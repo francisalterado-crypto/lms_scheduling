@@ -103,36 +103,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $regCollegeId = (int) ($_POST['college_id'] ?? 0);
         $regProgramName = trim((string) ($_POST['program_name'] ?? ''));
         $regYearLevel = trim((string) ($_POST['year_level'] ?? ''));
-        $password = (string) ($_POST['password'] ?? '');
-        $passwordConfirm = (string) ($_POST['password_confirm'] ?? '');
-
-        if ($password !== $passwordConfirm) {
-            $error = 'Passwords do not match.';
-        } else {
-            try {
-                submit_student_registration(
-                    $usernameValue,
-                    $password,
-                    $regFullName,
-                    $regEmail,
-                    $regStudentNumber,
-                    $regCollegeId,
-                    $regProgramName,
-                    $regYearLevel
-                );
-                $success = 'Registration submitted successfully. Your Program Chair will review your request. Once approved, you will receive an email with your username and temporary password.';
-                $viewMode = 'login';
-                $usernameValue = '';
-                $regFullName = '';
-                $regEmail = '';
-                $regStudentNumber = '';
-                $regCollegeId = 0;
-                $regProgramName = '';
-                $regYearLevel = '';
-            } catch (Throwable $e) {
-                $error = $e->getMessage();
-                $programsForCollege = $regCollegeId > 0 ? active_programs_for_college($regCollegeId) : [];
-            }
+        try {
+            submit_student_registration(
+                $usernameValue,
+                $regFullName,
+                $regEmail,
+                $regStudentNumber,
+                $regCollegeId,
+                $regProgramName,
+                $regYearLevel
+            );
+            $success = 'Registration submitted successfully. Your Program Chair will review your request. Once approved, you will receive an email with your username and temporary password.';
+            $viewMode = 'login';
+            $usernameValue = '';
+            $regFullName = '';
+            $regEmail = '';
+            $regStudentNumber = '';
+            $regCollegeId = 0;
+            $regProgramName = '';
+            $regYearLevel = '';
+        } catch (Throwable $e) {
+            $error = $e->getMessage();
+            $programsForCollege = $regCollegeId > 0 ? active_programs_for_college($regCollegeId) : [];
         }
     } else {
         $viewMode = 'login';
@@ -700,16 +692,6 @@ foreach ($sealCandidates as $sealPath) {
                             <input type="email" name="email" id="reg_email" class="form-control" value="<?= htmlspecialchars($regEmail) ?>" required>
                         </div>
                         <?php endif; ?>
-                        <div class="row g-3 mb-4">
-                            <div class="col-md-6 rounded-field">
-                                <label class="form-label fw-semibold" for="reg_password">Password</label>
-                                <input type="password" name="password" id="reg_password" class="form-control" required minlength="8">
-                            </div>
-                            <div class="col-md-6 rounded-field">
-                                <label class="form-label fw-semibold" for="reg_password_confirm">Confirm password</label>
-                                <input type="password" name="password_confirm" id="reg_password_confirm" class="form-control" required minlength="8">
-                            </div>
-                        </div>
                         <button type="submit" class="btn btn-success btn-login w-100" <?= !$registrationReady ? 'disabled' : '' ?>>
                             <i class="fa-solid fa-user-plus me-2"></i>Submit registration
                         </button>

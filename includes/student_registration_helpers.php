@@ -80,7 +80,6 @@ function active_year_levels_by_program_for_college(int $collegeId): array
 
 function validate_student_registration_input(
     string $username,
-    string $password,
     string $fullName,
     string $email,
     string $studentNumber,
@@ -93,9 +92,6 @@ function validate_student_registration_input(
     }
     if (!preg_match('/^[a-zA-Z0-9._-]{3,50}$/', $username)) {
         throw new RuntimeException('Username must be 3–50 characters (letters, numbers, . _ -).');
-    }
-    if ($password === '' || strlen($password) < 8) {
-        throw new RuntimeException('Password must be at least 8 characters.');
     }
     if ($studentNumber === '') {
         throw new RuntimeException('Student number is required.');
@@ -146,7 +142,6 @@ function username_taken_for_registration(string $username): bool
 
 function submit_student_registration(
     string $username,
-    string $password,
     string $fullName,
     string $email,
     string $studentNumber,
@@ -170,7 +165,6 @@ function submit_student_registration(
 
     validate_student_registration_input(
         $username,
-        $password,
         $fullName,
         $email,
         $studentNumber,
@@ -191,13 +185,15 @@ function submit_student_registration(
         );
     }
 
+    $placeholderPassword = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+
     db()->prepare(
         'INSERT INTO student_registration_requests
          (username, password, full_name, email, student_number, college_id, program_name, year_level, status)
          VALUES (?,?,?,?,?,?,?,?,?)'
     )->execute([
         $username,
-        password_hash($password, PASSWORD_DEFAULT),
+        $placeholderPassword,
         $fullName,
         $email,
         $studentNumber,
