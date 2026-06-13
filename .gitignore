@@ -1,0 +1,15 @@
+# Local secrets — copy config/config.example.php to config/config.php
+**/config/config.php
+
+# Database dumps (may contain user data)
+*_full_dump*.sql
+**/DB/*.sql
+
+# User uploads (keep directory placeholders)
+uploads/**
+!uploads/**/.gitkeep
+
+# IDE / OS
+*.code-workspace
+Thumbs.db
+.DS_Store

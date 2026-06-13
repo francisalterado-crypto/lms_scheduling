@@ -1,0 +1,204 @@
+openapi: 3.0.3
+info:
+  title: Student Wellness Chat Companion API
+  description: >
+    Authenticated REST API for bounded mental-health companionship replies.
+    The implementation is deterministic (rule-based)—not clinical AI—designed for
+    empathetic psychoeducation within scope: stress, anxiety, loneliness,
+    and low mood. It must not diagnose, prescribe, or replace therapy.
+    Crisis phrasing escalates with Philippines helpline payloads.
+  version: 1.1.0
+  contact:
+    name: Institution IT / LMS operator
+
+servers:
+  - url: http://localhost/CLASS
+    description: Local XAMPP (adjust if your virtual host differs)
+
+paths:
+  /api/student_wellness_chat.php:
+    get:
+      summary: Service descriptor & sample crisis resources
+      description: >-
+        Returns non-sensitive metadata suitable for onboarding API clients or
+        student developers. Philippines helpline excerpts match the deterministic
+        server copy (verify externally before production).
+      operationId: getWellnessChatInfo
+      responses:
+        '200':
+          description: Capability catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  service:
+                    type: string
+                  version:
+                    type: string
+                  constraints:
+                    type: array
+                    items:
+                      type: string
+                  openapi_url:
+                    type: string
+                    format: uri
+                  endpoints:
+                    type: array
+                    items:
+                      type: object
+                  disclaimer_banner_en:
+                    type: string
+                  philippines_crisis_sample:
+                    type: object
+    post:
+      summary: Non-diagnostic chat reply
+      operationId: postWellnessChat
+      security:
+        - CampusSessionStudent: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  description: Plain student message up to ~4000 UTF-8 graphemes (server-enforced length).
+                  maxLength: 4000
+                  example: I feel drained before every exam cycle and spiral about failing.
+                language_hint:
+                  type: string
+                  nullable: true
+                  description: >
+                    Prefer `tl`/`fil`/Tagalog synonyms, `en`, or omit/`auto`.
+                  enum:
+                    - en
+                    - tl
+                    - fil
+                    - tagalog
+                    - english
+                    - auto
+                    - ''
+                locale:
+                  type: string
+                  nullable: true
+                  description: Alias for `language_hint` when bilingual clients reuse generic field names.
+              required: []
+            examples:
+              english:
+                value:
+                  message: I barely sleep lately and dread group work.
+                  language_hint: en
+              tagalog_heuristic:
+                value:
+                  message: Nababalisa ako at parang nabibigatan sa lahat kahit hindi naman lagi may deadline.
+                  language_hint: auto
+      responses:
+        '200':
+          description: Supportive reply packaged with clinical-scope disclaimers
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - reply
+                  - reply_body
+                  - crisis
+                  - intent
+                  - scenarios
+                  - is_question
+                  - topics
+                  - detected_language
+                  - disclaimer_banner
+                  - footer_disclaimer
+                properties:
+                  ok:
+                    type: boolean
+                  reply:
+                    type: string
+                    description: Question-specific answer (Markdown). Same as reply_body.
+                  reply_body:
+                    type: string
+                    description: Main answer text without repeating disclaimers (show disclaimer_banner in UI separately).
+                  reply_format:
+                    type: string
+                    enum: [markdown]
+                  intent:
+                    type: string
+                    description: e.g. question_coping, exam_school, crisis, prompt
+                  scenarios:
+                    type: array
+                    items:
+                      type: string
+                    description: Matched themes ordered by relevance (exam_school, sleep, loneliness, etc.)
+                  is_question:
+                    type: boolean
+                  crisis:
+                    type: boolean
+                    description: True when suicidal ideation or self-harm crisis lexicon matched—the server substitutes hotline scaffolding.
+                  topics:
+                    type: array
+                    items:
+                      type: string
+                      description: Lightweight emotional tags (stress, anxiety, loneliness, low_mood) when not in crisis escalation.
+                  detected_language:
+                    type: string
+                    enum:
+                      - en
+                      - tl
+                  disclaimer_banner:
+                    type: string
+                  footer_disclaimer:
+                    type: string
+                  philippines_crisis_resources:
+                    type: object
+                    nullable: true
+                    description: Structured helpline snippets when crisis=true; mirrored for SPA rendering.
+                  error:
+                    type: string
+        '401':
+          description: Valid campus session lacking student role—or unauthenticated altogether.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                  code:
+                    type: string
+                    example: UNAUTHORIZED
+        '400':
+          description: Malformed payload or excessively long transcript.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                  code:
+                    type: string
+                    enum: [BAD_JSON, MESSAGE_TOO_LONG]
+        '405':
+          description: Verb other than GET/POST (server closes with deterministic JSON envelope).
+
+components:
+  securitySchemes:
+    CampusSessionStudent:
+      type: apiKey
+      in: cookie
+      name: FSS_SESSION
+      description: >
+        PHP session cookie issued by WPU SABLAe Portal after student login.

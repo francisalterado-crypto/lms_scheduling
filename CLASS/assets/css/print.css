@@ -1,0 +1,9 @@
+/* Print-friendly schedules */
+@media print {
+  body { background: #fff !important; font-size: 11pt; }
+  .navbar, .btn, .no-print, form, .pagination { display: none !important; }
+  main.container { max-width: 100% !important; padding: 0 !important; }
+  .card { border: 1px solid #ccc !important; box-shadow: none !important; page-break-inside: avoid; }
+  .table { font-size: 10pt; }
+  a { color: #000 !important; text-decoration: none !important; }
+}

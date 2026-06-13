@@ -1,0 +1,34 @@
+/* Print-friendly schedules */
+@media print {
+  body { background: #fff !important; font-size: 11pt; }
+  .navbar, .btn, .no-print, form, .pagination { display: none !important; }
+  main.container { max-width: 100% !important; padding: 0 !important; }
+  .card { border: 1px solid #ccc !important; box-shadow: none !important; page-break-inside: avoid; }
+  .table { font-size: 10pt; }
+  a { color: #000 !important; text-decoration: none !important; }
+
+  /* Weekly grid: always light ink on paper (even if screen was dark mode) */
+  .schedule-weekly thead.table-primary th {
+    background: #cfe2ff !important;
+    color: #052c65 !important;
+    border-color: #999 !important;
+  }
+  .schedule-weekly tbody td {
+    background: #fff !important;
+    color: #000 !important;
+    border-color: #ccc !important;
+  }
+  .schedule-block {
+    color: #000 !important;
+    border-left-color: #555 !important;
+  }
+  .schedule-block .text-muted {
+    color: #444 !important;
+  }
+  .schedule-block.c0 { background: #e3f2fd !important; border-left-color: #1976d2 !important; }
+  .schedule-block.c1 { background: #e8f5e9 !important; border-left-color: #388e3c !important; }
+  .schedule-block.c2 { background: #fff3e0 !important; border-left-color: #f57c00 !important; }
+  .schedule-block.c3 { background: #fce4ec !important; border-left-color: #c2185b !important; }
+  .schedule-block.c4 { background: #f3e5f5 !important; border-left-color: #7b1fa2 !important; }
+  .schedule-block.c5 { background: #e0f7fa !important; border-left-color: #00838f !important; }
+}
