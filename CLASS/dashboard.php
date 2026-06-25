@@ -16,6 +16,20 @@ $stat1Label = 'Active faculty';
 $stat2Label = 'Courses';
 $stat3Label = 'Schedules';
 $stat4Label = 'Open conflicts';
+$superStats = [
+    'totalSchedulesAllTime' => 0,
+    'collegesDepartments' => 0,
+    'facultyMembers' => 0,
+    'studentEnrollments' => 0,
+    'inactivePendingInvites' => 0,
+    'activeConflictAlerts' => 0,
+    'resolvedConflicts30d' => 0,
+    'roomDoubleBookingRisks' => 0,
+    'facultyTimeOverlap' => 0,
+    'scheduledClassesCurrentTerm' => 0,
+    'unassignedTimeSlots' => 0,
+    'superAdminLastLogin' => 'N/A',
+];
 
 if ($isAdmin) {
     $activeFaculty = (int) db()->query("SELECT COUNT(*) FROM faculty WHERE status = 'active' AND college_id IS NOT NULL")->fetchColumn();
@@ -127,6 +141,81 @@ if ($isAdmin) {
             $openConflicts = (int) $st->fetchColumn();
         }
     }
+} elseif ($role === 'super_admin') {
+    $activeFaculty = (int) db()->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
+    $totalCourses = (int) db()->query("SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = 1")->fetchColumn();
+    $totalSchedules = (int) db()->query("SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = 0")->fetchColumn();
+    $openConflicts = (int) db()->query("SELECT COUNT(*) FROM users WHERE role = 'super_admin'")->fetchColumn();
+    $stat1Label = 'Administrator accounts';
+    $stat2Label = 'Active admins';
+    $stat3Label = 'Disabled admins';
+    $stat4Label = 'Super Admin users';
+
+    $superStats['totalSchedulesAllTime'] = db_table_exists('schedules')
+        ? (int) db()->query('SELECT COUNT(*) FROM schedules')->fetchColumn()
+        : 0;
+    $superStats['facultyMembers'] = db_table_exists('faculty')
+        ? (int) db()->query('SELECT COUNT(*) FROM faculty')->fetchColumn()
+        : 0;
+    $superStats['collegesDepartments'] = db_table_exists('colleges')
+        ? (int) db()->query('SELECT COUNT(*) FROM colleges')->fetchColumn()
+        : 0;
+    $superStats['studentEnrollments'] = db_table_exists('classroom_enrollments')
+        ? (int) db()->query('SELECT COUNT(*) FROM classroom_enrollments')->fetchColumn()
+        : 0;
+    $superStats['inactivePendingInvites'] = db_table_exists('users')
+        ? (int) db()->query("SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = 0")->fetchColumn()
+        : 0;
+    $superStats['activeConflictAlerts'] = db_table_exists('conflict_requests')
+        ? (int) db()->query("SELECT COUNT(*) FROM conflict_requests WHERE status = 'pending'")->fetchColumn()
+        : 0;
+    if (db_table_exists('conflict_requests')) {
+        $resolvedDateColumn = db_first_existing_column(
+            'conflict_requests',
+            ['updated_at', 'reviewed_at', 'created_at'],
+            'created_at'
+        );
+        $superStats['resolvedConflicts30d'] = (int) db()->query(
+            "SELECT COUNT(*) FROM conflict_requests WHERE status = 'resolved' AND {$resolvedDateColumn} >= (NOW() - INTERVAL 30 DAY)"
+        )->fetchColumn();
+    } else {
+        $superStats['resolvedConflicts30d'] = 0;
+    }
+    if (db_table_exists('conflict_requests') && db_column_exists('conflict_requests', 'conflict_type')) {
+        $superStats['roomDoubleBookingRisks'] = (int) db()->query(
+            "SELECT COUNT(*) FROM conflict_requests WHERE status = 'pending' AND conflict_type LIKE '%room%'"
+        )->fetchColumn();
+        $superStats['facultyTimeOverlap'] = (int) db()->query(
+            "SELECT COUNT(*) FROM conflict_requests WHERE status = 'pending' AND conflict_type LIKE '%faculty%'"
+        )->fetchColumn();
+    } else {
+        $superStats['roomDoubleBookingRisks'] = 0;
+        $superStats['facultyTimeOverlap'] = 0;
+    }
+    $superStats['scheduledClassesCurrentTerm'] = db_table_exists('schedules')
+        ? (int) db()->query('SELECT COUNT(*) FROM schedules')->fetchColumn()
+        : 0;
+    $superStats['unassignedTimeSlots'] = db_table_exists('rooms')
+        ? max(0, ((int) db()->query('SELECT COUNT(*) FROM rooms')->fetchColumn() * 60) - $superStats['scheduledClassesCurrentTerm'])
+        : 0;
+    if (db_table_exists('users')) {
+        $lastLoginColumn = db_first_existing_column(
+            'users',
+            ['last_login', 'last_seen_at', 'updated_at', 'created_at'],
+            ''
+        );
+        if ($lastLoginColumn !== '') {
+            $lastLoginRaw = db()->query(
+                "SELECT {$lastLoginColumn} FROM users WHERE role = 'super_admin' ORDER BY {$lastLoginColumn} DESC LIMIT 1"
+            )->fetchColumn();
+            if (is_string($lastLoginRaw) && $lastLoginRaw !== '') {
+                $stamp = strtotime($lastLoginRaw);
+                if ($stamp !== false) {
+                    $superStats['superAdminLastLogin'] = date('M j, Y g:i A', $stamp);
+                }
+            }
+        }
+    }
 } else {
     $activeFaculty = 0;
     $totalCourses = 0;
@@ -159,11 +248,20 @@ if ($role === 'faculty' && !empty($_SESSION['faculty_id'])) {
 if ($role === 'gened') {
     $upSql .= ' AND c.is_gened = 1';
 }
-$showUpcoming = $role !== 'student';
+$showUpcoming = $role !== 'student' && $role !== 'super_admin';
 $upSql .= ' ORDER BY s.start_time ASC LIMIT 15';
-$upStmt = db()->prepare($upSql);
-$upStmt->execute($upParams);
-$upcoming = $upStmt->fetchAll();
+$upcoming = [];
+if ($showUpcoming) {
+    $upStmt = db()->prepare($upSql);
+    $upStmt->execute($upParams);
+    $upcoming = $upStmt->fetchAll();
+}
+
+$dashboardOverviewTitle = $showUpcoming
+    ? 'Upcoming classes today (' . htmlspecialchars($today) . ')'
+    : ($role === 'super_admin'
+        ? 'Super Admin workspace'
+        : 'Student overview');
 
 $formatTime12h = static function (?string $time): string {
     $raw = substr((string) $time, 0, 5);
@@ -172,6 +270,7 @@ $formatTime12h = static function (?string $time): string {
 };
 
 $roleLabel = match ($role) {
+    'super_admin' => 'Super Administrator',
     'admin' => 'Administrator',
     'dean' => 'Dean',
     'program_chair' => 'Program Chair',
@@ -182,6 +281,7 @@ $roleLabel = match ($role) {
 };
 
 $heroMessage = match ($role) {
+    'super_admin' => 'Provision System Administrator accounts and review high-level access. Day-to-day scheduling tools remain on each administrator’s own login.',
     'admin' => 'Monitor colleges, faculty activity, schedules, and system-wide academic coordination from one place.',
     'dean' => 'Stay on top of college schedules, faculty assignments, and pending coordination concerns with a smoother dashboard.',
     'program_chair' => 'Review your program workload, faculty activity, and schedule updates with a focused dashboard experience.',
@@ -380,6 +480,263 @@ require_once __DIR__ . '/includes/header.php';
 </style>
 
 <div class="dashboard-shell">
+<?php if ($role === 'super_admin'): ?>
+    <style>
+        .sa-container {
+            background: #f0f2f8;
+            border-radius: 28px;
+            padding: 28px 24px;
+        }
+
+        .sa-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #0b2b3b 0%, #1a4a6f 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: -0.3px;
+            margin-bottom: 8px;
+        }
+
+        .sa-sub {
+            color: #2c5a6e;
+            font-weight: 500;
+            font-size: 15px;
+            border-left: 3px solid #c9772e;
+            padding-left: 12px;
+            margin-bottom: 24px;
+        }
+
+        .sa-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 18px;
+            margin-bottom: 26px;
+        }
+
+        .sa-stat-card,
+        .sa-insight-card,
+        .sa-footer-alerts {
+            background: #fff;
+            border-radius: 24px;
+            border: 1px solid #e9eef5;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.04);
+        }
+
+        .sa-stat-card {
+            padding: 18px;
+        }
+
+        .sa-stat-title {
+            font-size: 13px;
+            text-transform: uppercase;
+            color: #5b6e8c;
+            font-weight: 600;
+            letter-spacing: 0.4px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sa-badge {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #eef2fa;
+        }
+
+        .sa-stat-number {
+            font-size: 34px;
+            line-height: 1.1;
+            font-weight: 800;
+            color: #1e2f41;
+        }
+
+        .sa-stat-trend {
+            font-size: 13px;
+            color: #63809c;
+            margin-top: 6px;
+        }
+
+        .sa-insight-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            margin-bottom: 20px;
+        }
+
+        .sa-insight-card {
+            flex: 1;
+            min-width: 260px;
+            padding: 20px;
+        }
+
+        .sa-insight-card h3 {
+            font-size: 17px;
+            color: #1e3a4d;
+            border-left: 4px solid #c9772e;
+            padding-left: 12px;
+            margin-bottom: 14px;
+        }
+
+        .sa-compact-row {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #edf2f7;
+            padding: 10px 0;
+            gap: 8px;
+        }
+
+        .sa-compact-label {
+            color: #436278;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .sa-compact-value {
+            color: #173e54;
+            font-weight: 700;
+            font-size: 18px;
+            text-align: right;
+        }
+
+        .sa-note {
+            font-size: 12px;
+            color: #7a8eaa;
+            margin-top: 12px;
+            background: #f8fafd;
+            border-radius: 12px;
+            padding: 10px 12px;
+        }
+
+        .sa-action-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 18px;
+        }
+
+        .sa-btn {
+            border: 1px solid #cfdfed;
+            background: #fff;
+            color: #1e4660;
+            border-radius: 999px;
+            padding: 10px 22px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .sa-btn-dark {
+            background: #1c2f3f;
+            color: #fff;
+            border: 0;
+        }
+
+        .sa-btn-super {
+            border: 0;
+            color: #fff;
+            background: linear-gradient(95deg, #2c5a6e 0%, #1e3f50 100%);
+        }
+
+        .sa-role-badge {
+            background: #e9eff5;
+            border-radius: 999px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+
+        .sa-footer-alerts {
+            padding: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .sa-conflict-badge {
+            background: #fff2e6;
+            border-left: 4px solid #e67e22;
+            border-radius: 999px;
+            padding: 8px 14px;
+            color: #b95a0c;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .sa-footer-note {
+            color: #4b6f8c;
+            font-size: 13px;
+            background: #f5f9ff;
+            border-radius: 999px;
+            padding: 8px 14px;
+        }
+    </style>
+    <div class="sa-container" id="saContainer">
+        <div class="sa-header">
+            <h1>Dashboard - Western Philippines University</h1>
+            <div class="sa-sub">Super Administrator Control Center - High-level analytics and system oversight</div>
+        </div>
+
+        <div class="sa-stats-grid">
+            <div class="sa-stat-card"><div class="sa-stat-title"><span class="sa-badge">👥</span>Administrator accounts</div><div class="sa-stat-number"><?= number_format($activeFaculty) ?></div><div class="sa-stat-trend">Total registered system admins</div></div>
+            <div class="sa-stat-card"><div class="sa-stat-title"><span class="sa-badge">🟢</span>Active admins</div><div class="sa-stat-number"><?= number_format($totalCourses) ?></div><div class="sa-stat-trend">Currently active</div></div>
+            <div class="sa-stat-card"><div class="sa-stat-title"><span class="sa-badge">⛔</span>Disabled admins</div><div class="sa-stat-number"><?= number_format($totalSchedules) ?></div><div class="sa-stat-trend">Locked or disabled accounts</div></div>
+            <div class="sa-stat-card"><div class="sa-stat-title"><span class="sa-badge">⭐</span>Super Admin users</div><div class="sa-stat-number"><?= number_format($openConflicts) ?></div><div class="sa-stat-trend">Ultimate privilege level</div></div>
+            <div class="sa-stat-card"><div class="sa-stat-title"><span class="sa-badge">📅</span>Total schedules</div><div class="sa-stat-number"><?= number_format($superStats['totalSchedulesAllTime']) ?></div><div class="sa-stat-trend">All-time schedule records</div></div>
+            <div class="sa-stat-card"><div class="sa-stat-title"><span class="sa-badge">🏫</span>Colleges / Departments</div><div class="sa-stat-number"><?= number_format($superStats['collegesDepartments']) ?></div><div class="sa-stat-trend">Configured academic units</div></div>
+            <div class="sa-stat-card"><div class="sa-stat-title"><span class="sa-badge">👩‍🏫</span>Faculty members</div><div class="sa-stat-number"><?= number_format($superStats['facultyMembers']) ?></div><div class="sa-stat-trend">Total faculty records</div></div>
+            <div class="sa-stat-card"><div class="sa-stat-title"><span class="sa-badge">🎓</span>Student enrollments</div><div class="sa-stat-number"><?= number_format($superStats['studentEnrollments']) ?></div><div class="sa-stat-trend">Across online classrooms</div></div>
+        </div>
+
+        <div class="sa-insight-row">
+            <div class="sa-insight-card">
+                <h3>Admin and Access Analytics</h3>
+                <div class="sa-compact-row"><span class="sa-compact-label">System admin accounts (provisioned)</span><span class="sa-compact-value"><?= number_format($activeFaculty) ?></span></div>
+                <div class="sa-compact-row"><span class="sa-compact-label">Super admin power users</span><span class="sa-compact-value"><?= number_format($openConflicts) ?></span></div>
+                <div class="sa-compact-row"><span class="sa-compact-label">Inactive or pending invites</span><span class="sa-compact-value"><?= number_format($superStats['inactivePendingInvites']) ?></span></div>
+                <div class="sa-compact-row"><span class="sa-compact-label">Last login (Super Admin)</span><span class="sa-compact-value"><?= htmlspecialchars($superStats['superAdminLastLogin']) ?></span></div>
+                <div class="sa-note">Super Admin role is strictly for system-wide configuration. Day-to-day scheduling tools require standard admin login.</div>
+            </div>
+            <div class="sa-insight-card">
+                <h3>Conflict and Scheduling Overview</h3>
+                <div class="sa-compact-row"><span class="sa-compact-label">Active conflict alerts (pending)</span><span class="sa-compact-value" style="color:#c96b1a;"><?= number_format($superStats['activeConflictAlerts']) ?></span></div>
+                <div class="sa-compact-row"><span class="sa-compact-label">Resolved conflicts (last 30d)</span><span class="sa-compact-value"><?= number_format($superStats['resolvedConflicts30d']) ?></span></div>
+                <div class="sa-compact-row"><span class="sa-compact-label">Room double-booking risks</span><span class="sa-compact-value"><?= number_format($superStats['roomDoubleBookingRisks']) ?></span></div>
+                <div class="sa-compact-row"><span class="sa-compact-label">Faculty time overlap</span><span class="sa-compact-value"><?= number_format($superStats['facultyTimeOverlap']) ?></span></div>
+                <div class="sa-note">Super Admin has no conflict queue by design. Switch to an Administrator account to manage conflicts and daily scheduling.</div>
+            </div>
+            <div class="sa-insight-card">
+                <h3>System Utilization</h3>
+                <div class="sa-compact-row"><span class="sa-compact-label">Total room usage (weekly avg)</span><span class="sa-compact-value">N/A</span></div>
+                <div class="sa-compact-row"><span class="sa-compact-label">Scheduled classes (current term)</span><span class="sa-compact-value"><?= number_format($superStats['scheduledClassesCurrentTerm']) ?></span></div>
+                <div class="sa-compact-row"><span class="sa-compact-label">Unassigned time slots</span><span class="sa-compact-value"><?= number_format($superStats['unassignedTimeSlots']) ?></span></div>
+                <div class="sa-compact-row"><span class="sa-compact-label">Peak hour load (10 AM - 12 PM)</span><span class="sa-compact-value">N/A</span></div>
+                <div class="sa-note">Utilization indicators improve as room, term, and conflict data become more complete.</div>
+            </div>
+        </div>
+
+        <div class="sa-action-bar">
+            <button type="button" class="sa-btn sa-btn-dark" id="darkModeToggleBtn">Dark</button>
+            <button type="button" class="sa-btn sa-btn-super" id="superAdminInfoBtn">Super Administrator - SUPER_ADMIN</button>
+            <span class="sa-role-badge">Elevated session - Full system audit rights</span>
+        </div>
+
+        <div class="sa-footer-alerts">
+            <div class="sa-conflict-badge">Conflict alerts - <?= number_format($superStats['activeConflictAlerts']) ?> pending resolution</div>
+            <div class="sa-footer-note">Super Admin is only for Administrator accounts (system admins). Not a student account.</div>
+            <div class="sa-footer-note">No conflict queue for Super Admin. Use Administrator accounts for day-to-day scheduling tools.</div>
+        </div>
+    </div>
+<?php else: ?>
     <div class="card dashboard-hero text-white mb-4">
         <div class="card-body">
             <div class="row align-items-center g-4">
@@ -482,7 +839,8 @@ require_once __DIR__ . '/includes/header.php';
             </ul>
             <div class="mt-3 d-flex flex-wrap gap-2">
                 <a href="student_classrooms.php" class="btn btn-primary btn-sm"<?= student_tooltip_attr('Opens the list of online classes you are enrolled in. Use this to join Meet, open materials, or submit work.') ?>><i class="fa-solid fa-user-graduate me-1"></i>Open My Classes</a>
-                <a href="settings.php" class="btn btn-outline-primary btn-sm"<?= student_tooltip_attr('Opens account settings to change your password. Use this when your password expires or you want a stronger one.') ?>><i class="fa-solid fa-key me-1"></i>Change Password</a>
+                <a href="student_edutools.php" class="btn btn-outline-primary btn-sm"<?= student_tooltip_attr('Opens EduTools: notebook, ChatGPT, Khan Academy, and other study helpers.') ?>><i class="fa-solid fa-wand-magic-sparkles me-1"></i>Learning tools</a>
+                <a href="settings.php" class="btn btn-outline-secondary btn-sm"<?= student_tooltip_attr('Opens account settings to change your password. Use this when your password expires or you want a stronger one.') ?>><i class="fa-solid fa-key me-1"></i>Change Password</a>
             </div>
         </div>
     </div>
@@ -492,13 +850,17 @@ require_once __DIR__ . '/includes/header.php';
     <div class="col-lg-7">
         <div class="card glass-card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="fa-solid fa-clock me-2 text-primary"></i><?= $showUpcoming ? 'Upcoming classes today (' . htmlspecialchars($today) . ')' : 'Student overview' ?></span>
+                <span><i class="fa-solid fa-clock me-2 text-primary"></i><?= $dashboardOverviewTitle ?></span>
             </div>
             <div class="card-body p-0">
-                <?php if (!$showUpcoming): ?>
+                <?php if ($role === 'student' && !$showUpcoming): ?>
                     <div class="p-3">
                         <p class="text-muted mb-2">Use your student account to open enrolled classrooms, receive announcements, and submit assessment answers.</p>
                         <a href="student_classrooms.php" class="btn btn-outline-primary btn-sm"<?= student_tooltip_attr('Opens your enrolled online classes. Use this shortcut when the overview reminds you to check announcements or assessments.') ?>>Go to My Classes</a>
+                    </div>
+                <?php elseif ($role === 'super_admin'): ?>
+                    <div class="p-3">
+                        <p class="text-muted mb-2">Super Admin is only for <strong>Administrator accounts</strong> (system admins). This is not a student account — do not use My Classes.</p>
                     </div>
                 <?php elseif (!$upcoming): ?>
                     <p class="text-muted p-3 mb-0">No more classes scheduled for today after the current time.</p>
@@ -535,7 +897,9 @@ require_once __DIR__ . '/includes/header.php';
                 <i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>Conflict alerts
             </div>
             <div class="card-body">
-                <?php if ($openConflicts === 0): ?>
+                <?php if ($role === 'super_admin'): ?>
+                    <p class="text-muted small mb-0">Super Admin has no conflict queue. Use <strong>Administrator accounts</strong> or sign in as an <code>admin</code> user for day-to-day scheduling tools.</p>
+                <?php elseif ($openConflicts === 0): ?>
                     <p class="text-success mb-0"><i class="fa-solid fa-check-circle me-1"></i>No pending alerts.</p>
                 <?php else: ?>
                     <p class="mb-2">You have <strong><?= $openConflicts ?></strong> pending item(s).</p>
@@ -546,6 +910,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </div>
 </div>
+<?php endif; ?>
 
 <script>
     (function () {
@@ -575,6 +940,57 @@ require_once __DIR__ . '/includes/header.php';
             if (!enabled || document.hidden) return;
             window.location.reload();
         }, seconds * 1000);
+    })();
+
+    (function () {
+        const darkToggle = document.getElementById('darkModeToggleBtn');
+        const superAdminBtn = document.getElementById('superAdminInfoBtn');
+        const container = document.getElementById('saContainer');
+        if (!darkToggle || !superAdminBtn || !container) return;
+
+        function applyDarkMode(isDark) {
+            const cards = container.querySelectorAll('.sa-stat-card, .sa-insight-card, .sa-footer-alerts');
+            if (isDark) {
+                document.body.style.backgroundColor = '#121826';
+                container.style.backgroundColor = '#121826';
+                cards.forEach(function (el) {
+                    el.style.backgroundColor = '#1e2a36';
+                    el.style.borderColor = '#2d3e4e';
+                });
+            } else {
+                document.body.style.backgroundColor = '#f0f2f8';
+                container.style.backgroundColor = '#f0f2f8';
+                cards.forEach(function (el) {
+                    el.style.backgroundColor = '#ffffff';
+                    el.style.borderColor = '#e9eef5';
+                });
+            }
+        }
+
+        let darkModeEnabled = localStorage.getItem('wpu_dark_mode') === 'true';
+        applyDarkMode(darkModeEnabled);
+        darkToggle.addEventListener('click', function () {
+            darkModeEnabled = !darkModeEnabled;
+            applyDarkMode(darkModeEnabled);
+            localStorage.setItem('wpu_dark_mode', darkModeEnabled ? 'true' : 'false');
+        });
+
+        superAdminBtn.addEventListener('click', function () {
+            const existingToast = document.querySelector('.super-toast-msg');
+            if (existingToast) existingToast.remove();
+            const toast = document.createElement('div');
+            toast.className = 'super-toast-msg';
+            toast.style.position = 'fixed';
+            toast.style.bottom = '28px';
+            toast.style.left = '50%';
+            toast.style.transform = 'translateX(-50%)';
+            toast.style.zIndex = '9999';
+            toast.innerHTML = '<div style="background:#1f3e4b;color:#f9e0b0;padding:12px 20px;border-radius:60px;font-weight:500;box-shadow:0 20px 32px -10px rgba(0,0,0,0.2);">SUPER_ADMIN role: full system audit and account provisioning. Use standard admin login for daily scheduling.</div>';
+            document.body.appendChild(toast);
+            setTimeout(function () {
+                if (toast && toast.remove) toast.remove();
+            }, 5000);
+        });
     })();
 </script>
 

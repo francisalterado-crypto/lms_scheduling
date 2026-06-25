@@ -45,6 +45,7 @@ function render_nav_sections_markup(array $sections, string $currentPage, bool $
 function app_sidebar_brand_meta(string $role): string
 {
     return match ($role) {
+        'super_admin' => 'Super administrator',
         'admin' => 'System administration',
         'dean' => 'College dean',
         'program_chair' => 'Program chair',
@@ -61,6 +62,7 @@ function app_sidebar_brand_meta(string $role): string
 function app_sidebar_topbar_icon_class(string $role): string
 {
     return match ($role) {
+        'super_admin' => 'fa-user-secret',
         'admin' => 'fa-user-shield',
         'dean' => 'fa-user-tie',
         'program_chair' => 'fa-clipboard-list',
@@ -72,12 +74,79 @@ function app_sidebar_topbar_icon_class(string $role): string
 }
 
 /**
+ * Top bar user avatar: profile photo when set, otherwise role icon.
+ */
+function app_render_topbar_avatar(string $role, ?string $profilePhotoUrl): void
+{
+    if ($profilePhotoUrl !== null && $profilePhotoUrl !== '') {
+        echo '<span class="admin-topbar-avatar rounded-circle d-inline-flex align-items-center justify-content-center overflow-hidden">';
+        echo '<img src="' . htmlspecialchars($profilePhotoUrl, ENT_QUOTES, 'UTF-8') . '" alt="" class="admin-topbar-avatar-img" width="34" height="34" loading="lazy" decoding="async">';
+        echo '</span>';
+        return;
+    }
+
+    $topbarIcon = app_sidebar_topbar_icon_class($role);
+    echo '<span class="admin-topbar-avatar rounded-circle d-inline-flex align-items-center justify-content-center">';
+    echo '<i class="fa-solid ' . htmlspecialchars($topbarIcon, ENT_QUOTES, 'UTF-8') . ' admin-topbar-avatar-icon" aria-hidden="true"></i>';
+    echo '</span>';
+}
+
+/**
  * Renders grouped admin navigation (sidebar / mobile drawer).
  *
  * @param string $currentPage basename of current script, e.g. dashboard.php
  * @param int $messagingUnread unread message count for badge
  * @param bool $dismissOffcanvas when true, links close the mobile drawer (Bootstrap offcanvas)
  */
+/**
+ * Super Admin: manage administrator accounts only (no college/schedule tools).
+ *
+ * @param string $currentPage basename of current script
+ * @param int $messagingUnread unread message count (unused; kept for signature parity)
+ * @param bool $dismissOffcanvas when true, links close the mobile drawer
+ */
+function render_super_admin_nav_sections(string $currentPage, int $messagingUnread, bool $dismissOffcanvas = false): void
+{
+    unset($messagingUnread);
+    $sections = [
+        'Overview' => [
+            [
+                'file' => 'dashboard.php',
+                'href' => 'dashboard.php',
+                'icon' => 'fa-gauge-high',
+                'label' => 'Dashboard',
+                'tooltip' => 'Returns to the Super Admin home with shortcuts to administrator account management.',
+            ],
+        ],
+        'Accounts' => [
+            [
+                'file' => 'super_admin_admins.php',
+                'href' => 'super_admin_admins.php',
+                'icon' => 'fa-user-shield',
+                'label' => 'Administrator accounts',
+                'tooltip' => 'Create or update System Administrator accounts (scheduling admins). Each account can show a title in the activity log.',
+            ],
+        ],
+        'Reports' => [
+            [
+                'file' => 'super_admin_faculty_inventory.php',
+                'href' => 'super_admin_faculty_inventory.php',
+                'icon' => 'fa-address-book',
+                'label' => 'Faculty inventory',
+                'tooltip' => 'All faculty records across colleges, including GE-tagged faculty. Filter by college, scope, or name.',
+            ],
+            [
+                'file' => 'super_admin_teaching_load_report.php',
+                'href' => 'super_admin_teaching_load_report.php',
+                'icon' => 'fa-scale-balanced',
+                'label' => 'Teaching load (under / over)',
+                'tooltip' => 'All programs: weekly contact hours from schedules. Under load is below 18 hrs/week; overload is above 27. Filter by college and term.',
+            ],
+        ],
+    ];
+    render_nav_sections_markup($sections, $currentPage, $dismissOffcanvas);
+}
+
 function render_admin_nav_sections(string $currentPage, int $messagingUnread, bool $dismissOffcanvas = false): void
 {
     $sections = [
@@ -218,6 +287,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
             'Academic' => [
                 ['file' => 'faculty.php', 'href' => 'faculty.php', 'icon' => 'fa-chalkboard-user', 'label' => 'Faculty'],
                 ['file' => 'program_chair_students.php', 'href' => 'program_chair_students.php', 'icon' => 'fa-user-graduate', 'label' => 'Students'],
+                [
+                    'file' => 'program_chair_student_registrations.php',
+                    'href' => 'program_chair_student_registrations.php',
+                    'icon' => 'fa-user-check',
+                    'label' => 'Registration approvals',
+                    'tooltip' => 'Review and approve student self-registration requests for your program.',
+                ],
                 ['file' => 'courses.php', 'href' => 'courses.php', 'icon' => 'fa-book', 'label' => 'Courses'],
             ],
             'Scheduling' => [
@@ -321,6 +397,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'icon' => 'fa-wand-magic-sparkles',
                     'label' => 'Learning tools',
                     'tooltip' => 'Opens EduTools: built-in notebook, NotebookLM, ChatGPT, Perplexity, Khan Academy, Wolfram Alpha, and Notion for studying and research.',
+                ],
+                [
+                    'file' => 'student_wellness.php',
+                    'href' => 'student_wellness.php',
+                    'icon' => 'fa-heart-pulse',
+                    'label' => 'Wellness companion',
+                    'tooltip' => 'Private mental health support chat (stress, anxiety, loneliness). English/Tagalog. Not therapy or emergency care—crisis hotlines shown when needed.',
                 ],
             ],
         ],

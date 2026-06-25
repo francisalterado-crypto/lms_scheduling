@@ -10,7 +10,7 @@ $pageTitle = 'Wellness companion';
 $mainContainerClass = 'container-fluid px-3 px-lg-4 py-3 py-md-4 flex-grow-1 student-wellness-page';
 require_once __DIR__ . '/includes/header.php';
 ?>
-<div class="mb-3">
+<div class="mb-3 student-page-header">
     <h1 class="h4 mb-1">
         <i class="fa-solid fa-heart-pulse me-2 text-success"></i>Wellness companion
     </h1>

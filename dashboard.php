@@ -839,7 +839,8 @@ require_once __DIR__ . '/includes/header.php';
             </ul>
             <div class="mt-3 d-flex flex-wrap gap-2">
                 <a href="student_classrooms.php" class="btn btn-primary btn-sm"<?= student_tooltip_attr('Opens the list of online classes you are enrolled in. Use this to join Meet, open materials, or submit work.') ?>><i class="fa-solid fa-user-graduate me-1"></i>Open My Classes</a>
-                <a href="settings.php" class="btn btn-outline-primary btn-sm"<?= student_tooltip_attr('Opens account settings to change your password. Use this when your password expires or you want a stronger one.') ?>><i class="fa-solid fa-key me-1"></i>Change Password</a>
+                <a href="student_edutools.php" class="btn btn-outline-primary btn-sm"<?= student_tooltip_attr('Opens EduTools: notebook, ChatGPT, Khan Academy, and other study helpers.') ?>><i class="fa-solid fa-wand-magic-sparkles me-1"></i>Learning tools</a>
+                <a href="settings.php" class="btn btn-outline-secondary btn-sm"<?= student_tooltip_attr('Opens account settings to change your password. Use this when your password expires or you want a stronger one.') ?>><i class="fa-solid fa-key me-1"></i>Change Password</a>
             </div>
         </div>
     </div>

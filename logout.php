@@ -31,9 +31,9 @@ if ($userId > 0) {
                  SET ar.evidence_logout_at = ?, ar.checked_at = ?, ar.updated_at = CURRENT_TIMESTAMP,
                      ar.notes = CONCAT(TRIM(ar.notes), CASE WHEN TRIM(ar.notes) = "" THEN "" ELSE " " END, "Logout captured at sign-out.")
                  WHERE cs.user_id = ?
-                   AND s.attendance_date = CURDATE()
+                   AND s.attendance_date = ?
                    AND ar.evidence_logout_at IS NULL'
-            )->execute([$nowTs, $nowTs, $userId]);
+            )->execute([$nowTs, $nowTs, $userId, date('Y-m-d')]);
         }
     } catch (Throwable $e) {
         // Best effort logout timestamp update.

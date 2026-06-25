@@ -111,8 +111,8 @@ $classroomLiveAt = $hasLiveAt && $classroom ? (string) ($classroom['online_live_
 $classroomIsLive = $hasLiveAt && $classIsLive($classroomLiveAt);
 $studentWeekSyllabusReady = $classroom && $hasSyllabusCols && trim((string) ($classroom['syllabus_stored_name'] ?? '')) !== '';
 ?>
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-    <div>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 student-page-header">
+    <div class="min-w-0">
         <h1 class="h3 mb-1">
             <i class="fa-solid fa-calendar-week me-2 text-primary"></i><?= htmlspecialchars($requestedWeek !== '' ? $requestedWeek : 'Course Materials') ?>
             <?php if ($classroomIsLive): ?>
@@ -120,13 +120,13 @@ $studentWeekSyllabusReady = $classroom && $hasSyllabusCols && trim((string) ($cl
             <?php endif; ?>
         </h1>
         <?php if ($classroom): ?>
-            <div class="text-muted">
+            <div class="text-muted student-class-meta">
                 <?= htmlspecialchars((string) $classroom['course_code']) ?> - <?= htmlspecialchars((string) $classroom['course_name']) ?>
                 | Instructor: <?= htmlspecialchars((string) $classroom['faculty_name']) ?>
             </div>
         <?php endif; ?>
     </div>
-    <div class="d-flex flex-wrap gap-2">
+    <div class="d-flex flex-wrap gap-2 student-page-header__actions">
         <?php if ($studentWeekSyllabusReady): ?>
             <a href="<?= htmlspecialchars(classroom_syllabus_href((int) $classroomId)) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm"<?= student_tooltip_attr('Opens the course syllabus in a new tab.') ?>><i class="fa-solid fa-file-contract me-1"></i>Syllabus</a>
         <?php endif; ?>

@@ -16,6 +16,7 @@ if ($u) {
     $bodyRoleClass = preg_replace('/[^a-z0-9_-]/', '', (string) ($u['role'] ?? ''));
 }
 $appCursorTooltips = $u && app_cursor_tooltips_active();
+$styleCssVersion = @filemtime(__DIR__ . '/../assets/css/style.css') ?: 1;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -42,10 +43,10 @@ $appCursorTooltips = $u && app_cursor_tooltips_active();
     <title><?= htmlspecialchars($pageTitle) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-    <link href="assets/css/style.css" rel="stylesheet">
+    <link href="assets/css/style.css?v=<?= (int) $styleCssVersion ?>" rel="stylesheet">
     <link href="assets/css/print.css" rel="stylesheet" media="print">
 </head>
-<body class="app-shell<?= $u ? ' app-shell-sidebar' . ($bodyRoleClass !== '' ? ' app-shell-sidebar--' . htmlspecialchars($bodyRoleClass, ENT_QUOTES, 'UTF-8') : '') : '' ?>">
+<body class="app-shell<?= $u ? ' app-shell-sidebar' . ($bodyRoleClass !== '' ? ' app-shell-sidebar--' . htmlspecialchars($bodyRoleClass, ENT_QUOTES, 'UTF-8') : '') : '' ?><?= !empty($bodyPageClass) ? ' ' . htmlspecialchars((string) $bodyPageClass, ENT_QUOTES, 'UTF-8') : '' ?>">
 <a class="visually-hidden-focusable btn btn-primary position-fixed top-0 start-0 m-2 px-3 py-2 rounded-3 shadow z-3" href="#main-content" style="z-index: 1080;"<?= $appCursorTooltips ? app_tooltip_attr('Jumps past the sidebar and menus to the main page content. Use this for faster keyboard access to what you are reading.') : '' ?>>Skip to main content</a>
 <?php if ($u): ?>
 <?php
@@ -77,36 +78,12 @@ $topbarProfilePhotoUrl = profile_photo_url((int) ($u['id'] ?? 0));
             <a class="admin-sidebar-foot-link admin-sidebar-logout" href="logout.php"<?= $appCursorTooltips ? app_tooltip_attr('Signs you out of the system. Use when you are done or when someone else needs this device.') : '' ?>><i class="fa-solid fa-right-from-bracket me-2" aria-hidden="true"></i>Logout</a>
         </div>
     </aside>
-    <div class="offcanvas offcanvas-start d-lg-none admin-offcanvas-nav no-print" tabindex="-1" id="adminNavOffcanvas" aria-labelledby="adminNavOffcanvasLabel">
-        <div class="offcanvas-header border-bottom">
-            <div>
-                <div class="fw-semibold" id="adminNavOffcanvasLabel">Menu</div>
-                <div class="small text-muted text-uppercase"><?= htmlspecialchars($navRole) ?></div>
-            </div>
-            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close menu"<?= $appCursorTooltips ? app_tooltip_attr('Closes the slide-out navigation menu. Use this after you choose a page or if you opened the menu by mistake.') : '' ?>></button>
-        </div>
-        <div class="offcanvas-body p-0 d-flex flex-column">
-            <nav class="admin-sidebar-nav flex-grow-1 px-2 pb-3" aria-label="Primary sections">
-                <?php if ($navRole === 'admin'): ?>
-                    <?php render_admin_nav_sections($adminNavPage, $messagingNavUnread, true); ?>
-                <?php elseif ($navRole === 'super_admin'): ?>
-                    <?php render_super_admin_nav_sections($adminNavPage, $messagingNavUnread, true); ?>
-                <?php else: ?>
-                    <?php render_role_nav_sections($navRole, $adminNavPage, $messagingNavUnread, true); ?>
-                <?php endif; ?>
-            </nav>
-            <div class="admin-sidebar-footer border-top px-3 py-3 mt-auto">
-                <a class="admin-sidebar-foot-link d-block py-1" href="settings.php" data-bs-dismiss="offcanvas"<?= $appCursorTooltips ? app_tooltip_attr('Opens account settings where you can change your password. The mobile menu closes when you tap this.') : '' ?>><i class="fa-solid fa-gear me-2" aria-hidden="true"></i>Settings</a>
-                <a class="admin-sidebar-foot-link admin-sidebar-logout d-block py-1" href="logout.php" data-bs-dismiss="offcanvas"<?= $appCursorTooltips ? app_tooltip_attr('Signs you out. The mobile menu closes when you tap this.') : '' ?>><i class="fa-solid fa-right-from-bracket me-2" aria-hidden="true"></i>Logout</a>
-            </div>
-        </div>
-    </div>
     <div class="admin-main-wrap flex-grow-1 d-flex flex-column min-vh-100 min-w-0">
         <header class="admin-topbar border-bottom bg-body shadow-sm sticky-top no-print">
             <div class="d-flex align-items-center gap-3 px-3 px-lg-4 py-2 py-lg-3">
-                <button class="btn btn-outline-secondary btn-sm d-lg-none rounded-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#adminNavOffcanvas" aria-controls="adminNavOffcanvas" aria-label="Open navigation menu"<?= $appCursorTooltips ? app_tooltip_attr('Opens the navigation menu on phones and small screens. Use this when the left sidebar is hidden to reach Dashboard, Messages, schedules, and other app sections.') : '' ?>>
+                <label id="adminNavOpenBtn" for="adminNavToggle" class="btn btn-outline-secondary btn-sm d-lg-none rounded-3 d-inline-flex align-items-center justify-content-center" role="button" tabindex="0" aria-controls="adminNavOffcanvas" aria-label="Open navigation menu"<?= $appCursorTooltips ? app_tooltip_attr('Opens the navigation menu on phones and small screens. Use this when the left sidebar is hidden to reach Dashboard, Messages, schedules, and other app sections.') : '' ?>>
                     <i class="fa-solid fa-bars"></i>
-                </button>
+                </label>
                 <div class="flex-grow-1 min-w-0">
                     <div class="admin-topbar-title text-truncate"><?= htmlspecialchars($pageTitle) ?></div>
                     <div class="admin-topbar-subtitle small text-muted text-truncate d-none d-sm-block">Western Philippines University</div>

@@ -116,17 +116,23 @@ require_once __DIR__ . '/includes/header.php';
 
 $invalidWith = $withId > 0 && (!$threadUser || !$canOpen);
 $invalidClassroom = $usesClassroomDiscussions && $classroomId > 0 && !$activeClassroom;
+$studentMessagesThreadOpen = is_student()
+    && $usesClassroomDiscussions
+    && $activeClassroom !== null
+    && !$invalidClassroom;
+$messagesLayoutClass = 'row g-3 student-messages-layout'
+    . ($studentMessagesThreadOpen ? ' student-messages-thread-open' : '');
 ?>
 <h1 class="h3 mb-3"><i class="fa-solid fa-comments me-2 text-primary"></i>Messages</h1>
 <p class="text-muted small mb-3">
     <?php if (is_admin()): ?>
         You can message <strong>deans</strong>, <strong>program chairs</strong>, and <strong>GEN ED</strong> coordinators. You can also send memo announcements with attachments to <strong>faculty</strong>.
     <?php elseif (is_dean()): ?>
-        <strong>Dr. Francis A. Alterado</strong> may message <strong>GE faculty</strong> in your college; other deans message non-GE faculty only. <strong>GEN ED</strong> and <strong>admin</strong> contacts unchanged.
+        Message <strong>faculty</strong> in your college, <strong>GEN ED</strong>, and <strong>admin</strong> (faculty can reply). Memo announcements can be sent to your college faculty.
     <?php elseif (is_program_chair()): ?>
         Message your college <strong>dean</strong>, <strong>admin</strong>, and <strong>faculty</strong> in your assigned program (faculty can reply). Memo announcements can be sent to your program faculty.
     <?php elseif (is_faculty()): ?>
-        <strong>GE faculty Inbox:</strong> message <strong>Dean Francis Alterado</strong> and the <strong>GEN ED</strong> coordinator only. Other faculty may also use program <strong>chair</strong> and college dean. <strong>Subjects:</strong> class conversations with students.
+        Use <strong>Inbox</strong> to message your dean, program chair, or <strong>GEN ED</strong> coordinator. <strong>Subjects:</strong> class conversations with students.
     <?php elseif (is_gened()): ?>
         Message <strong>deans</strong>, <strong>admin</strong>, and <strong>GE faculty</strong> (faculty can reply). Memo announcements can be sent to GE faculty.
     <?php elseif (is_student()): ?>
@@ -150,8 +156,8 @@ $invalidClassroom = $usesClassroomDiscussions && $classroomId > 0 && !$activeCla
     <div class="alert alert-warning py-2">Memo attachments are not installed yet. Run <code>upgrade_roles.php</code> once to enable memo fields.</div>
 <?php endif; ?>
 
-<div class="row g-3">
-    <div class="col-lg-4">
+<div class="<?= htmlspecialchars($messagesLayoutClass, ENT_QUOTES, 'UTF-8') ?>">
+    <div class="col-lg-4 student-messages-sidebar">
         <div class="card shadow-sm h-100">
             <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <strong><?= $usesClassroomDiscussions ? 'Subjects' : 'Conversations' ?></strong>
@@ -268,9 +274,12 @@ $invalidClassroom = $usesClassroomDiscussions && $classroomId > 0 && !$activeCla
             </div>
         </div>
     </div>
-    <div class="col-lg-8">
+    <div class="col-lg-8 student-messages-panel">
         <div class="card shadow-sm">
             <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <?php if ($studentMessagesThreadOpen): ?>
+                    <a href="messages.php" class="btn btn-outline-secondary btn-sm student-messages-back"<?= app_tooltip_attr('Returns to your subject list on phones and small screens.') ?>><i class="fa-solid fa-arrow-left"></i> Subjects</a>
+                <?php endif; ?>
                 <?php if ($showInternalThread): ?>
                     <div>
                         <strong><?= htmlspecialchars($threadUser['full_name']) ?></strong>

@@ -293,6 +293,38 @@ declare(strict_types=1);
     html[data-bs-theme="dark"] .student-wellness-page .text-success {
       color: var(--wellness-accent) !important;
     }
+
+    @media (max-width: 575.98px) {
+      .student-wellness-root {
+        max-width: 100%;
+      }
+
+      .student-wellness-card {
+        min-height: min(82vh, 640px);
+        border-radius: 12px;
+      }
+
+      .student-wellness-card-header,
+      .student-wellness-compose,
+      .student-wellness-thread {
+        padding-left: 0.875rem;
+        padding-right: 0.875rem;
+      }
+
+      .student-wellness-thread {
+        max-height: min(44vh, 360px);
+        min-height: 220px;
+      }
+
+      .student-wellness-send {
+        flex: 1 1 100%;
+        text-align: center;
+      }
+
+      .student-wellness-bubble {
+        max-width: 96%;
+      }
+    }
   </style>
 
   <div class="student-wellness-card" aria-label="Wellness chat">

@@ -900,7 +900,93 @@ body.app-shell-sidebar--student {
 }
 
 .admin-offcanvas-nav {
-  max-width: min(320px, 92vw);
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  height: 100%;
+  width: min(320px, 92vw);
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--admin-sidebar-bg, var(--app-surface, #fff));
+  border-right: 1px solid var(--admin-sidebar-border, rgba(15, 23, 42, 0.08));
+  box-shadow: 2px 0 24px rgba(15, 23, 42, 0.18);
+  z-index: 1060;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+  will-change: transform;
+  overflow: hidden;
+}
+
+.admin-offcanvas-nav.show,
+#adminNavToggle:checked ~ .admin-offcanvas-nav {
+  transform: none;
+}
+
+.admin-nav-toggle-input {
+  position: fixed;
+  top: 0;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (min-width: 992px) {
+  .admin-offcanvas-nav,
+  .admin-offcanvas-backdrop,
+  .admin-nav-toggle-input {
+    display: none;
+  }
+}
+
+.admin-offcanvas-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1055;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: rgba(15, 23, 42, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.admin-offcanvas-backdrop.show,
+#adminNavToggle:checked ~ .admin-offcanvas-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.admin-offcanvas-nav .offcanvas-header {
+  padding: 1rem 1.1rem;
+}
+
+.admin-offcanvas-nav .offcanvas-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.admin-offcanvas-nav .admin-sidebar-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.admin-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 1040;
 }
 
 .admin-main-wrap {
@@ -1372,5 +1458,165 @@ html[data-bs-theme="dark"] .pcs-app .pcs-modal-card {
 
 html[data-bs-theme="dark"] .pcs-app .pcs-empty {
   color: var(--pcs-muted);
+}
+
+/* —— Student account: mobile responsiveness —— */
+body.app-shell-sidebar--student .admin-main-wrap {
+  overflow-x: clip;
+  min-width: 0;
+}
+
+body.page-student-edutools .admin-main-wrap {
+  overflow-x: visible;
+}
+
+body.app-shell-sidebar--student .student-class-meta {
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+body.app-shell-sidebar--student .student-messages-back {
+  display: none;
+}
+
+@media (max-width: 991.98px) {
+  body.app-shell-sidebar--student .admin-main-wrap > main.app-main {
+    padding-left: 0.875rem !important;
+    padding-right: 0.875rem !important;
+  }
+
+  body.app-shell-sidebar--student .student-page-header {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  body.app-shell-sidebar--student .student-page-header__actions {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  body.app-shell-sidebar--student .student-page-header__actions > .btn,
+  body.app-shell-sidebar--student .student-page-header__actions > form .btn {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+  }
+
+  body.app-shell-sidebar--student .student-page-header__actions > .student-attendance-panel {
+    flex: 1 1 100%;
+  }
+
+  body.app-shell-sidebar--student .student-attendance-panel .d-flex.flex-wrap.gap-2 {
+    width: 100%;
+  }
+
+  body.app-shell-sidebar--student .student-attendance-panel .btn {
+    flex: 1 1 calc(50% - 0.25rem);
+  }
+
+  body.app-shell-sidebar--student .student-messages-layout.student-messages-thread-open .student-messages-sidebar {
+    display: none;
+  }
+
+  body.app-shell-sidebar--student .student-messages-layout:not(.student-messages-thread-open) .student-messages-panel {
+    display: none;
+  }
+
+  body.app-shell-sidebar--student .student-messages-back {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  body.app-shell-sidebar--student #msgThread,
+  body.app-shell-sidebar--student #studentClassDiscussionThread {
+    max-height: min(52vh, 420px);
+  }
+
+  body.app-shell-sidebar--student .student-edutools-page {
+    overflow: visible;
+    padding-bottom: 1rem !important;
+  }
+
+  body.app-shell-sidebar--student .student-edutools-root {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body.app-shell-sidebar--student .student-edutools-root .app-container {
+    flex: 1 1 auto;
+    min-height: min(560px, calc(100dvh - 11rem));
+  }
+
+  body.app-shell-sidebar--student .student-edutools-root .main-area {
+    min-height: min(560px, calc(100dvh - 11rem));
+  }
+
+  body.app-shell-sidebar--student .student-edutools-root .tool-viewport,
+  body.app-shell-sidebar--student .student-edutools-root #eduDynamicContent {
+    min-height: min(480px, calc(100dvh - 15rem));
+  }
+
+  #adminNavOpenBtn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.5rem 0.65rem;
+    touch-action: manipulation;
+  }
+
+  .admin-offcanvas-nav .admin-nav-link,
+  .admin-offcanvas-nav .admin-sidebar-foot-link {
+    min-height: 44px;
+    align-items: center;
+  }
+}
+
+@media (max-width: 575.98px) {
+  body.app-shell-sidebar--student .admin-topbar .app-theme-toggle #appThemeToggleLabel {
+    display: none;
+  }
+
+  body.app-shell-sidebar--student .admin-topbar .px-3 {
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
+    gap: 0.5rem !important;
+  }
+
+  body.app-shell-sidebar--student .student-page-header h1,
+  body.app-shell-sidebar--student .student-page-header .h3 {
+    font-size: 1.2rem;
+    line-height: 1.35;
+  }
+
+  body.app-shell-sidebar--student .student-page-header__actions > .btn,
+  body.app-shell-sidebar--student .student-page-header__actions > form .btn {
+    flex: 1 1 100%;
+  }
+
+  body.app-shell-sidebar--student .student-class-card-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  body.app-shell-sidebar--student .student-class-card-stats > span {
+    margin-right: 0 !important;
+  }
+
+  body.app-shell-sidebar--student .student-join-form .btn {
+    width: 100%;
+  }
+
+  body.app-shell-sidebar--student .card-body .d-flex.gap-2.flex-wrap .btn {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+  }
+
+  body.app-shell-sidebar--student .card[style*="max-width"] {
+    max-width: 100% !important;
+  }
 }
 

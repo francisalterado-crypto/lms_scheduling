@@ -458,15 +458,16 @@ if ($missingTables === []) {
     }
 
     if ($hasAttendanceTables) {
+        $attendanceTodayDate = date('Y-m-d');
         if ($hasAttendanceLogoutColumn) {
             $st = db()->prepare(
                 'SELECT ar.evidence_login_at, ar.evidence_logout_at
                  FROM classroom_attendance_sessions s
                  LEFT JOIN classroom_attendance_records ar ON ar.session_id = s.id AND ar.student_id = ?
-                 WHERE s.classroom_id = ? AND s.attendance_date = CURDATE()
+                 WHERE s.classroom_id = ? AND s.attendance_date = ?
                  LIMIT 1'
             );
-            $st->execute([$studentId, $classroomId]);
+            $st->execute([$studentId, $classroomId, $attendanceTodayDate]);
             $attendanceRow = $st->fetch() ?: null;
             if ($attendanceRow) {
                 $attendanceTodayLoginAt = $attendanceRow['evidence_login_at'] ?? null;
@@ -477,10 +478,10 @@ if ($missingTables === []) {
                 'SELECT ar.evidence_login_at
                  FROM classroom_attendance_sessions s
                  LEFT JOIN classroom_attendance_records ar ON ar.session_id = s.id AND ar.student_id = ?
-                 WHERE s.classroom_id = ? AND s.attendance_date = CURDATE()
+                 WHERE s.classroom_id = ? AND s.attendance_date = ?
                  LIMIT 1'
             );
-            $st->execute([$studentId, $classroomId]);
+            $st->execute([$studentId, $classroomId, $attendanceTodayDate]);
             $attendanceRow = $st->fetch() ?: null;
             if ($attendanceRow) {
                 $attendanceTodayLoginAt = $attendanceRow['evidence_login_at'] ?? null;
@@ -512,8 +513,8 @@ if ($attendanceHasLogoutToday) {
     $attendanceStatusLabel = $hasAttendanceLogoutColumn ? 'In class' : 'Login recorded';
 }
 ?>
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-    <div>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 student-page-header">
+    <div class="min-w-0">
         <h1 class="h3 mb-1">
             <i class="fa-solid fa-book-open-reader me-2 text-primary"></i><?= htmlspecialchars((string) ($classroom['title'] ?? 'Classroom')) ?>
             <?php if ($classroomIsLive): ?>
@@ -521,7 +522,7 @@ if ($attendanceHasLogoutToday) {
             <?php endif; ?>
         </h1>
         <?php if ($classroom): ?>
-            <div class="text-muted">
+            <div class="text-muted student-class-meta">
                 <?= htmlspecialchars((string) $classroom['course_code']) ?> - <?= htmlspecialchars((string) $classroom['course_name']) ?>
                 | Instructor: <?= htmlspecialchars((string) $classroom['faculty_name']) ?>
             </div>
@@ -532,15 +533,15 @@ if ($attendanceHasLogoutToday) {
             <?php endif; ?>
         <?php endif; ?>
     </div>
-    <div class="d-flex flex-wrap align-items-start align-items-md-center gap-2">
+    <div class="d-flex flex-wrap align-items-start align-items-md-center gap-2 student-page-header__actions">
         <?php if ($studentSyllabusReady): ?>
-            <a href="<?= htmlspecialchars(classroom_syllabus_href((int) $classroomId)) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm px-3 text-nowrap"<?= student_tooltip_attr('Opens the official course syllabus in a new browser tab so you can read it alongside the class page.') ?>><i class="fa-solid fa-file-contract me-1"></i>Syllabus</a>
+            <a href="<?= htmlspecialchars(classroom_syllabus_href((int) $classroomId)) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm px-3"<?= student_tooltip_attr('Opens the official course syllabus in a new browser tab so you can read it alongside the class page.') ?>><i class="fa-solid fa-file-contract me-1"></i>Syllabus</a>
         <?php elseif ($hasSyllabusCols && $classroom): ?>
             <span class="badge text-bg-secondary align-self-center">Syllabus pending</span>
         <?php endif; ?>
-        <a href="student_classrooms.php" class="btn btn-outline-secondary btn-sm px-3 text-nowrap"<?= student_tooltip_attr('Returns to the list of all your enrolled classes. Use this when you are done with this class or want to switch subjects.') ?>>Back to My Classes</a>
+        <a href="student_classrooms.php" class="btn btn-outline-secondary btn-sm px-3"<?= student_tooltip_attr('Returns to the list of all your enrolled classes. Use this when you are done with this class or want to switch subjects.') ?>>Back to My Classes</a>
         <?php if ($hasAttendanceTables): ?>
-            <div class="border rounded-3 px-2 py-2 bg-light-subtle d-flex flex-column align-items-start gap-1">
+            <div class="border rounded-3 px-2 py-2 bg-light-subtle d-flex flex-column align-items-start gap-1 student-attendance-panel">
                 <div class="small fw-semibold <?= htmlspecialchars($attendanceStatusClass) ?>">
                     <i class="fa-solid fa-user-check me-1"></i><?= htmlspecialchars($attendanceStatusLabel) ?>
                 </div>
@@ -565,7 +566,7 @@ if ($attendanceHasLogoutToday) {
             </div>
         <?php endif; ?>
         <?php if ($classroom && trim((string) $classroom['meet_link']) !== ''): ?>
-            <a href="<?= htmlspecialchars((string) $classroom['meet_link']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm px-3 text-nowrap"<?= student_tooltip_attr('Opens the live video meeting for this class in a new tab. Use this during class time or when the LIVE badge shows your instructor is online.') ?>><i class="fa-solid fa-video me-1"></i>Join Meet</a>
+            <a href="<?= htmlspecialchars((string) $classroom['meet_link']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm px-3"<?= student_tooltip_attr('Opens the live video meeting for this class in a new tab. Use this during class time or when the LIVE badge shows your instructor is online.') ?>><i class="fa-solid fa-video me-1"></i>Join Meet</a>
         <?php endif; ?>
     </div>
 </div>
@@ -583,7 +584,7 @@ if ($attendanceHasLogoutToday) {
     </div>
 <?php else: ?>
     <div class="row g-4">
-        <div class="col-lg-4">
+        <div class="col-lg-4 order-lg-1 order-2">
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-white"><strong>Announcements</strong></div>
                 <div class="card-body">
@@ -655,7 +656,7 @@ if ($attendanceHasLogoutToday) {
             </div>
         </div>
 
-        <div class="col-lg-8">
+        <div class="col-lg-8 order-lg-2 order-1 student-classroom-main">
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-white"><strong>Class Discussion</strong></div>
                 <div class="card-body">

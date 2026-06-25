@@ -9,16 +9,28 @@ require_role(['student']);
 $userId = (int) ($_SESSION['user_id'] ?? 0);
 $storageNs = 'u' . ($userId > 0 ? (string) $userId : '0');
 
+$eduToolsCatalog = [
+    ['id' => 'notebook', 'name' => 'Notebook', 'icon' => '📘', 'category' => 'notebooks'],
+    ['id' => 'notebooklm', 'name' => 'NotebookLM', 'icon' => '🧠', 'category' => 'notebooks'],
+    ['id' => 'chatgpt', 'name' => 'ChatGPT', 'icon' => '🤖', 'category' => 'ai'],
+    ['id' => 'perplexity', 'name' => 'Perplexity', 'icon' => '🔍', 'category' => 'ai'],
+    ['id' => 'wolfram', 'name' => 'Wolfram', 'icon' => '🧮', 'category' => 'reference'],
+    ['id' => 'khan', 'name' => 'Khan Academy', 'icon' => '📚', 'category' => 'reference'],
+    ['id' => 'notion', 'name' => 'Notion', 'icon' => '📝', 'category' => 'reference'],
+];
+
 $pageTitle = 'Learning tools (EduTools)';
-$mainContainerClass = 'container-fluid px-3 px-lg-4 py-3 py-md-4 flex-grow-1 d-flex flex-column min-w-0 student-edutools-page';
+$bodyPageClass = 'page-student-edutools';
+$mainContainerClass = 'container-fluid px-3 px-lg-4 py-3 py-md-4 flex-grow-1 d-flex flex-column min-w-0 app-main student-edutools-page';
 require_once __DIR__ . '/includes/header.php';
 ?>
 <div class="mb-3">
     <h1 class="h4 mb-1"><i class="fa-solid fa-wand-magic-sparkles me-2 text-primary"></i>EduTools</h1>
-    <p class="text-muted small mb-0">AI helpers, references, and a personal notebook for your studies. Use the sidebar to pick a tool; <kbd class="small">Ctrl</kbd>+<kbd class="small">E</kbd> toggles the tool menu.</p>
+    <p class="text-muted small mb-0 d-none d-lg-block">AI helpers, references, and a personal notebook for your studies. Use the sidebar to pick a tool; <kbd class="small">Ctrl</kbd>+<kbd class="small">E</kbd> toggles the tool menu.</p>
+    <p class="text-muted small mb-0 d-lg-none">Swipe the tool chips at the top, then use the notebook or launch button below.</p>
 </div>
 
-<div class="student-edutools-root" data-storage-ns="<?= htmlspecialchars($storageNs, ENT_QUOTES, 'UTF-8') ?>">
+<div class="student-edutools-root flex-grow-1 d-flex flex-column min-h-0" data-storage-ns="<?= htmlspecialchars($storageNs, ENT_QUOTES, 'UTF-8') ?>">
   <style>
     .student-edutools-root * {
       box-sizing: border-box;
@@ -134,6 +146,50 @@ require_once __DIR__ . '/includes/header.php';
       background: #fefefe;
       overflow: auto;
       min-height: 0;
+    }
+
+    .student-edutools-root #eduDynamicContent {
+      min-height: 100%;
+    }
+
+    .student-edutools-root .mobile-tools-strip {
+      display: none;
+      gap: 8px;
+      padding: 8px 12px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      border-bottom: 1px solid #e9eef3;
+      background: #f8fafc;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      flex-shrink: 0;
+    }
+
+    .student-edutools-root .mobile-tool-chip {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #1e293b;
+      font-size: 0.78rem;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+
+    .student-edutools-root .mobile-tool-chip:hover {
+      background: #f1f5f9;
+    }
+
+    .student-edutools-root .mobile-tool-chip.active {
+      background: #eef2ff;
+      border-color: #93c5fd;
+      color: #1e40af;
     }
 
     .student-edutools-root iframe {
@@ -306,21 +362,111 @@ require_once __DIR__ . '/includes/header.php';
       color: #1a73e8;
     }
 
-    @media (max-width: 680px) {
-      .student-edutools-root .tools-panel {
-        width: 260px;
+    .student-edutools-root .tools-panel-backdrop {
+      display: none;
+      position: absolute;
+      inset: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: rgba(15, 23, 42, 0.45);
+      z-index: 35;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .student-edutools-root .tools-panel-backdrop.is-visible {
+      display: block;
+    }
+
+    @media (max-width: 991.98px) {
+      .student-edutools-root .app-container {
+        position: relative;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: min(560px, calc(100dvh - 11rem));
+        overflow: visible;
       }
+
+      .student-edutools-root .tools-panel,
+      .student-edutools-root .tools-panel-backdrop,
+      .student-edutools-root .menu-toggle-btn,
+      .student-edutools-root .key-hint {
+        display: none !important;
+      }
+
+      .student-edutools-root .mobile-tools-strip {
+        display: flex !important;
+        order: 1;
+        width: 100%;
+      }
+
+      .student-edutools-root .main-area {
+        order: 2;
+        width: 100%;
+        flex: 1 1 auto;
+        max-width: 100%;
+        min-height: min(520px, calc(100dvh - 12rem));
+        overflow: visible;
+      }
+
+      .student-edutools-root .top-bar {
+        padding: 8px 12px;
+      }
+
+      .student-edutools-root .active-badge {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 0.78rem;
+      }
+
+      .student-edutools-root .tool-viewport {
+        flex: 1 1 auto;
+        min-height: min(460px, calc(100dvh - 14rem));
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .student-edutools-root #eduDynamicContent {
+        min-height: min(460px, calc(100dvh - 14rem));
+      }
+
+      .student-edutools-root textarea.notepad-textarea {
+        min-height: min(360px, calc(100dvh - 17rem));
+      }
+
       .student-edutools-root .notebook-container {
         padding: 14px;
       }
-      .student-edutools-root .top-bar {
-        padding: 8px 12px;
+
+      .student-edutools-root .shortcut-toast {
+        display: none;
+      }
+
+      .student-edutools-root iframe {
+        min-height: 360px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .student-edutools-root .note-actions .note-btn {
+        flex: 1 1 calc(50% - 0.25rem);
+        text-align: center;
       }
     }
 
   </style>
 
   <div class="app-container">
+    <div class="mobile-tools-strip" id="eduMobileToolsStrip" aria-label="Quick tool picker">
+      <?php foreach ($eduToolsCatalog as $tool): ?>
+        <button type="button" class="mobile-tool-chip<?= $tool['id'] === 'notebook' ? ' active' : '' ?>" data-tool-id="<?= htmlspecialchars($tool['id'], ENT_QUOTES, 'UTF-8') ?>">
+          <span aria-hidden="true"><?= $tool['icon'] ?></span>
+          <span><?= htmlspecialchars($tool['name'], ENT_QUOTES, 'UTF-8') ?></span>
+        </button>
+      <?php endforeach; ?>
+    </div>
+    <button type="button" class="tools-panel-backdrop" id="eduToolsBackdrop" aria-label="Close tool menu" tabindex="-1" aria-hidden="true"></button>
     <aside class="tools-panel" id="eduToolsPanel" aria-label="Learning tools">
       <div style="padding: 16px 16px 0 16px;">
         <h2 style="font-size: 1.35rem; font-weight: 700; margin: 0; background: linear-gradient(145deg, #0f2b3d, #1e4a76); background-clip: text; -webkit-background-clip: text; color: transparent;">EduTools</h2>
@@ -349,7 +495,22 @@ require_once __DIR__ . '/includes/header.php';
         </div>
       </div>
       <div class="tool-viewport position-relative" id="eduToolViewport">
-        <div id="eduDynamicContent"></div>
+        <div id="eduDynamicContent">
+          <div class="notebook-container">
+            <div class="notebook-header">
+              <h2>Personal learning notebook</h2>
+              <div class="note-actions">
+                <button type="button" id="eduExportMdBtn" class="note-btn">Export .md</button>
+                <button type="button" id="eduExportTxtBtn" class="note-btn">Export .txt</button>
+                <button type="button" id="eduClearNotebookBtn" class="note-btn">Clear</button>
+              </div>
+            </div>
+            <textarea id="eduNotebookTextarea" class="notepad-textarea" placeholder="Write your notes here..."># Welcome to your Smart Notebook
+
+Take notes, draft ideas, and save study resources.</textarea>
+            <div class="status-msg" id="eduNoteStatus">Auto-save enabled</div>
+          </div>
+        </div>
         <div class="shortcut-toast" aria-hidden="true">Ctrl+E toggles sidebar · NotebookLM: AI research assistant</div>
       </div>
     </div>
@@ -382,22 +543,70 @@ require_once __DIR__ . '/includes/header.php';
 
   const toolViewport = document.getElementById('eduDynamicContent');
   const toolsPanel = document.getElementById('eduToolsPanel');
+  const toolsBackdrop = document.getElementById('eduToolsBackdrop');
   const toggleBtn = document.getElementById('eduTogglePanelBtn');
   const activeToolNameSpan = document.getElementById('eduActiveToolName');
   const toolMenuList = document.getElementById('eduToolMenuList');
   const notebookSectionList = document.getElementById('eduNotebookSectionList');
+  const mobileToolsStrip = document.getElementById('eduMobileToolsStrip');
+  const mobileToolsQuery = window.matchMedia('(max-width: 991.98px)');
 
-  if (!toolViewport || !toolsPanel || !toggleBtn || !activeToolNameSpan || !toolMenuList || !notebookSectionList) return;
+  if (!toolViewport || !toolsPanel || !activeToolNameSpan || !toolMenuList || !notebookSectionList) return;
+
+  function isMobileToolsLayout() {
+    return mobileToolsQuery.matches;
+  }
+
+  function syncToolsBackdrop() {
+    if (!toolsBackdrop) return;
+    var open = isMobileToolsLayout() && !toolsPanel.classList.contains('collapsed');
+    toolsBackdrop.classList.toggle('is-visible', open);
+    toolsBackdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
+    toolsBackdrop.tabIndex = open ? 0 : -1;
+  }
+
+  function setPanelCollapsed(collapsed, persist) {
+    toolsPanel.classList.toggle('collapsed', collapsed);
+    if (persist !== false) {
+      localStorage.setItem(PANEL_COLLAPSED_KEY, collapsed ? 'true' : 'false');
+    }
+    syncToolsBackdrop();
+  }
 
   function renderMenu() {
     toolMenuList.innerHTML = '';
     notebookSectionList.innerHTML = '';
+    if (mobileToolsStrip) {
+      mobileToolsStrip.innerHTML = '';
+    }
     const aiTools = toolsConfig.filter(function (t) { return t.category === 'ai'; });
     const refTools = toolsConfig.filter(function (t) { return t.category === 'reference'; });
     const notebookTools = toolsConfig.filter(function (t) { return t.category === 'notebooks'; });
     aiTools.forEach(function (tool) { toolMenuList.appendChild(createMenuItem(tool)); });
     refTools.forEach(function (tool) { toolMenuList.appendChild(createMenuItem(tool)); });
     notebookTools.forEach(function (tool) { notebookSectionList.appendChild(createMenuItem(tool)); });
+    toolsConfig.forEach(function (tool) {
+      if (!mobileToolsStrip) return;
+      var existing = mobileToolsStrip.querySelector('[data-tool-id="' + tool.id + '"]');
+      if (!existing) {
+        mobileToolsStrip.appendChild(createMobileChip(tool));
+      }
+    });
+  }
+
+  function createMobileChip(tool) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mobile-tool-chip' + (currentToolId === tool.id ? ' active' : '');
+    btn.setAttribute('data-tool-id', tool.id);
+    btn.innerHTML = '<span aria-hidden="true">' + tool.icon + '</span><span>' + escapeHtml(tool.name) + '</span>';
+    btn.addEventListener('click', function () {
+      activateTool(tool.id);
+      if (isMobileToolsLayout()) {
+        setPanelCollapsed(true);
+      }
+    });
+    return btn;
   }
 
   function createMenuItem(tool) {
@@ -412,6 +621,9 @@ require_once __DIR__ . '/includes/header.php';
     li.addEventListener('click', function (e) {
       e.stopPropagation();
       activateTool(tool.id);
+      if (isMobileToolsLayout()) {
+        setPanelCollapsed(true);
+      }
     });
     return li;
   }
@@ -535,6 +747,13 @@ require_once __DIR__ . '/includes/header.php';
         item.classList.remove('active');
       }
     });
+    document.querySelectorAll('.student-edutools-root .mobile-tool-chip').forEach(function (chip) {
+      if (chip.getAttribute('data-tool-id') === toolId) {
+        chip.classList.add('active');
+      } else {
+        chip.classList.remove('active');
+      }
+    });
     if (tool.type === 'notebook') {
       renderNotebook();
       setTimeout(function () {
@@ -550,23 +769,26 @@ require_once __DIR__ . '/includes/header.php';
   }
 
   function togglePanel() {
-    toolsPanel.classList.toggle('collapsed');
-    localStorage.setItem(PANEL_COLLAPSED_KEY, toolsPanel.classList.contains('collapsed') ? 'true' : 'false');
+    setPanelCollapsed(!toolsPanel.classList.contains('collapsed'));
   }
 
   function restoreState() {
     var lastTool = localStorage.getItem(LAST_TOOL_KEY);
-    var panelCollapsed = localStorage.getItem(PANEL_COLLAPSED_KEY) === 'true';
-    if (panelCollapsed) {
-      toolsPanel.classList.add('collapsed');
-    } else {
-      toolsPanel.classList.remove('collapsed');
+    var storedCollapsed = localStorage.getItem(PANEL_COLLAPSED_KEY);
+    var panelCollapsed = storedCollapsed === 'true';
+    if (isMobileToolsLayout()) {
+      panelCollapsed = true;
+    } else if (storedCollapsed === null) {
+      panelCollapsed = false;
     }
+    setPanelCollapsed(panelCollapsed, false);
     if (lastTool && toolsConfig.some(function (t) { return t.id === lastTool; })) {
       activateTool(lastTool);
     } else {
       activateTool('notebook');
     }
+    toolsPanel.classList.add('tools-panel-ready');
+    syncToolsBackdrop();
   }
 
   function handleKeydown(e) {
@@ -584,7 +806,46 @@ require_once __DIR__ . '/includes/header.php';
 
   renderMenu();
   restoreState();
-  toggleBtn.addEventListener('click', togglePanel);
+  document.querySelectorAll('.student-edutools-root .mobile-tool-chip[data-tool-id]').forEach(function (chip) {
+    if (chip.getAttribute('data-edu-bound') === '1') return;
+    chip.setAttribute('data-edu-bound', '1');
+    chip.addEventListener('click', function () {
+      var toolId = chip.getAttribute('data-tool-id');
+      if (toolId) {
+        activateTool(toolId);
+        if (isMobileToolsLayout()) {
+          setPanelCollapsed(true);
+        }
+      }
+    });
+  });
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', togglePanel);
+  }
+  if (toolsBackdrop) {
+    toolsBackdrop.addEventListener('click', function () {
+      if (!toolsPanel.classList.contains('collapsed')) {
+        setPanelCollapsed(true);
+      }
+    });
+  }
+  if (typeof mobileToolsQuery.addEventListener === 'function') {
+    mobileToolsQuery.addEventListener('change', function () {
+      if (isMobileToolsLayout()) {
+        setPanelCollapsed(true);
+      } else {
+        syncToolsBackdrop();
+      }
+    });
+  } else if (typeof mobileToolsQuery.addListener === 'function') {
+    mobileToolsQuery.addListener(function () {
+      if (isMobileToolsLayout()) {
+        setPanelCollapsed(true);
+      } else {
+        syncToolsBackdrop();
+      }
+    });
+  }
   window.addEventListener('keydown', handleKeydown);
 
   setInterval(function () {

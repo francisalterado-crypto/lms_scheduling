@@ -139,7 +139,7 @@ if ($missingTables === []) {
 $pageTitle = 'My Classes';
 require_once __DIR__ . '/includes/header.php';
 ?>
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 student-page-header">
     <h1 class="h3 mb-0"><i class="fa-solid fa-user-graduate me-2 text-primary"></i>My Classes</h1>
 </div>
 
@@ -160,13 +160,13 @@ require_once __DIR__ . '/includes/header.php';
             <div class="card-header bg-white"><strong>Join a class with a code</strong></div>
             <div class="card-body">
                 <p class="small text-muted mb-3">Your program chair or instructor gives you a code. Enter it here to add the class to your list.</p>
-                <form method="post" class="row g-2 align-items-end">
+                <form method="post" class="row g-2 align-items-end student-join-form">
                     <input type="hidden" name="action" value="join_with_code">
-                    <div class="col-md-6 col-lg-4">
+                    <div class="col-12 col-md-6 col-lg-4">
                         <label class="form-label" for="join-code-input">Class code</label>
                         <input id="join-code-input" type="text" name="join_code" class="form-control font-monospace text-uppercase" maxlength="16" placeholder="e.g. AB12CD34" autocomplete="off" required>
                     </div>
-                    <div class="col-auto">
+                    <div class="col-12 col-sm-auto">
                         <button type="submit" class="btn btn-primary"<?= student_tooltip_attr('Enrolls you in the class that matches the code you entered. Use this after your instructor or program chair shares a join code with you.') ?>>Join class</button>
                     </div>
                 </form>
@@ -184,7 +184,7 @@ require_once __DIR__ . '/includes/header.php';
                     </div>
                 <?php endif; ?>
                 <?php foreach ($classes as $class): ?>
-                    <div class="col-md-6">
+                    <div class="col-12 col-md-6">
                         <?php
                         $liveAt = $hasLiveAt ? (string) ($class['online_live_at'] ?? '') : '';
                         $isLive = $hasLiveAt && $classIsLive($liveAt);
@@ -215,7 +215,7 @@ require_once __DIR__ . '/includes/header.php';
                                         <i class="fa-solid fa-circle-play me-1"></i>Your instructor is live now.
                                     </div>
                                 <?php endif; ?>
-                                <div class="small mb-3">
+                                <div class="small mb-3 student-class-card-stats">
                                     <span class="me-2">Announcements: <strong><?= (int) $class['announcement_count'] ?></strong></span>
                                     <span class="me-2">Assessments: <strong><?= (int) $class['assessment_count'] ?></strong></span>
                                     <span>Pending: <strong><?= (int) $class['pending_count'] ?></strong></span>
