@@ -16,6 +16,7 @@ $hasContentWeeks = db_column_exists('classroom_content', 'weeks');
 $hasContentDaysPerTopic = db_column_exists('classroom_content', 'days_per_topic');
 $hasContentTopicSchedule = $hasContentWeeks && $hasContentDaysPerTopic;
 $hasSyllabusCols = db_column_exists('online_classrooms', 'syllabus_stored_name');
+$hasCreditedWeek = db_column_exists('classroom_assessments', 'credited_week');
 $hasAttendanceSessionsTable = db_table_exists('classroom_attendance_sessions');
 $hasAttendanceRecordsTable = db_table_exists('classroom_attendance_records');
 $hasAttendanceTables = $hasAttendanceSessionsTable && $hasAttendanceRecordsTable;
@@ -75,7 +76,7 @@ $missingTables = array_values(array_filter(
 $classroom = null;
 if ($classroomId > 0 && $missingTables === []) {
     $st = db()->prepare(
-        'SELECT oc.*, c.course_code, c.course_name, f.full_name AS faculty_name, s.semester, s.school_year, s.start_time, s.end_time, s.online_live_at
+        'SELECT oc.*, c.course_code, c.course_name, f.full_name AS faculty_name, s.semester, s.school_year, s.day_of_week, s.start_time, s.end_time, s.online_live_at
          FROM classroom_enrollments ce
          INNER JOIN online_classrooms oc ON oc.id = ce.classroom_id
          INNER JOIN courses c ON c.id = oc.course_id
@@ -260,6 +261,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
                 }
 
                 if ($action === 'attendance_login') {
+                    $loginWindow = classroom_attendance_login_allowed($classroom);
+                    if (!$loginWindow['allowed']) {
+                        throw new RuntimeException(
+                            $loginWindow['reason'] !== ''
+                                ? $loginWindow['reason']
+                                : 'You can only log in during scheduled class time.'
+                        );
+                    }
+
                     if ($hasAttendanceLogoutColumn) {
                         db()->prepare(
                             'INSERT INTO classroom_attendance_records
@@ -457,6 +467,16 @@ if ($missingTables === []) {
         }
     }
 
+    $assessmentsByWeek = [];
+    if ($hasCreditedWeek) {
+        foreach ($assessments as $a) {
+            $wk = trim((string) ($a['credited_week'] ?? ''));
+            if ($wk !== '') {
+                $assessmentsByWeek[$wk][] = $a;
+            }
+        }
+    }
+
     if ($hasAttendanceTables) {
         $attendanceTodayDate = date('Y-m-d');
         if ($hasAttendanceLogoutColumn) {
@@ -499,7 +519,20 @@ $classroomIsLive = $hasLiveAt && $classIsLive($classroomLiveAt);
 $studentSyllabusReady = $classroom && $hasSyllabusCols && trim((string) ($classroom['syllabus_stored_name'] ?? '')) !== '';
 $attendanceHasLoginToday = trim((string) ($attendanceTodayLoginAt ?? '')) !== '';
 $attendanceHasLogoutToday = $hasAttendanceLogoutColumn && trim((string) ($attendanceTodayLogoutAt ?? '')) !== '';
-$attendanceCanLogin = !$attendanceHasLoginToday || $attendanceHasLogoutToday;
+$attendanceLoginWindow = $classroom ? classroom_attendance_login_allowed($classroom) : [
+    'allowed' => false,
+    'reason' => '',
+    'is_scheduled_day' => false,
+    'is_within_window' => false,
+    'session_start' => '',
+    'session_end' => '',
+];
+$attendanceCanLogin = (!$attendanceHasLoginToday || $attendanceHasLogoutToday) && $attendanceLoginWindow['allowed'];
+$attendanceLoginTooltip = $attendanceLoginWindow['allowed']
+    ? 'Records that you joined today’s class session for attendance. Use this when class starts or when your instructor expects a login check.'
+    : ($attendanceLoginWindow['reason'] !== ''
+        ? $attendanceLoginWindow['reason']
+        : 'Class login is only available during your scheduled class time.');
 $attendanceCanLogout = $hasAttendanceLogoutColumn
     ? ($attendanceHasLoginToday && !$attendanceHasLogoutToday)
     : true;
@@ -549,7 +582,7 @@ if ($attendanceHasLogoutToday) {
                     <form method="post" class="d-inline">
                         <input type="hidden" name="action" value="attendance_login">
                         <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
-                        <button type="submit" class="btn btn-primary btn-sm" <?= $attendanceCanLogin ? '' : 'disabled' ?> <?= student_tooltip_attr('Records that you joined today’s class session for attendance. Use this when class starts or when your instructor expects a login check.') ?>><i class="fa-solid fa-right-to-bracket me-1"></i>Class Login</button>
+                        <button type="submit" class="btn btn-primary btn-sm" <?= $attendanceCanLogin ? '' : 'disabled' ?> <?= student_tooltip_attr($attendanceLoginTooltip) ?>><i class="fa-solid fa-right-to-bracket me-1"></i>Class Login</button>
                     </form>
                     <form method="post" class="d-inline">
                         <input type="hidden" name="action" value="attendance_logout">
@@ -557,6 +590,9 @@ if ($attendanceHasLogoutToday) {
                         <button type="submit" class="btn btn-outline-danger btn-sm" <?= $attendanceCanLogout ? '' : 'disabled' ?> <?= student_tooltip_attr('Records that you left the class session. Use this when your instructor tracks end-of-class attendance or when you must leave early.') ?>><i class="fa-solid fa-right-from-bracket me-1"></i>Class Logout</button>
                     </form>
                 </div>
+                <?php if (!$attendanceLoginWindow['allowed'] && $attendanceLoginWindow['reason'] !== ''): ?>
+                    <div class="small text-muted"><?= htmlspecialchars($attendanceLoginWindow['reason']) ?></div>
+                <?php endif; ?>
                 <div class="small text-muted">
                     Last class login: <?= htmlspecialchars($formatDateTime12h($attendanceTodayLoginAt !== null ? (string) $attendanceTodayLoginAt : null)) ?>
                     <?php if ($hasAttendanceLogoutColumn): ?>
@@ -566,7 +602,11 @@ if ($attendanceHasLogoutToday) {
             </div>
         <?php endif; ?>
         <?php if ($classroom && trim((string) $classroom['meet_link']) !== ''): ?>
-            <a href="<?= htmlspecialchars((string) $classroom['meet_link']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm px-3"<?= student_tooltip_attr('Opens the live video meeting for this class in a new tab. Use this during class time or when the LIVE badge shows your instructor is online.') ?>><i class="fa-solid fa-video me-1"></i>Join Meet</a>
+            <?php if ($classroomIsLive): ?>
+                <a href="<?= htmlspecialchars((string) $classroom['meet_link']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm px-3"<?= student_tooltip_attr('Your instructor is live. Opens the video meeting for this class in a new tab.') ?>><i class="fa-solid fa-video me-1"></i>Join Meet</a>
+            <?php else: ?>
+                <button type="button" class="btn btn-outline-secondary btn-sm px-3" disabled<?= student_tooltip_attr('Join Meet is available only when your instructor goes live for this class.') ?>><i class="fa-solid fa-video me-1"></i>Join Meet</button>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>
@@ -642,12 +682,18 @@ if ($attendanceHasLogoutToday) {
                         <p class="small text-muted">Open a week to view only that week's faculty topics, materials, links, and attachments.</p>
                         <div class="list-group list-group-flush">
                             <?php foreach ($materialWeeks as $group): ?>
+                                <?php $weekAssessments = $assessmentsByWeek[(string) $group['label']] ?? []; ?>
                                 <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0" href="student_classroom_week.php?id=<?= (int) $classroomId ?>&week=<?= rawurlencode((string) $group['label']) ?>"<?= student_tooltip_attr('Opens materials and topics for this week only. Use this to focus on what your instructor posted for a specific week.') ?>>
                                     <span>
                                         <i class="fa-regular fa-calendar me-2 text-primary"></i>
                                         <strong><?= htmlspecialchars((string) $group['label']) ?></strong>
                                     </span>
-                                    <span class="badge text-bg-primary rounded-pill"><?= (int) $group['count'] ?></span>
+                                    <span class="d-flex gap-1">
+                                        <span class="badge text-bg-primary rounded-pill"><?= (int) $group['count'] ?></span>
+                                        <?php if ($weekAssessments !== []): ?>
+                                            <span class="badge text-bg-warning rounded-pill"><?= count($weekAssessments) ?> <?= count($weekAssessments) === 1 ? 'assessment' : 'assessments' ?></span>
+                                        <?php endif; ?>
+                                    </span>
                                 </a>
                             <?php endforeach; ?>
                         </div>
@@ -702,103 +748,148 @@ if ($attendanceHasLogoutToday) {
                     <?php endif; ?>
 
                     <?php foreach ($assessments as $assessment): ?>
-                        <div class="border rounded p-3 mb-3">
-                            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center border rounded p-3 mb-2" id="assessment-<?= (int) $assessment['id'] ?>">
+                            <div class="min-w-0 me-3">
                                 <div>
                                     <strong><?= htmlspecialchars((string) $assessment['title']) ?></strong>
                                     <span class="badge <?= classroom_assessment_type_badge_class((string) ($assessment['assessment_type'] ?? 'essay')) ?> ms-1">
                                         <?= htmlspecialchars(classroom_assessment_type_label((string) ($assessment['assessment_type'] ?? 'essay'))) ?>
                                     </span>
-                                    <div class="small text-muted">
-                                        <?= number_format((float) $assessment['total_points'], 2) ?> points
-                                        <?php if (!empty($assessment['due_at'])): ?>
-                                            | Due: <?= htmlspecialchars((string) $assessment['due_at']) ?>
-                                        <?php endif; ?>
-                                    </div>
-                                    <?php if (trim((string) ($assessment['description'] ?? '')) !== ''): ?>
-                                        <div class="small mt-1 classroom-assessment-desc"><?= classroom_content_render_body((string) $assessment['description']) ?></div>
+                                </div>
+                                <div class="small text-muted">
+                                    <?= number_format((float) $assessment['total_points'], 2) ?> points
+                                    <?php if (!empty($assessment['due_at'])): ?>
+                                        | Due: <?= htmlspecialchars((string) $assessment['due_at']) ?>
                                     <?php endif; ?>
                                 </div>
-                                <?php if ($assessment['score'] !== null): ?>
-                                    <div class="text-end">
-                                        <span class="badge bg-success">Graded</span>
-                                        <div class="small mt-1"><?= number_format((float) $assessment['score'], 2) ?> / <?= number_format((float) $assessment['total_points'], 2) ?></div>
-                                    </div>
-                                <?php endif; ?>
                             </div>
-
-                            <?php if (!empty($assessment['submitted_at'])): ?>
-                                <div class="alert alert-light border small">
-                                    Submitted: <?= htmlspecialchars((string) $assessment['submitted_at']) ?>
-                                    <?php if (!empty($assessment['submission_status'])): ?>
-                                        | Status: <?= htmlspecialchars((string) $assessment['submission_status']) ?>
-                                    <?php endif; ?>
-                                    <?php if (trim((string) ($assessment['feedback'] ?? '')) !== ''): ?>
-                                        <br>Feedback: <?= htmlspecialchars((string) $assessment['feedback']) ?>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endif; ?>
-
-                            <form method="post">
-                                <input type="hidden" name="action" value="submit_assessment">
-                                <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
-                                <input type="hidden" name="assessment_id" value="<?= (int) $assessment['id'] ?>">
-                                <?php $aid = (int) $assessment['id']; ?>
-                                <?php $questions = $assessmentQuestionMap[$aid] ?? []; ?>
-                                <?php if ($questions === []): ?>
-                                    <div class="alert alert-warning small mb-2">This assessment has no questions yet.</div>
+                            <div class="d-flex align-items-center gap-2">
+                                <?php if ($assessment['score'] !== null): ?>
+                                    <span class="badge bg-success"><?= number_format((float) $assessment['score'], 2) ?> / <?= number_format((float) $assessment['total_points'], 2) ?></span>
+                                <?php elseif (!empty($assessment['submitted_at'])): ?>
+                                    <span class="badge bg-info text-dark">Submitted</span>
                                 <?php endif; ?>
-                                <?php foreach ($questions as $idx => $q): ?>
-                                    <?php
-                                    $qid = (int) ($q['id'] ?? 0);
-                                    $qType = classroom_question_normalize_type((string) ($q['question_type'] ?? 'essay'));
-                                    $savedAnswer = (string) (($submissionQuestionMap[$aid][$qid]['answer_text'] ?? ''));
-                                    $savedSteps = (string) (($submissionQuestionMap[$aid][$qid]['answer_steps'] ?? ''));
-                                    $options = json_decode((string) ($q['options_json'] ?? '[]'), true);
-                                    if (!is_array($options)) {
-                                        $options = [];
-                                    }
-                                    ?>
-                                    <div class="mb-3 border rounded p-3 bg-light-subtle">
-                                        <div class="fw-semibold mb-1">Q<?= (int) ($idx + 1) ?>. <?= htmlspecialchars((string) $q['question_text']) ?></div>
-                                        <div class="small text-muted mb-2"><?= htmlspecialchars(classroom_question_type_label($qType)) ?> • <?= number_format((float) ($q['points'] ?? 0), 2) ?> pts</div>
-                                        <?php if ($qType === 'multiple_choice'): ?>
-                                            <?php foreach ($options as $oIdx => $opt): ?>
-                                                <?php $val = (string) chr(65 + (int) $oIdx); ?>
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="radio" name="answers[<?= $qid ?>]" id="q<?= $qid ?>_<?= $val ?>" value="<?= htmlspecialchars($val) ?>" <?= $savedAnswer === $val ? 'checked' : '' ?> required>
-                                                    <label class="form-check-label" for="q<?= $qid ?>_<?= $val ?>"><?= htmlspecialchars($val . '. ' . (string) $opt) ?></label>
-                                                </div>
-                                            <?php endforeach; ?>
-                                        <?php elseif ($qType === 'true_false'): ?>
-                                            <?php foreach (['true' => 'True', 'false' => 'False'] as $tfVal => $tfLabel): ?>
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="radio" name="answers[<?= $qid ?>]" id="q<?= $qid ?>_<?= $tfVal ?>" value="<?= $tfVal ?>" <?= strtolower($savedAnswer) === $tfVal ? 'checked' : '' ?> required>
-                                                    <label class="form-check-label" for="q<?= $qid ?>_<?= $tfVal ?>"><?= $tfLabel ?></label>
-                                                </div>
-                                            <?php endforeach; ?>
-                                        <?php else: ?>
-                                            <textarea class="form-control mb-2" name="answers[<?= $qid ?>]" rows="<?= $qType === 'essay' ? 5 : 3 ?>" <?= (int) ($q['char_limit'] ?? 0) > 0 ? 'maxlength="' . (int) $q['char_limit'] . '"' : '' ?> required><?= htmlspecialchars($savedAnswer) ?></textarea>
-                                            <?php if ((int) ($q['word_limit'] ?? 0) > 0): ?>
-                                                <div class="small text-muted">Word limit: <?= (int) $q['word_limit'] ?></div>
-                                            <?php endif; ?>
-                                        <?php endif; ?>
-                                        <?php if ((int) ($q['allow_steps'] ?? 0) === 1): ?>
-                                            <label class="form-label small mt-2">Optional step-by-step work</label>
-                                            <textarea class="form-control" name="answer_steps[<?= $qid ?>]" rows="3" placeholder="Show your steps for teacher review"><?= htmlspecialchars($savedSteps) ?></textarea>
-                                        <?php endif; ?>
-                                    </div>
-                                <?php endforeach; ?>
-                                <button type="submit" class="btn btn-primary btn-sm"<?= student_tooltip_attr('Sends your written answer to your instructor for grading. Use this when you are ready to submit or save changes to your response.') ?>>
-                                    <?= !empty($assessment['submitted_at']) ? 'Update answer' : 'Submit answer' ?>
+                                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#assessmentModal<?= (int) $assessment['id'] ?>"<?= student_tooltip_attr('Opens this assessment in a focused popup window where you can read the questions, write your answers, and submit.') ?>>
+                                    <i class="fa-solid fa-up-right-from-square me-1"></i>Open
                                 </button>
-                            </form>
+                            </div>
                         </div>
                     <?php endforeach; ?>
                 </div>
             </div>
         </div>
     </div>
+
+    <?php foreach ($assessments as $assessment): ?>
+    <?php
+    $aid = (int) $assessment['id'];
+    $questions = $assessmentQuestionMap[$aid] ?? [];
+    ?>
+    <div class="modal fade" id="assessmentModal<?= $aid ?>" tabindex="-1" aria-labelledby="assessmentModalLabel<?= $aid ?>" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-fullscreen-sm-down modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="assessmentModalLabel<?= $aid ?>">
+                        <i class="fa-solid fa-file-pen me-2 text-primary"></i><?= htmlspecialchars((string) $assessment['title']) ?>
+                        <span class="badge <?= classroom_assessment_type_badge_class((string) ($assessment['assessment_type'] ?? 'essay')) ?> ms-2 align-middle">
+                            <?= htmlspecialchars(classroom_assessment_type_label((string) ($assessment['assessment_type'] ?? 'essay'))) ?>
+                        </span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div class="text-muted">
+                            <?= number_format((float) $assessment['total_points'], 2) ?> points
+                            <?php if (!empty($assessment['due_at'])): ?>
+                                | Due: <?= htmlspecialchars((string) $assessment['due_at']) ?>
+                            <?php endif; ?>
+                        </div>
+                        <?php if (trim((string) ($assessment['description'] ?? '')) !== ''): ?>
+                            <div class="mt-1 classroom-assessment-desc"><?= classroom_content_render_body((string) $assessment['description']) ?></div>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php if ($assessment['score'] !== null): ?>
+                        <div class="alert alert-success small">
+                            <i class="fa-solid fa-check-circle me-1"></i><strong>Score:</strong>
+                            <?= number_format((float) $assessment['score'], 2) ?> / <?= number_format((float) $assessment['total_points'], 2) ?>
+                            <?php if (trim((string) ($assessment['feedback'] ?? '')) !== ''): ?>
+                                <br>Feedback: <?= htmlspecialchars((string) $assessment['feedback']) ?>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($assessment['submitted_at'])): ?>
+                        <div class="alert alert-light border small">
+                            Submitted: <?= htmlspecialchars((string) $assessment['submitted_at']) ?>
+                            <?php if (!empty($assessment['submission_status'])): ?>
+                                | Status: <?= htmlspecialchars((string) $assessment['submission_status']) ?>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <form method="post">
+                        <input type="hidden" name="action" value="submit_assessment">
+                        <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
+                        <input type="hidden" name="assessment_id" value="<?= $aid ?>">
+                        <?php if ($questions === []): ?>
+                            <div class="alert alert-warning small mb-2">This assessment has no questions yet.</div>
+                        <?php endif; ?>
+                        <?php foreach ($questions as $idx => $q): ?>
+                            <?php
+                            $qid = (int) ($q['id'] ?? 0);
+                            $qType = classroom_question_normalize_type((string) ($q['question_type'] ?? 'essay'));
+                            $savedAnswer = (string) (($submissionQuestionMap[$aid][$qid]['answer_text'] ?? ''));
+                            $savedSteps = (string) (($submissionQuestionMap[$aid][$qid]['answer_steps'] ?? ''));
+                            $options = json_decode((string) ($q['options_json'] ?? '[]'), true);
+                            if (!is_array($options)) {
+                                $options = [];
+                            }
+                            ?>
+                            <div class="mb-3 border rounded p-3 bg-light-subtle">
+                                <div class="fw-semibold mb-1">Q<?= (int) ($idx + 1) ?>. <?= htmlspecialchars((string) $q['question_text']) ?></div>
+                                <div class="small text-muted mb-2"><?= htmlspecialchars(classroom_question_type_label($qType)) ?> &bull; <?= number_format((float) ($q['points'] ?? 0), 2) ?> pts</div>
+                                <?php if ($qType === 'multiple_choice'): ?>
+                                    <?php foreach ($options as $oIdx => $opt): ?>
+                                        <?php $val = (string) chr(65 + (int) $oIdx); ?>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="answers[<?= $qid ?>]" id="qm<?= $aid ?>_<?= $qid ?>_<?= $val ?>" value="<?= htmlspecialchars($val) ?>" <?= $savedAnswer === $val ? 'checked' : '' ?> required>
+                                            <label class="form-check-label" for="qm<?= $aid ?>_<?= $qid ?>_<?= $val ?>"><?= htmlspecialchars($val . '. ' . (string) $opt) ?></label>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php elseif ($qType === 'true_false'): ?>
+                                    <?php foreach (['true' => 'True', 'false' => 'False'] as $tfVal => $tfLabel): ?>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="answers[<?= $qid ?>]" id="qm<?= $aid ?>_<?= $qid ?>_<?= $tfVal ?>" value="<?= $tfVal ?>" <?= strtolower($savedAnswer) === $tfVal ? 'checked' : '' ?> required>
+                                            <label class="form-check-label" for="qm<?= $aid ?>_<?= $qid ?>_<?= $tfVal ?>"><?= $tfLabel ?></label>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <textarea class="form-control mb-2" name="answers[<?= $qid ?>]" rows="<?= $qType === 'essay' ? 5 : 3 ?>" <?= (int) ($q['char_limit'] ?? 0) > 0 ? 'maxlength="' . (int) $q['char_limit'] . '"' : '' ?> required><?= htmlspecialchars($savedAnswer) ?></textarea>
+                                    <?php if ((int) ($q['word_limit'] ?? 0) > 0): ?>
+                                        <div class="small text-muted">Word limit: <?= (int) $q['word_limit'] ?></div>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                                <?php if ((int) ($q['allow_steps'] ?? 0) === 1): ?>
+                                    <label class="form-label small mt-2">Optional step-by-step work</label>
+                                    <textarea class="form-control" name="answer_steps[<?= $qid ?>]" rows="3" placeholder="Show your steps for teacher review"><?= htmlspecialchars($savedSteps) ?></textarea>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                        <?php if ($questions !== []): ?>
+                        <div class="text-end">
+                            <button type="submit" class="btn btn-primary"<?= student_tooltip_attr('Sends your written answer to your instructor for grading. Use this when you are ready to submit or save changes to your response.') ?>>
+                                <i class="fa-solid fa-paper-plane me-1"></i><?= !empty($assessment['submitted_at']) ? 'Update answer' : 'Submit answer' ?>
+                            </button>
+                        </div>
+                        <?php endif; ?>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endforeach; ?>
 <?php endif; ?>
 
 <?php if ($hasClassroomDiscussions): ?>
@@ -806,6 +897,20 @@ if ($attendanceHasLogoutToday) {
 document.getElementById('studentClassDiscussionThread')?.scrollTo(0, document.getElementById('studentClassDiscussionThread').scrollHeight);
 </script>
 <?php endif; ?>
+
+<script>
+(function () {
+    var hash = window.location.hash;
+    if (hash && hash.indexOf('#assessment-') === 0) {
+        var id = hash.substring('#assessment-'.length);
+        var modalEl = document.getElementById('assessmentModal' + id);
+        if (modalEl && typeof bootstrap !== 'undefined') {
+            var modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+    }
+})();
+</script>
 
 <script>
 document.querySelectorAll('[data-wordpad]').forEach((shell) => {

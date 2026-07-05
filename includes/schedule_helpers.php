@@ -142,7 +142,7 @@ function render_schedule_form(array $defaults = [], array $options = []): void
         $facultySql = "SELECT id, faculty_id, full_name FROM faculty WHERE status='active' AND college_id=?";
         $facultyParams = [$collegeId];
         if ($programScope !== null) {
-            $facultySql .= " AND department=?";
+            $facultySql .= " AND (department=? OR department='')";
             $facultyParams[] = $programScope;
         }
         $facultySql .= " ORDER BY full_name";

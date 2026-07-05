@@ -147,7 +147,7 @@ function resolve_faculty_id_for_user(int $userId): ?int
     $u = db()->prepare('SELECT id, role, full_name, college_id FROM users WHERE id=? LIMIT 1');
     $u->execute([$userId]);
     $user = $u->fetch();
-    if (!$user || (string) $user['role'] !== 'faculty') {
+    if (!$user || !in_array((string) $user['role'], ['faculty', 'program_chair', 'dean', 'gened'], true)) {
         return null;
     }
 
@@ -173,6 +173,98 @@ function resolve_faculty_id_for_user(int $userId): ?int
     }
 
     return null;
+}
+
+/**
+ * Auto-provision a faculty record for a non-faculty role (dean, program_chair, gened)
+ * so they can use classroom features under their own teaching load.
+ * Returns the faculty table PK or null on failure.
+ */
+function ensure_faculty_profile_for_teaching_role(int $userId): ?int
+{
+    $role = (string) ($_SESSION['role'] ?? '');
+    if (!in_array($role, ['dean', 'program_chair', 'gened'], true)) {
+        return null;
+    }
+
+    $hasIsGened = db_column_exists('faculty', 'is_gened');
+
+    $st = db()->prepare('SELECT id, department, college_id' . ($hasIsGened ? ', is_gened' : '') . ' FROM faculty WHERE user_id = ? LIMIT 1');
+    $st->execute([$userId]);
+    $existing = $st->fetch();
+    if ($existing !== false) {
+        $needsUpdate = false;
+        $updates = [];
+        $params = [];
+
+        if ($role === 'program_chair' && trim((string) $existing['department']) === '') {
+            $prog = trim((string) ($_SESSION['assigned_program'] ?? ''));
+            if ($prog !== '') {
+                $updates[] = 'department = ?';
+                $params[] = $prog;
+                $needsUpdate = true;
+            }
+        }
+
+        if ($role === 'gened' && $hasIsGened && (int) ($existing['is_gened'] ?? 0) === 0) {
+            $updates[] = 'is_gened = 1';
+            $needsUpdate = true;
+        }
+
+        if ($needsUpdate && $updates !== []) {
+            $params[] = (int) $existing['id'];
+            db()->prepare('UPDATE faculty SET ' . implode(', ', $updates) . ' WHERE id = ?')->execute($params);
+        }
+        return (int) $existing['id'];
+    }
+
+    $u = db()->prepare('SELECT id, full_name, college_id, assigned_program FROM users WHERE id = ? LIMIT 1');
+    $u->execute([$userId]);
+    $user = $u->fetch();
+    if (!$user) {
+        return null;
+    }
+
+    $prefixMap = ['dean' => 'DN', 'program_chair' => 'PC', 'gened' => 'GE'];
+    $prefix = $prefixMap[$role] ?? 'FC';
+    $facCode = $prefix . '-' . str_pad((string) $userId, 6, '0', STR_PAD_LEFT);
+
+    $chk = db()->prepare('SELECT COUNT(*) FROM faculty WHERE faculty_id = ?');
+    $chk->execute([$facCode]);
+    if ((int) $chk->fetchColumn() > 0) {
+        $facCode = $prefix . '-' . $userId . '-' . time() % 10000;
+    }
+
+    $department = $role === 'program_chair' ? trim((string) ($user['assigned_program'] ?? '')) : '';
+    $isGened = ($role === 'gened') ? 1 : 0;
+
+    $cols = 'user_id, faculty_id, full_name, department, college_id, employment_status, status';
+    $placeholders = '?, ?, ?, ?, ?, ?, ?';
+    $values = [
+        $userId,
+        $facCode,
+        (string) $user['full_name'],
+        $department,
+        $user['college_id'] !== null ? (int) $user['college_id'] : null,
+        'Permanent',
+        'active',
+    ];
+
+    if ($hasIsGened) {
+        $cols .= ', is_gened';
+        $placeholders .= ', ?';
+        $values[] = $isGened;
+    }
+
+    db()->prepare("INSERT INTO faculty ({$cols}) VALUES ({$placeholders})")->execute($values);
+
+    return (int) db()->lastInsertId();
+}
+
+/** @deprecated Use ensure_faculty_profile_for_teaching_role() instead */
+function ensure_faculty_profile_for_program_chair(int $userId): ?int
+{
+    return ensure_faculty_profile_for_teaching_role($userId);
 }
 
 function resolve_student_id_for_user(int $userId): ?int
@@ -273,4 +365,27 @@ function verify_admin_password(string $password): bool
         }
     }
     return false;
+}
+
+/** Username variants for login (exact, compact, common Super Admin aliases). */
+function login_username_lookup_variants(string $username): array
+{
+    $trimmed = trim($username);
+    if ($trimmed === '') {
+        return [];
+    }
+
+    $variants = [$trimmed];
+    $compact = strtolower((string) preg_replace('/[\s_.-]+/', '', $trimmed));
+    if ($compact !== '' && $compact !== strtolower($trimmed)) {
+        $variants[] = $compact;
+    }
+    if ($compact !== '' && defined('DEFAULT_SUPER_ADMIN_USERNAME')) {
+        $defaultSuper = strtolower((string) DEFAULT_SUPER_ADMIN_USERNAME);
+        if (in_array($compact, ['superadmin', 'superadministrator', 'super'], true) && $defaultSuper !== '') {
+            $variants[] = (string) DEFAULT_SUPER_ADMIN_USERNAME;
+        }
+    }
+
+    return array_values(array_unique($variants));
 }

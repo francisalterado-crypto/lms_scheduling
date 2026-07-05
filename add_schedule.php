@@ -8,6 +8,11 @@ require_once __DIR__ . '/includes/admin_activity_log.php';
 require_role(['dean', 'program_chair']);
 $collegeId = dean_or_program_chair_college_id_or_fail();
 $programScope = is_program_chair() ? program_scope_or_fail() : null;
+
+if (in_array($_SESSION['role'] ?? '', ['dean', 'program_chair'], true)) {
+    $userId = (int) ($_SESSION['user_id'] ?? 0);
+    ensure_faculty_profile_for_teaching_role($userId);
+}
 $hasLabFlag = db_column_exists('courses', 'is_laboratory');
 $hasProgramsTable = db_table_exists('programs');
 $hasYearLevel = db_column_exists('courses', 'year_level');
@@ -79,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $sql = 'SELECT COUNT(*) FROM faculty WHERE id=? AND college_id=?';
             $params = [$facultyId, $collegeId];
             if ($programScope !== null) {
-                $sql .= ' AND department=?';
+                $sql .= " AND (department=? OR department='')";
                 $params[] = $programScope;
             }
             $chk = db()->prepare($sql);

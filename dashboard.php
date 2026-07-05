@@ -10,6 +10,10 @@ $role = (string) ($_SESSION['role'] ?? '');
 $collegeId = current_college_id();
 $programScope = is_program_chair() ? program_scope_or_fail() : null;
 $today = date('l');
+$studentSelfId = 0;
+$studentScheduleClasses = [];
+$studentScheduleByDay = [];
+$hasStudentLiveAt = db_column_exists('schedules', 'online_live_at');
 $isAdmin = $role === 'admin';
 $autoRefreshSeconds = 30;
 $stat1Label = 'Active faculty';
@@ -140,6 +144,41 @@ if ($isAdmin) {
             $st->execute([$studentSelfId]);
             $openConflicts = (int) $st->fetchColumn();
         }
+
+        if (db_table_exists('online_classrooms') && db_table_exists('schedules')) {
+            $st = db()->prepare(
+                'SELECT oc.id AS classroom_id, oc.title, oc.meet_link,
+                        c.course_code, c.course_name, c.id AS course_id,
+                        f.full_name AS faculty_name,
+                        s.semester, s.school_year, s.day_of_week, s.start_time, s.end_time,
+                        s.online_live_at, r.room_code
+                 FROM classroom_enrollments ce
+                 INNER JOIN online_classrooms oc ON oc.id = ce.classroom_id
+                 INNER JOIN schedules s ON s.id = oc.schedule_id
+                 INNER JOIN courses c ON c.id = oc.course_id
+                 INNER JOIN faculty f ON f.id = oc.faculty_id
+                 INNER JOIN rooms r ON r.id = s.room_id
+                 WHERE ce.student_id = ?
+                 ORDER BY s.start_time, c.course_code'
+            );
+            $st->execute([$studentSelfId]);
+            $studentScheduleClasses = $st->fetchAll();
+            foreach (schedule_days_list() as $dayName) {
+                $studentScheduleByDay[$dayName] = [];
+            }
+            foreach ($studentScheduleClasses as $schedRow) {
+                foreach (parse_day_set((string) ($schedRow['day_of_week'] ?? '')) as $dayName) {
+                    if (isset($studentScheduleByDay[$dayName])) {
+                        $studentScheduleByDay[$dayName][] = $schedRow;
+                    }
+                }
+            }
+            foreach ($studentScheduleByDay as $dayName => $dayList) {
+                usort($studentScheduleByDay[$dayName], static function (array $a, array $b): int {
+                    return strcmp((string) $a['start_time'], (string) $b['start_time']);
+                });
+            }
+        }
     }
 } elseif ($role === 'super_admin') {
     $activeFaculty = (int) db()->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
@@ -257,17 +296,40 @@ if ($showUpcoming) {
     $upcoming = $upStmt->fetchAll();
 }
 
-$dashboardOverviewTitle = $showUpcoming
-    ? 'Upcoming classes today (' . htmlspecialchars($today) . ')'
-    : ($role === 'super_admin'
-        ? 'Super Admin workspace'
-        : 'Student overview');
+$dashboardOverviewTitle = $role === 'student'
+    ? 'Today\'s remaining classes (' . htmlspecialchars($today) . ')'
+    : ($showUpcoming
+        ? 'Upcoming classes today (' . htmlspecialchars($today) . ')'
+        : ($role === 'super_admin'
+            ? 'Super Admin workspace'
+            : 'Student overview'));
 
 $formatTime12h = static function (?string $time): string {
     $raw = substr((string) $time, 0, 5);
     $dt = DateTime::createFromFormat('H:i', $raw);
     return $dt ? $dt->format('g:i A') : $raw;
 };
+
+$studentClassIsLive = static function (?string $liveAt) use ($hasStudentLiveAt): bool {
+    if (!$hasStudentLiveAt || $liveAt === null || $liveAt === '') {
+        return false;
+    }
+    $liveTs = strtotime($liveAt);
+    if ($liveTs === false) {
+        return false;
+    }
+    return (time() - $liveTs) <= 2 * 3600;
+};
+
+$studentTodayClasses = [];
+if ($role === 'student' && isset($studentScheduleByDay[$today])) {
+    $nowTime = date('H:i:s');
+    foreach ($studentScheduleByDay[$today] as $schedRow) {
+        if ((string) ($schedRow['end_time'] ?? '') >= $nowTime) {
+            $studentTodayClasses[] = $schedRow;
+        }
+    }
+}
 
 $roleLabel = match ($role) {
     'super_admin' => 'Super Administrator',
@@ -448,6 +510,42 @@ require_once __DIR__ . '/includes/header.php';
 
     .upcoming-table tbody tr:hover {
         background: #f8fbf9;
+    }
+
+    .student-calendar-wrap .schedule-weekly th.is-today,
+    .student-calendar-wrap .schedule-cell.is-today {
+        background: rgba(31, 111, 67, 0.08);
+    }
+
+    .student-calendar-wrap .schedule-weekly th.is-today {
+        box-shadow: inset 0 -3px 0 #1f6f43;
+    }
+
+    .student-calendar-wrap .schedule-block {
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .student-calendar-wrap .schedule-block:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+    }
+
+    .student-calendar-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+        font-size: 0.82rem;
+        color: #5c6f7f;
+    }
+
+    .student-calendar-legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .student-calendar-legend i {
+        color: #1f6f43;
     }
 
     .conflict-card {
@@ -837,27 +935,146 @@ require_once __DIR__ . '/includes/header.php';
                 <li>Review grades and feedback once your instructor evaluates your work.</li>
                 <li>Cannot access classrooms or assessments where you are not enrolled.</li>
             </ul>
-            <div class="mt-3 d-flex flex-wrap gap-2">
+            <div class="mt-3 d-flex flex-wrap gap-2 student-dashboard-quick-actions">
                 <a href="student_classrooms.php" class="btn btn-primary btn-sm"<?= student_tooltip_attr('Opens the list of online classes you are enrolled in. Use this to join Meet, open materials, or submit work.') ?>><i class="fa-solid fa-user-graduate me-1"></i>Open My Classes</a>
                 <a href="student_edutools.php" class="btn btn-outline-primary btn-sm"<?= student_tooltip_attr('Opens EduTools: notebook, ChatGPT, Khan Academy, and other study helpers.') ?>><i class="fa-solid fa-wand-magic-sparkles me-1"></i>Learning tools</a>
+                <a href="student_materials_reviewer.php" class="btn btn-outline-primary btn-sm"<?= student_tooltip_attr('Review weekly course materials and generate practice questions per week.') ?>><i class="fa-solid fa-clipboard-question me-1"></i>Materials reviewer</a>
                 <a href="settings.php" class="btn btn-outline-secondary btn-sm"<?= student_tooltip_attr('Opens account settings to change your password. Use this when your password expires or you want a stronger one.') ?>><i class="fa-solid fa-key me-1"></i>Change Password</a>
             </div>
         </div>
     </div>
 <?php endif; ?>
 
+<?php if ($role === 'student'): ?>
+    <div class="card glass-card mb-4 student-calendar-wrap">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span><i class="fa-solid fa-calendar-week me-2 text-primary"></i>Virtual class calendar</span>
+            <a href="student_classrooms.php" class="btn btn-sm btn-outline-primary"<?= student_tooltip_attr('Opens your enrolled online classes. Use this to join Meet, read announcements, or submit work.') ?>><i class="fa-solid fa-user-graduate me-1"></i>My Classes</a>
+        </div>
+        <div class="card-body">
+            <?php if ($studentScheduleClasses === []): ?>
+                <p class="text-muted mb-2">You are not enrolled in any class yet. When your instructor or program chair adds you, your weekly schedule will appear here.</p>
+                <a href="student_classrooms.php" class="btn btn-outline-primary btn-sm"<?= student_tooltip_attr('Opens My Classes where you can join a class with a code from your instructor.') ?>>Go to My Classes</a>
+            <?php else: ?>
+                <div class="student-calendar-legend mb-3">
+                    <span><i class="fa-solid fa-circle-dot"></i> Today: <?= htmlspecialchars($today) ?></span>
+                    <span><i class="fa-solid fa-book-open"></i> <?= count($studentScheduleClasses) ?> enrolled class<?= count($studentScheduleClasses) === 1 ? '' : 'es' ?></span>
+                    <?php if ($hasStudentLiveAt): ?>
+                        <span><i class="fa-solid fa-circle text-danger"></i> LIVE = instructor is broadcasting now</span>
+                    <?php endif; ?>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered bg-body schedule-weekly mb-0">
+                        <thead class="table-primary">
+                            <tr>
+                                <?php foreach (schedule_days_list() as $dayName): ?>
+                                    <th class="text-center schedule-day-col<?= $dayName === $today ? ' is-today' : '' ?>">
+                                        <?= htmlspecialchars($dayName) ?>
+                                        <?php if ($dayName === $today): ?>
+                                            <span class="badge bg-success ms-1" style="font-size:0.65rem">Today</span>
+                                        <?php endif; ?>
+                                    </th>
+                                <?php endforeach; ?>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <?php foreach (schedule_days_list() as $dayName): ?>
+                                    <td class="align-top schedule-cell p-2<?= $dayName === $today ? ' is-today' : '' ?>">
+                                        <?php foreach ($studentScheduleByDay[$dayName] as $schedRow): ?>
+                                            <?php
+                                            $colorClass = 'c' . ((int) ($schedRow['course_id'] ?? 0) % 6);
+                                            $liveAt = $hasStudentLiveAt ? (string) ($schedRow['online_live_at'] ?? '') : '';
+                                            $isLive = $studentClassIsLive($liveAt);
+                                            $meetLink = trim((string) ($schedRow['meet_link'] ?? ''));
+                                            ?>
+                                            <div class="schedule-block <?= $colorClass ?>">
+                                                <div class="fw-semibold">
+                                                    <?= htmlspecialchars($formatTime12h((string) ($schedRow['start_time'] ?? ''))) ?>
+                                                    –
+                                                    <?= htmlspecialchars($formatTime12h((string) ($schedRow['end_time'] ?? ''))) ?>
+                                                </div>
+                                                <div>
+                                                    <strong><?= htmlspecialchars((string) $schedRow['course_code']) ?></strong>
+                                                    <?php if ($isLive): ?>
+                                                        <span class="badge bg-danger live-pulse-badge ms-1" style="font-size:0.65rem">LIVE</span>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <div class="small"><?= htmlspecialchars((string) $schedRow['course_name']) ?></div>
+                                                <div class="small text-muted"><?= htmlspecialchars((string) $schedRow['faculty_name']) ?></div>
+                                                <div class="small"><i class="fa-solid fa-door-open me-1"></i><?= htmlspecialchars((string) $schedRow['room_code']) ?></div>
+                                                <div class="small text-muted"><?= htmlspecialchars((string) $schedRow['semester']) ?> / <?= htmlspecialchars((string) $schedRow['school_year']) ?></div>
+                                                <div class="mt-1 d-flex flex-wrap gap-1">
+                                                    <a href="student_classroom.php?id=<?= (int) $schedRow['classroom_id'] ?>" class="btn btn-sm btn-primary py-0 px-2"<?= student_tooltip_attr('Opens this class workspace with announcements, materials, and assessments.') ?>>Open</a>
+                                                    <?php if ($meetLink !== ''): ?>
+                                                        <?php if ($isLive): ?>
+                                                            <a href="<?= htmlspecialchars($meetLink) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-success py-0 px-2"<?= student_tooltip_attr('Your instructor is live. Opens the video meeting for this class in a new tab.') ?>><i class="fa-solid fa-video me-1"></i>Meet</a>
+                                                        <?php else: ?>
+                                                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" disabled<?= student_tooltip_attr('Meet is available only when your instructor goes live for this class.') ?>><i class="fa-solid fa-video me-1"></i>Meet</button>
+                                                        <?php endif; ?>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        <?php endforeach; ?>
+                                        <?php if ($studentScheduleByDay[$dayName] === []): ?>
+                                            <span class="text-muted small">—</span>
+                                        <?php endif; ?>
+                                    </td>
+                                <?php endforeach; ?>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
+
 <div class="row g-4">
-    <div class="col-lg-7">
+    <div class="<?= $role === 'student' ? 'col-lg-7' : 'col-lg-7' ?>">
         <div class="card glass-card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="fa-solid fa-clock me-2 text-primary"></i><?= $dashboardOverviewTitle ?></span>
             </div>
             <div class="card-body p-0">
-                <?php if ($role === 'student' && !$showUpcoming): ?>
-                    <div class="p-3">
-                        <p class="text-muted mb-2">Use your student account to open enrolled classrooms, receive announcements, and submit assessment answers.</p>
-                        <a href="student_classrooms.php" class="btn btn-outline-primary btn-sm"<?= student_tooltip_attr('Opens your enrolled online classes. Use this shortcut when the overview reminds you to check announcements or assessments.') ?>>Go to My Classes</a>
-                    </div>
+                <?php if ($role === 'student'): ?>
+                    <?php if ($studentTodayClasses === []): ?>
+                        <p class="text-muted p-3 mb-0">No more classes scheduled for today after the current time.</p>
+                    <?php else: ?>
+                        <div class="table-responsive">
+                            <table class="table table-hover upcoming-table mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Course</th>
+                                        <th>Instructor</th>
+                                        <th>Room</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($studentTodayClasses as $u): ?>
+                                        <?php
+                                        $liveAt = $hasStudentLiveAt ? (string) ($u['online_live_at'] ?? '') : '';
+                                        $isLive = $studentClassIsLive($liveAt);
+                                        ?>
+                                        <tr>
+                                            <td>
+                                                <?= htmlspecialchars($formatTime12h((string) ($u['start_time'] ?? ''))) ?>
+                                                –
+                                                <?= htmlspecialchars($formatTime12h((string) ($u['end_time'] ?? ''))) ?>
+                                                <?php if ($isLive): ?>
+                                                    <span class="badge bg-danger live-pulse-badge ms-1">LIVE</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><strong><?= htmlspecialchars((string) $u['course_code']) ?></strong> <?= htmlspecialchars((string) $u['course_name']) ?></td>
+                                            <td><?= htmlspecialchars((string) $u['faculty_name']) ?></td>
+                                            <td><?= htmlspecialchars((string) $u['room_code']) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
                 <?php elseif ($role === 'super_admin'): ?>
                     <div class="p-3">
                         <p class="text-muted mb-2">Super Admin is only for <strong>Administrator accounts</strong> (system admins). This is not a student account — do not use My Classes.</p>
@@ -894,11 +1111,22 @@ require_once __DIR__ . '/includes/header.php';
     <div class="col-lg-5">
         <div class="card conflict-card">
             <div class="card-header">
-                <i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>Conflict alerts
+                <?php if ($role === 'student'): ?>
+                    <i class="fa-solid fa-list-check me-2 text-warning"></i>Pending work
+                <?php else: ?>
+                    <i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>Conflict alerts
+                <?php endif; ?>
             </div>
             <div class="card-body">
                 <?php if ($role === 'super_admin'): ?>
                     <p class="text-muted small mb-0">Super Admin has no conflict queue. Use <strong>Administrator accounts</strong> or sign in as an <code>admin</code> user for day-to-day scheduling tools.</p>
+                <?php elseif ($role === 'student'): ?>
+                    <?php if ($openConflicts === 0): ?>
+                        <p class="text-success mb-0"><i class="fa-solid fa-check-circle me-1"></i>All caught up — no pending assessments.</p>
+                    <?php else: ?>
+                        <p class="mb-2">You have <strong><?= $openConflicts ?></strong> assessment<?= $openConflicts === 1 ? '' : 's' ?> waiting for your answers.</p>
+                        <a href="student_classrooms.php" class="btn btn-outline-warning btn-sm"<?= student_tooltip_attr('Opens My Classes so you can find and submit pending assessments.') ?>>Open My Classes</a>
+                    <?php endif; ?>
                 <?php elseif ($openConflicts === 0): ?>
                     <p class="text-success mb-0"><i class="fa-solid fa-check-circle me-1"></i>No pending alerts.</p>
                 <?php else: ?>

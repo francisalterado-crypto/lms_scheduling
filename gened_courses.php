@@ -434,7 +434,7 @@ require_once __DIR__ . '/includes/header.php';
                     <thead>
                     <tr>
                         <th>Code</th>
-                        <th>Name</th>
+                        <th>Course Title</th>
                         <th>Program</th>
                         <th>Lec units</th>
                         <th>Lab units</th>

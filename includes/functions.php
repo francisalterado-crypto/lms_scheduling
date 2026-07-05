@@ -951,6 +951,90 @@ function parse_day_set(?string $value): array
 }
 
 /**
+ * Abbreviate a weekday name for schedule display (MW/TTH-style).
+ */
+function abbreviate_day_name(string $day): string
+{
+    static $map = [
+        'Monday' => 'M',
+        'Tuesday' => 'T',
+        'Wednesday' => 'W',
+        'Thursday' => 'TH',
+        'Friday' => 'F',
+        'Saturday' => 'S',
+        'Sunday' => 'Su',
+    ];
+    $day = trim($day);
+    return $map[$day] ?? $day;
+}
+
+/**
+ * Format a MySQL SET or comma-separated day string as abbreviated labels (e.g. "T, TH").
+ */
+function format_day_set_abbrev(?string $value): string
+{
+    $days = parse_day_set($value);
+    if ($days === []) {
+        return '';
+    }
+    return implode(', ', array_map('abbreviate_day_name', $days));
+}
+
+/**
+ * Whether a student may record attendance login for a class at the given moment.
+ *
+ * @param array{day_of_week?: string|null, start_time?: string|null, end_time?: string|null} $scheduleRow
+ * @return array{allowed: bool, reason: string, is_scheduled_day: bool, is_within_window: bool, session_start: string, session_end: string}
+ */
+function classroom_attendance_login_allowed(array $scheduleRow, ?int $timestamp = null): array
+{
+    $timestamp = $timestamp ?? time();
+    $todayDate = date('Y-m-d', $timestamp);
+    $nowStr = date('Y-m-d H:i:s', $timestamp);
+    $dayName = date('l', $timestamp);
+
+    $normalizeDayToken = static function (string $value): string {
+        $lettersOnly = preg_replace('/[^a-z]/i', '', trim($value)) ?? '';
+        return strtolower(substr($lettersOnly, 0, 3));
+    };
+
+    $scheduleDayTokens = [];
+    foreach (parse_day_set((string) ($scheduleRow['day_of_week'] ?? '')) as $scheduledDay) {
+        $token = $normalizeDayToken((string) $scheduledDay);
+        if ($token !== '') {
+            $scheduleDayTokens[$token] = true;
+        }
+    }
+    $isScheduledDay = isset($scheduleDayTokens[$normalizeDayToken($dayName)]);
+
+    $startTime = substr((string) ($scheduleRow['start_time'] ?? '00:00:00'), 0, 8);
+    $endTime = substr((string) ($scheduleRow['end_time'] ?? '23:59:59'), 0, 8);
+    $sessionStart = $todayDate . ' ' . $startTime;
+    $sessionEnd = $todayDate . ' ' . $endTime;
+    $isWithinWindow = $nowStr >= $sessionStart && $nowStr <= $sessionEnd;
+
+    $reason = '';
+    if ($scheduleDayTokens === []) {
+        $reason = 'Class schedule days are not configured yet.';
+    } elseif (!$isScheduledDay) {
+        $reason = 'Class is not scheduled today.';
+    } elseif ($nowStr < $sessionStart) {
+        $reason = 'Class has not started yet. You can log in when class time begins.';
+    } elseif ($nowStr > $sessionEnd) {
+        $reason = 'Class time has already ended.';
+    }
+
+    return [
+        'allowed' => $scheduleDayTokens !== [] && $isScheduledDay && $isWithinWindow,
+        'reason' => $reason,
+        'is_scheduled_day' => $isScheduledDay,
+        'is_within_window' => $isWithinWindow,
+        'session_start' => $sessionStart,
+        'session_end' => $sessionEnd,
+    ];
+}
+
+/**
  * Convert array of days to MySQL SET string.
  */
 function days_to_set(array $days): string
@@ -1692,4 +1776,57 @@ function create_conflict_request(array $payload): int
         (string) $payload['reason'],
     ]);
     return (int) db()->lastInsertId();
+}
+
+/** Full name of the administrator who signs as VPAA on teaching load memoranda. */
+function vpaa_signatory_full_name(): string
+{
+    static $resolved = null;
+    if ($resolved !== null) {
+        return $resolved;
+    }
+
+    if (defined('VPAA_ADMIN_USER_ID') && (int) VPAA_ADMIN_USER_ID > 0) {
+        $st = db()->prepare(
+            'SELECT full_name FROM users WHERE id = ? AND is_active = 1 AND role IN (\'admin\', \'super_admin\') LIMIT 1'
+        );
+        $st->execute([(int) VPAA_ADMIN_USER_ID]);
+        $name = trim((string) ($st->fetchColumn() ?: ''));
+        if ($name !== '') {
+            $resolved = $name;
+
+            return $resolved;
+        }
+    }
+
+    if (db_column_exists('users', 'admin_log_title')) {
+        $st = db()->query(
+            'SELECT full_name, admin_log_title
+             FROM users
+             WHERE is_active = 1 AND role = \'admin\' AND admin_log_title != \'\'
+             ORDER BY id ASC'
+        );
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+            $title = strtolower(trim((string) ($row['admin_log_title'] ?? '')));
+            $isVpaa = ($title !== '' && str_contains($title, 'vice president') && str_contains($title, 'academic affairs'))
+                || $title === 'vpaa'
+                || str_contains($title, 'vp for academic affairs');
+            if (!$isVpaa) {
+                continue;
+            }
+            $name = trim((string) ($row['full_name'] ?? ''));
+            if ($name !== '') {
+                $resolved = $name;
+
+                return $resolved;
+            }
+        }
+    }
+
+    $st = db()->query(
+        'SELECT full_name FROM users WHERE is_active = 1 AND role = \'admin\' ORDER BY id ASC LIMIT 1'
+    );
+    $resolved = trim((string) ($st->fetchColumn() ?: ''));
+
+    return $resolved;
 }

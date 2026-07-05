@@ -772,10 +772,10 @@ body.app-shell-sidebar--student {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--sidebar-brand-icon-bg, rgba(13, 110, 253, 0.1));
-  color: var(--sidebar-brand-icon-color, var(--bs-primary));
+  background: transparent;
   font-size: 1.05rem;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .admin-sidebar-brand-meta {
@@ -1048,22 +1048,28 @@ body.app-shell-sidebar--student {
 .app-cursor-tooltip {
   position: fixed;
   z-index: 1090;
-  max-width: 200px;
-  padding: 0.45rem 0.65rem;
+  max-width: 220px;
+  padding: 0.5rem 0.75rem;
   border-radius: 8px;
   font-size: 0.8125rem;
   line-height: 1.38;
   pointer-events: none;
-  box-shadow: var(--app-shadow-md);
-  border: 1px solid var(--app-border-strong);
-  background: var(--app-surface);
-  color: var(--app-text);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  border: 1px solid #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.app-cursor-tooltip[aria-hidden="false"] {
+  opacity: 1;
 }
 
 html[data-bs-theme="dark"] body.app-shell .app-cursor-tooltip {
-  background: #1e293b;
-  color: #f1f5f9;
-  border-color: rgba(255, 255, 255, 0.12);
+  background: #451a03;
+  color: #fde68a;
+  border-color: #d97706;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
 
@@ -1479,6 +1485,49 @@ body.app-shell-sidebar--student .student-messages-back {
   display: none;
 }
 
+body.app-shell-sidebar--student .reviewer-question-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  background: #fff;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+body.app-shell-sidebar--student .reviewer-question-card .reviewer-choice {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+body.app-shell-sidebar--student .reviewer-answer {
+  display: none;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #cbd5e1;
+}
+
+body.app-shell-sidebar--student .reviewer-question-card.is-revealed .reviewer-answer {
+  display: block;
+}
+
+html[data-bs-theme="dark"] body.app-shell-sidebar--student .reviewer-question-card {
+  background: var(--bs-body-bg);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html[data-bs-theme="dark"] body.app-shell-sidebar--student .reviewer-answer {
+  border-top-color: rgba(255, 255, 255, 0.15);
+}
+
+body.app-shell-sidebar--student .student-calendar-wrap .table-responsive {
+  -webkit-overflow-scrolling: touch;
+}
+
+body.app-shell-sidebar--student .student-calendar-wrap .schedule-day-col {
+  min-width: 140px;
+}
+
 @media (max-width: 991.98px) {
   body.app-shell-sidebar--student .admin-main-wrap > main.app-main {
     padding-left: 0.875rem !important;
@@ -1495,6 +1544,17 @@ body.app-shell-sidebar--student .student-messages-back {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
+  }
+
+  body.app-shell-sidebar--student .student-page-header > .d-flex.gap-2:not(.student-page-header__actions):not(.min-w-0) {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  body.app-shell-sidebar--student .student-page-header > .d-flex.gap-2:not(.student-page-header__actions):not(.min-w-0) > .btn {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
   }
 
   body.app-shell-sidebar--student .student-page-header__actions > .btn,
@@ -1560,6 +1620,35 @@ body.app-shell-sidebar--student .student-messages-back {
     min-height: min(480px, calc(100dvh - 15rem));
   }
 
+  body.app-shell-sidebar--student .dashboard-hero .hero-title {
+    font-size: clamp(1.25rem, 4.5vw, 1.85rem);
+    line-height: 1.3;
+  }
+
+  body.app-shell-sidebar--student .student-calendar-wrap .schedule-day-col {
+    min-width: 120px;
+    font-size: 0.85rem;
+  }
+
+  body.app-shell-sidebar--student .student-calendar-wrap .schedule-block {
+    font-size: 0.88rem;
+  }
+
+  body.app-shell-sidebar--student .student-reviewer-actions .btn {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+  }
+
+  body.app-shell-sidebar--student .student-dashboard-quick-actions .btn {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+  }
+
+  body.app-shell-sidebar--student .glass-card .card-header .btn {
+    width: auto;
+    max-width: 100%;
+  }
+
   #adminNavOpenBtn {
     min-width: 44px;
     min-height: 44px;
@@ -1596,6 +1685,29 @@ body.app-shell-sidebar--student .student-messages-back {
     flex: 1 1 100%;
   }
 
+  body.app-shell-sidebar--student .student-page-header > .d-flex.gap-2:not(.student-page-header__actions):not(.min-w-0) > .btn {
+    flex: 1 1 100%;
+  }
+
+  body.app-shell-sidebar--student .student-reviewer-actions .btn,
+  body.app-shell-sidebar--student .student-dashboard-quick-actions .btn {
+    flex: 1 1 100%;
+  }
+
+  body.app-shell-sidebar--student .student-calendar-wrap .schedule-day-col {
+    min-width: 108px;
+    font-size: 0.78rem;
+  }
+
+  body.app-shell-sidebar--student .student-calendar-wrap .card-header {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  body.app-shell-sidebar--student .student-calendar-wrap .card-header .btn {
+    width: 100%;
+  }
+
   body.app-shell-sidebar--student .student-class-card-stats {
     display: flex;
     flex-direction: column;
@@ -1611,7 +1723,7 @@ body.app-shell-sidebar--student .student-messages-back {
   }
 
   body.app-shell-sidebar--student .card-body .d-flex.gap-2.flex-wrap .btn {
-    flex: 1 1 calc(50% - 0.25rem);
+    flex: 1 1 100%;
     min-width: 0;
   }
 

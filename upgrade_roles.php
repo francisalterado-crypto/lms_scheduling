@@ -430,6 +430,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              END"
         );
         exec_safe($pdo, "ALTER TABLE classroom_assessments MODIFY COLUMN assessment_type ENUM('multiple_choice','true_false','essay','problem_solving') NOT NULL DEFAULT 'essay'");
+        exec_safe($pdo, "ALTER TABLE classroom_assessments ADD COLUMN credited_week VARCHAR(100) NOT NULL DEFAULT ''");
         exec_safe($pdo, "ALTER TABLE online_classrooms ADD COLUMN written_work_percentage DECIMAL(5,2) NOT NULL DEFAULT 50.00");
         exec_safe($pdo, "ALTER TABLE online_classrooms ADD COLUMN performance_task_percentage DECIMAL(5,2) NOT NULL DEFAULT 50.00");
         exec_safe(
@@ -600,6 +601,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+
+        exec_safe(
+            $pdo,
+            "CREATE TABLE IF NOT EXISTS login_slideshow_images (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                stored_name VARCHAR(120) NOT NULL,
+                caption VARCHAR(255) NOT NULL DEFAULT '',
+                sort_order INT NOT NULL DEFAULT 0,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                uploaded_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_login_slide_order (sort_order, id),
+                CONSTRAINT fk_login_slide_uploader FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
 
         // Remove campuses feature: drop FKs/columns/table and restore pre-campus room_code_scope (idempotent).
         exec_safe($pdo, 'ALTER TABLE schedules DROP FOREIGN KEY fk_sched_campus');

@@ -4,13 +4,19 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-require_role(['faculty']);
+require_role(['faculty', 'program_chair', 'dean', 'gened']);
 
 $facultyId = isset($_SESSION['faculty_id']) ? (int) $_SESSION['faculty_id'] : 0;
 $userId = (int) ($_SESSION['user_id'] ?? 0);
 if ($facultyId < 1) {
     $facultyId = resolve_faculty_id_for_user($userId) ?? 0;
     $_SESSION['faculty_id'] = $facultyId > 0 ? $facultyId : null;
+}
+if ($facultyId < 1 && in_array($_SESSION['role'] ?? '', ['program_chair', 'dean', 'gened'], true)) {
+    $facultyId = ensure_faculty_profile_for_teaching_role($userId) ?? 0;
+    if ($facultyId > 0) {
+        $_SESSION['faculty_id'] = $facultyId;
+    }
 }
 if ($facultyId < 1) {
     exit('Faculty profile not linked to this account. Ask your dean to create/link your faculty profile.');
@@ -20,6 +26,7 @@ $flash = $_SESSION['flash'] ?? '';
 unset($_SESSION['flash']);
 
 $classroomId = (int) ($_GET['id'] ?? $_POST['classroom_id'] ?? 0);
+$hasCreditedWeek = db_column_exists('classroom_assessments', 'credited_week');
 $requiredTables = [
     'online_classrooms',
     'classroom_students',
@@ -200,6 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             $description = classroom_content_prepare_body((string) ($_POST['description'] ?? ''));
             $totalPoints = (float) ($_POST['total_points'] ?? 0);
             $dueAt = faculty_assessment_datetime_save((string) ($_POST['due_at'] ?? ''));
+            $creditedWeek = $hasCreditedWeek ? trim((string) ($_POST['credited_week'] ?? '')) : '';
             $questions = faculty_parse_questions_json((string) ($_POST['questions_json'] ?? '[]'), $assessmentType);
 
             if ($title === '') {
@@ -212,18 +220,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             $totalPoints = $calculatedPoints;
 
             db()->beginTransaction();
-            db()->prepare(
-                'INSERT INTO classroom_assessments (classroom_id, faculty_id, assessment_type, title, description, total_points, due_at)
-                 VALUES (?,?,?,?,?,?,?)'
-            )->execute([
-                $classroomId,
-                $facultyId,
-                $assessmentType,
-                $title,
-                $description,
-                $totalPoints,
-                $dueAt,
-            ]);
+            if ($hasCreditedWeek) {
+                db()->prepare(
+                    'INSERT INTO classroom_assessments (classroom_id, faculty_id, assessment_type, title, description, total_points, due_at, credited_week)
+                     VALUES (?,?,?,?,?,?,?,?)'
+                )->execute([
+                    $classroomId,
+                    $facultyId,
+                    $assessmentType,
+                    $title,
+                    $description,
+                    $totalPoints,
+                    $dueAt,
+                    $creditedWeek,
+                ]);
+            } else {
+                db()->prepare(
+                    'INSERT INTO classroom_assessments (classroom_id, faculty_id, assessment_type, title, description, total_points, due_at)
+                     VALUES (?,?,?,?,?,?,?)'
+                )->execute([
+                    $classroomId,
+                    $facultyId,
+                    $assessmentType,
+                    $title,
+                    $description,
+                    $totalPoints,
+                    $dueAt,
+                ]);
+            }
             $assessmentId = (int) db()->lastInsertId();
             $qStmt = db()->prepare(
                 'INSERT INTO classroom_assessment_questions
@@ -254,6 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             $description = classroom_content_prepare_body((string) ($_POST['description'] ?? ''));
             $totalPoints = (float) ($_POST['total_points'] ?? 0);
             $dueAt = faculty_assessment_datetime_save((string) ($_POST['due_at'] ?? ''));
+            $creditedWeek = $hasCreditedWeek ? trim((string) ($_POST['credited_week'] ?? '')) : '';
             $questions = faculty_parse_questions_json((string) ($_POST['questions_json'] ?? '[]'), $assessmentType);
 
             if ($assessmentId < 1) {
@@ -265,21 +290,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             $totalPoints = array_sum(array_map(static fn (array $q): float => (float) $q['points'], $questions));
 
             db()->beginTransaction();
-            $st = db()->prepare(
-                'UPDATE classroom_assessments
-                 SET assessment_type = ?, title = ?, description = ?, total_points = ?, due_at = ?
-                 WHERE id = ? AND classroom_id = ? AND faculty_id = ?'
-            );
-            $st->execute([
-                $assessmentType,
-                $title,
-                $description,
-                $totalPoints,
-                $dueAt,
-                $assessmentId,
-                $classroomId,
-                $facultyId,
-            ]);
+            if ($hasCreditedWeek) {
+                $st = db()->prepare(
+                    'UPDATE classroom_assessments
+                     SET assessment_type = ?, title = ?, description = ?, total_points = ?, due_at = ?, credited_week = ?
+                     WHERE id = ? AND classroom_id = ? AND faculty_id = ?'
+                );
+                $st->execute([
+                    $assessmentType,
+                    $title,
+                    $description,
+                    $totalPoints,
+                    $dueAt,
+                    $creditedWeek,
+                    $assessmentId,
+                    $classroomId,
+                    $facultyId,
+                ]);
+            } else {
+                $st = db()->prepare(
+                    'UPDATE classroom_assessments
+                     SET assessment_type = ?, title = ?, description = ?, total_points = ?, due_at = ?
+                     WHERE id = ? AND classroom_id = ? AND faculty_id = ?'
+                );
+                $st->execute([
+                    $assessmentType,
+                    $title,
+                    $description,
+                    $totalPoints,
+                    $dueAt,
+                    $assessmentId,
+                    $classroomId,
+                    $facultyId,
+                ]);
+            }
             if ($st->rowCount() < 1) {
                 $check = db()->prepare('SELECT id FROM classroom_assessments WHERE id = ? AND classroom_id = ? AND faculty_id = ? LIMIT 1');
                 $check->execute([$assessmentId, $classroomId, $facultyId]);
@@ -444,11 +488,14 @@ if ($missingTables === [] && $classroom) {
     $st->execute([$classroomId]);
     $enrollments = $st->fetchAll();
 
+    $assessmentOrderBy = $hasCreditedWeek
+        ? 'ORDER BY credited_week ASC, created_at DESC'
+        : 'ORDER BY created_at DESC';
     $st = db()->prepare(
-        'SELECT *
+        "SELECT *
          FROM classroom_assessments
          WHERE classroom_id = ? AND faculty_id = ?
-         ORDER BY created_at DESC'
+         {$assessmentOrderBy}"
     );
     $st->execute([$classroomId, $facultyId]);
     $assessments = $st->fetchAll();
@@ -686,6 +733,34 @@ require_once __DIR__ . '/includes/header.php';
         padding: 0.9rem 0.5rem 0.9rem 0;
         border-bottom: 1px solid #f0f2f5;
         vertical-align: middle;
+    }
+    .fac-assess-dashboard .week-group-header td {
+        border-bottom: none;
+        padding-top: 1.25rem;
+        padding-bottom: 0.4rem;
+    }
+    .fac-assess-dashboard .week-group-cell {
+        background: #f1f5f9;
+        border-radius: 0.6rem;
+        padding: 0.55rem 1rem !important;
+        font-size: 0.85rem;
+        color: #0f3b5c;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .fac-assess-dashboard .week-group-cell i {
+        color: #2c7da0;
+        font-size: 0.9rem;
+    }
+    .fac-assess-dashboard .week-count-badge {
+        background: #e2e8f0;
+        padding: 0.15rem 0.6rem;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 500;
+        color: #475569;
+        margin-left: 0.25rem;
     }
     .fac-assess-dashboard .type-badge {
         background: #eef2ff;
@@ -1030,6 +1105,23 @@ require_once __DIR__ . '/includes/header.php';
                         No assessments yet. Use <strong>Add assessment</strong> to create one. Student cards appear here once learners are enrolled.
                     </div>
                 <?php else: ?>
+                    <?php
+                    $weekGroups = [];
+                    foreach ($assessments as $row) {
+                        $wk = $hasCreditedWeek ? trim((string) ($row['credited_week'] ?? '')) : '';
+                        $label = $wk !== '' ? $wk : 'Unassigned';
+                        if (!isset($weekGroups[$label])) {
+                            $weekGroups[$label] = [];
+                        }
+                        $weekGroups[$label][] = $row;
+                    }
+                    uksort($weekGroups, static function (string $a, string $b): int {
+                        $na = $a === 'Unassigned' ? 999 : ((int) preg_replace('/\D/', '', $a) ?: 999);
+                        $nb = $b === 'Unassigned' ? 999 : ((int) preg_replace('/\D/', '', $b) ?: 999);
+                        return $na <=> $nb;
+                    });
+                    $tableCols = $hasCreditedWeek ? 6 : 6;
+                    ?>
                     <div class="assessment-table-wrapper">
                         <table class="assessment-table" id="assessmentsDataTable">
                             <thead>
@@ -1043,79 +1135,94 @@ require_once __DIR__ . '/includes/header.php';
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($assessments as $row): ?>
-                                    <?php
-                                    $aid = (int) $row['id'];
-                                    $questionsForAssessment = $questionMap[$aid] ?? [];
-                                    $typeLabel = classroom_assessment_type_label((string) ($row['assessment_type'] ?? 'essay'));
-                                    $dueRaw = (string) ($row['due_at'] ?? '');
-                                    $desc = trim((string) ($row['description'] ?? ''));
-                                    $descPlain = $desc === '' ? '' : (preg_replace('/\s+/u', ' ', trim(html_entity_decode(strip_tags(str_replace('&nbsp;', ' ', $desc)), ENT_QUOTES | ENT_HTML5, 'UTF-8'))) ?? '');
-                                    $isPerf = classroom_assessment_normalize_type((string) ($row['assessment_type'] ?? 'essay')) === 'problem_solving';
-                                    $serializedQuestions = [];
-                                    foreach ($questionsForAssessment as $q) {
-                                        $serializedQuestions[] = [
-                                            'question_type' => (string) ($q['question_type'] ?? 'essay'),
-                                            'question_text' => (string) ($q['question_text'] ?? ''),
-                                            'points' => (float) ($q['points'] ?? 0),
-                                            'options' => json_decode((string) ($q['options_json'] ?? '[]'), true) ?: [],
-                                            'answer_key' => (string) ($q['answer_key'] ?? ''),
-                                            'word_limit' => $q['word_limit'],
-                                            'char_limit' => $q['char_limit'],
-                                            'allow_steps' => (int) ($q['allow_steps'] ?? 0),
-                                        ];
-                                    }
-                                    $questionCount = count($questionsForAssessment);
-                                    ?>
-                                    <tr
-                                        data-filter="<?= htmlspecialchars(faculty_assess_lc($typeLabel . ' ' . (string) $row['title'] . ' ' . $row['total_points'] . ' ' . $dueRaw . ' ' . $descPlain . ' ' . $questionCount . ' questions')) ?>"
-                                        data-type="<?= htmlspecialchars(faculty_assess_lc($typeLabel)) ?>"
-                                        data-title="<?= htmlspecialchars(faculty_assess_lc((string) $row['title'])) ?>"
-                                        data-points="<?= htmlspecialchars((string) (float) $row['total_points']) ?>"
-                                        data-due="<?= htmlspecialchars($dueRaw !== '' ? $dueRaw : '9999-99-99') ?>"
-                                    >
-                                        <td>
-                                            <span class="type-badge <?= $isPerf ? 'type-performance' : '' ?>"><?= htmlspecialchars($typeLabel) ?></span>
-                                        </td>
-                                        <td><strong><?= htmlspecialchars((string) $row['title']) ?></strong></td>
-                                        <td><span class="points"><?= number_format((float) $row['total_points'], 2) ?></span></td>
-                                        <td class="d-none d-md-table-cell">
-                                            <?php if ($descPlain !== ''): ?>
-                                                <?php
-                                                $descPreview = $descPlain;
-                                                if (function_exists('mb_strlen') && mb_strlen($descPreview) > 120) {
-                                                    $descPreview = mb_substr($descPreview, 0, 117) . '…';
-                                                } elseif (strlen($descPreview) > 120) {
-                                                    $descPreview = substr($descPreview, 0, 117) . '…';
-                                                }
-                                                ?>
-                                                <span style="color:#5b6e8c;font-size:0.85rem;"><?= htmlspecialchars($descPreview) ?></span>
-                                            <?php else: ?>
-                                                <span style="color:#94a3b8;font-size:0.8rem;font-style:italic;">No description</span>
-                                            <?php endif; ?>
-                                            <div style="color:#64748b;font-size:0.75rem;margin-top:0.25rem;"><?= (int) $questionCount ?> question<?= $questionCount === 1 ? '' : 's' ?></div>
-                                        </td>
-                                        <td class="d-none d-lg-table-cell" style="color:#5b6e8c;font-size:0.85rem;"><?= $dueRaw !== '' ? htmlspecialchars($dueRaw) : '—' ?></td>
-                                        <td class="action-icons">
-                                            <button type="button" class="fac-icon-btn" title="Edit"<?= app_tooltip_attr('Opens the editor to change title, points, due date, or instructions for this assessment.') ?>
-                                                data-bs-toggle="modal" data-bs-target="#modalEditAssessment"
-                                                data-id="<?= $aid ?>"
-                                                data-type="<?= htmlspecialchars((string) ($row['assessment_type'] ?? 'essay')) ?>"
-                                                data-title="<?= htmlspecialchars((string) $row['title']) ?>"
-                                                data-points="<?= htmlspecialchars((string) $row['total_points']) ?>"
-                                                data-due="<?= htmlspecialchars(faculty_assessment_due_for_input($dueRaw !== '' ? $dueRaw : null)) ?>"
-                                                data-description="<?= htmlspecialchars(str_replace(["\r", "\n", "\t"], ' ', $desc), ENT_QUOTES, 'UTF-8') ?>"
-                                                data-questions="<?= htmlspecialchars((string) json_encode($serializedQuestions, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>">
-                                                <i class="fa-solid fa-pen-to-square"></i>
-                                            </button>
-                                            <form method="post" class="d-inline" onsubmit="return confirm('Delete this assessment and all related grades and submissions?');">
-                                                <input type="hidden" name="action" value="delete_assessment">
-                                                <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
-                                                <input type="hidden" name="assessment_id" value="<?= $aid ?>">
-                                                <button type="submit" class="fac-icon-btn" title="Delete"<?= app_tooltip_attr('Deletes this assessment and related grades after confirmation.') ?>><i class="fa-solid fa-trash-can"></i></button>
-                                            </form>
+                                <?php foreach ($weekGroups as $weekLabel => $weekRows): ?>
+                                    <?php if ($hasCreditedWeek): ?>
+                                    <tr class="week-group-header" data-filter="<?= htmlspecialchars(faculty_assess_lc((string) $weekLabel)) ?>">
+                                        <td colspan="<?= $tableCols ?>">
+                                            <div class="week-group-cell">
+                                                <i class="fa-regular fa-calendar-alt"></i>
+                                                <strong><?= htmlspecialchars((string) $weekLabel) ?></strong>
+                                                <span class="week-count-badge"><?= count($weekRows) ?> assessment<?= count($weekRows) === 1 ? '' : 's' ?></span>
+                                            </div>
                                         </td>
                                     </tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($weekRows as $row): ?>
+                                        <?php
+                                        $aid = (int) $row['id'];
+                                        $questionsForAssessment = $questionMap[$aid] ?? [];
+                                        $typeLabel = classroom_assessment_type_label((string) ($row['assessment_type'] ?? 'essay'));
+                                        $dueRaw = (string) ($row['due_at'] ?? '');
+                                        $desc = trim((string) ($row['description'] ?? ''));
+                                        $descPlain = $desc === '' ? '' : (preg_replace('/\s+/u', ' ', trim(html_entity_decode(strip_tags(str_replace('&nbsp;', ' ', $desc)), ENT_QUOTES | ENT_HTML5, 'UTF-8'))) ?? '');
+                                        $isPerf = classroom_assessment_normalize_type((string) ($row['assessment_type'] ?? 'essay')) === 'problem_solving';
+                                        $serializedQuestions = [];
+                                        foreach ($questionsForAssessment as $q) {
+                                            $serializedQuestions[] = [
+                                                'question_type' => (string) ($q['question_type'] ?? 'essay'),
+                                                'question_text' => (string) ($q['question_text'] ?? ''),
+                                                'points' => (float) ($q['points'] ?? 0),
+                                                'options' => json_decode((string) ($q['options_json'] ?? '[]'), true) ?: [],
+                                                'answer_key' => (string) ($q['answer_key'] ?? ''),
+                                                'word_limit' => $q['word_limit'],
+                                                'char_limit' => $q['char_limit'],
+                                                'allow_steps' => (int) ($q['allow_steps'] ?? 0),
+                                            ];
+                                        }
+                                        $questionCount = count($questionsForAssessment);
+                                        ?>
+                                        <tr
+                                            data-filter="<?= htmlspecialchars(faculty_assess_lc($typeLabel . ' ' . (string) $row['title'] . ' ' . $row['total_points'] . ' ' . $dueRaw . ' ' . $descPlain . ' ' . $questionCount . ' questions ' . ($weekLabel !== 'Unassigned' ? $weekLabel : ''))) ?>"
+                                            data-type="<?= htmlspecialchars(faculty_assess_lc($typeLabel)) ?>"
+                                            data-title="<?= htmlspecialchars(faculty_assess_lc((string) $row['title'])) ?>"
+                                            data-points="<?= htmlspecialchars((string) (float) $row['total_points']) ?>"
+                                            data-due="<?= htmlspecialchars($dueRaw !== '' ? $dueRaw : '9999-99-99') ?>"
+                                            data-week="<?= htmlspecialchars((string) $weekLabel) ?>"
+                                        >
+                                            <td>
+                                                <span class="type-badge <?= $isPerf ? 'type-performance' : '' ?>"><?= htmlspecialchars($typeLabel) ?></span>
+                                            </td>
+                                            <td><strong><?= htmlspecialchars((string) $row['title']) ?></strong></td>
+                                            <td><span class="points"><?= number_format((float) $row['total_points'], 2) ?></span></td>
+                                            <td class="d-none d-md-table-cell">
+                                                <?php if ($descPlain !== ''): ?>
+                                                    <?php
+                                                    $descPreview = $descPlain;
+                                                    if (function_exists('mb_strlen') && mb_strlen($descPreview) > 120) {
+                                                        $descPreview = mb_substr($descPreview, 0, 117) . '…';
+                                                    } elseif (strlen($descPreview) > 120) {
+                                                        $descPreview = substr($descPreview, 0, 117) . '…';
+                                                    }
+                                                    ?>
+                                                    <span style="color:#5b6e8c;font-size:0.85rem;"><?= htmlspecialchars($descPreview) ?></span>
+                                                <?php else: ?>
+                                                    <span style="color:#94a3b8;font-size:0.8rem;font-style:italic;">No description</span>
+                                                <?php endif; ?>
+                                                <div style="color:#64748b;font-size:0.75rem;margin-top:0.25rem;"><?= (int) $questionCount ?> question<?= $questionCount === 1 ? '' : 's' ?></div>
+                                            </td>
+                                            <td class="d-none d-lg-table-cell" style="color:#5b6e8c;font-size:0.85rem;"><?= $dueRaw !== '' ? htmlspecialchars($dueRaw) : '—' ?></td>
+                                            <td class="action-icons">
+                                                <button type="button" class="fac-icon-btn" title="Edit"<?= app_tooltip_attr('Opens the editor to change title, points, due date, or instructions for this assessment.') ?>
+                                                    data-bs-toggle="modal" data-bs-target="#modalEditAssessment"
+                                                    data-id="<?= $aid ?>"
+                                                    data-type="<?= htmlspecialchars((string) ($row['assessment_type'] ?? 'essay')) ?>"
+                                                    data-title="<?= htmlspecialchars((string) $row['title']) ?>"
+                                                    data-points="<?= htmlspecialchars((string) $row['total_points']) ?>"
+                                                    data-due="<?= htmlspecialchars(faculty_assessment_due_for_input($dueRaw !== '' ? $dueRaw : null)) ?>"
+                                                    data-credited-week="<?= htmlspecialchars((string) ($row['credited_week'] ?? '')) ?>"
+                                                    data-description="<?= htmlspecialchars(str_replace(["\r", "\n", "\t"], ' ', $desc), ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-questions="<?= htmlspecialchars((string) json_encode($serializedQuestions, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>">
+                                                    <i class="fa-solid fa-pen-to-square"></i>
+                                                </button>
+                                                <form method="post" class="d-inline" onsubmit="return confirm('Delete this assessment and all related grades and submissions?');">
+                                                    <input type="hidden" name="action" value="delete_assessment">
+                                                    <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
+                                                    <input type="hidden" name="assessment_id" value="<?= $aid ?>">
+                                                    <button type="submit" class="fac-icon-btn" title="Delete"<?= app_tooltip_attr('Deletes this assessment and related grades after confirmation.') ?>><i class="fa-solid fa-trash-can"></i></button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
@@ -1316,10 +1423,21 @@ require_once __DIR__ . '/includes/header.php';
                             <label class="form-label small">Points</label>
                             <input type="number" name="total_points" class="form-control" min="1" step="0.01" value="100" required>
                         </div>
-                        <div class="col-md-8">
+                        <div class="col-md-4">
                             <label class="form-label small">Due date</label>
                             <input type="datetime-local" name="due_at" class="form-control">
                         </div>
+                        <?php if ($hasCreditedWeek): ?>
+                        <div class="col-md-4">
+                            <label class="form-label small">Credited week</label>
+                            <select name="credited_week" class="form-select">
+                                <option value="">No specific week</option>
+                                <?php for ($wn = 1; $wn <= 18; $wn++): ?>
+                                    <option value="Week <?= $wn ?>">Week <?= $wn ?></option>
+                                <?php endfor; ?>
+                            </select>
+                        </div>
+                        <?php endif; ?>
                         <div class="col-12">
                             <label class="form-label small fw-semibold">Questions</label>
                             <div class="small text-muted mb-1">Total items: <span id="addTotalItems">0</span></div>
@@ -1395,10 +1513,21 @@ require_once __DIR__ . '/includes/header.php';
                             <label class="form-label small">Points</label>
                             <input type="number" name="total_points" class="form-control" id="edit_points" min="1" step="0.01" required>
                         </div>
-                        <div class="col-md-8">
+                        <div class="col-md-4">
                             <label class="form-label small">Due date</label>
                             <input type="datetime-local" name="due_at" class="form-control" id="edit_due">
                         </div>
+                        <?php if ($hasCreditedWeek): ?>
+                        <div class="col-md-4">
+                            <label class="form-label small">Credited week</label>
+                            <select name="credited_week" id="edit_credited_week" class="form-select">
+                                <option value="">No specific week</option>
+                                <?php for ($wn = 1; $wn <= 18; $wn++): ?>
+                                    <option value="Week <?= $wn ?>">Week <?= $wn ?></option>
+                                <?php endfor; ?>
+                            </select>
+                        </div>
+                        <?php endif; ?>
                         <div class="col-12">
                             <label class="form-label small fw-semibold">Questions</label>
                             <div class="small text-muted mb-1">Total items: <span id="editTotalItems">0</span></div>
@@ -1465,9 +1594,19 @@ require_once __DIR__ . '/includes/header.php';
     if (filterInput && table) {
         filterInput.addEventListener('input', function () {
             var q = this.value.trim().toLowerCase();
-            table.querySelectorAll('tbody tr').forEach(function (row) {
+            var weekHeaders = {};
+            table.querySelectorAll('tbody tr:not(.week-group-header)').forEach(function (row) {
                 var hay = row.getAttribute('data-filter') || '';
-                row.classList.toggle('d-none', q !== '' && hay.indexOf(q) === -1);
+                var visible = q === '' || hay.indexOf(q) !== -1;
+                row.classList.toggle('d-none', !visible);
+                if (visible) {
+                    var wk = (row.getAttribute('data-week') || '').toLowerCase();
+                    if (wk) weekHeaders[wk] = true;
+                }
+            });
+            table.querySelectorAll('tbody tr.week-group-header').forEach(function (hdr) {
+                var hdrKey = (hdr.getAttribute('data-filter') || '').toLowerCase();
+                hdr.classList.toggle('d-none', q !== '' && !weekHeaders[hdrKey]);
             });
         });
     }
@@ -1482,7 +1621,7 @@ require_once __DIR__ . '/includes/header.php';
                 sortState.dir = sortState.col === key ? -sortState.dir : 1;
                 sortState.col = key;
                 var tbody = table.querySelector('tbody');
-                var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+                var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr:not(.week-group-header)'));
                 rows.sort(function (a, b) {
                     var av, bv;
                     if (key === 'type') { av = a.getAttribute('data-type') || ''; bv = b.getAttribute('data-type') || ''; }
@@ -1750,6 +1889,10 @@ require_once __DIR__ . '/includes/header.php';
             document.getElementById('edit_title').value = btn.getAttribute('data-title') || '';
             document.getElementById('edit_points').value = btn.getAttribute('data-points') || '';
             document.getElementById('edit_due').value = btn.getAttribute('data-due') || '';
+            var editWeekSel = document.getElementById('edit_credited_week');
+            if (editWeekSel) {
+                editWeekSel.value = btn.getAttribute('data-credited-week') || '';
+            }
             var editDescTa = document.getElementById('edit_description');
             if (editDescTa) {
                 editDescTa.value = btn.getAttribute('data-description') || '';

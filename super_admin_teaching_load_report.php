@@ -11,6 +11,8 @@ require_once __DIR__ . '/includes/functions.php';
 
 require_role(['super_admin']);
 $hasEmploymentStatusColumn = db_column_exists('faculty', 'employment_status');
+$hasLectureUnits = db_column_exists('courses', 'lecture_units');
+$hasLaboratoryUnits = db_column_exists('courses', 'laboratory_units');
 
 $adminCollegeId = (int) ($_GET['college_id'] ?? 0);
 $sem = trim((string) ($_GET['semester'] ?? ''));
@@ -32,11 +34,19 @@ if ($sy === '' && $latestTerm) {
     $sy = (string) ($latestTerm['school_year'] ?? '');
 }
 
+$courseUnitsSelect = ', c.units AS course_units_total';
+if ($hasLectureUnits) {
+    $courseUnitsSelect .= ', c.lecture_units';
+}
+if ($hasLaboratoryUnits) {
+    $courseUnitsSelect .= ', c.laboratory_units';
+}
+
 $sql = "SELECT s.id, s.faculty_id, s.course_id, s.college_id AS sched_college_id,
         s.semester, s.school_year,
         s.start_time, s.end_time, s.day_of_week,
         f.full_name AS faculty_name, f.department AS faculty_department,
-        c.course_code, c.units AS course_units_total
+        c.course_code{$courseUnitsSelect}
         FROM schedules s
         INNER JOIN faculty f ON f.id = s.faculty_id
         INNER JOIN courses c ON c.id = s.course_id
@@ -76,7 +86,7 @@ $sessionHoursBetween = static function (string $start, string $end): float {
     return round($secs / 3600, 2);
 };
 
-$weeklyContactFromGroup = static function (array $group) use ($sessionHoursBetween, $labSessionMinHours): float {
+$weeklyContactFromGroup = static function (array $group) use ($sessionHoursBetween, $labSessionMinHours): array {
     $lec = 0.0;
     $lab = 0.0;
     foreach ($group as $r) {
@@ -92,7 +102,44 @@ $weeklyContactFromGroup = static function (array $group) use ($sessionHoursBetwe
             $lec += $weeklyH;
         }
     }
-    return round($lec + $lab, 2);
+    return [
+        'lec' => round($lec, 2),
+        'lab' => round($lab, 2),
+        'total' => round($lec + $lab, 2),
+    ];
+};
+
+$courseOfferingUnits = static function (array $r) use ($hasLectureUnits, $hasLaboratoryUnits): float {
+    if ($hasLectureUnits && $hasLaboratoryUnits) {
+        return (float) ($r['lecture_units'] ?? 0) + (float) ($r['laboratory_units'] ?? 0);
+    }
+
+    return (float) ($r['course_units_total'] ?? 0);
+};
+
+$courseOfferingLecUnits = static function (array $r) use ($hasLectureUnits, $hasLaboratoryUnits, $courseOfferingUnits): float {
+    if ($hasLectureUnits && $hasLaboratoryUnits) {
+        return (float) ($r['lecture_units'] ?? 0);
+    }
+
+    return $courseOfferingUnits($r);
+};
+
+$courseOfferingLabUnits = static function (array $r) use ($hasLectureUnits, $hasLaboratoryUnits): float {
+    if ($hasLectureUnits && $hasLaboratoryUnits) {
+        return (float) ($r['laboratory_units'] ?? 0);
+    }
+
+    return 0.0;
+};
+
+$formatUnitCell = static function (float $units): string {
+    return $units > 0 ? number_format($units, 2) : '—';
+};
+
+/** Permanent/Temporary load equivalent: lecture contact hours ×2, laboratory ×1.5. */
+$weightedTeachingHours = static function (float $lecHours, float $labHours): float {
+    return round(($lecHours * 2.0) + ($labHours * 1.5), 2);
 };
 
 $scheduleListGroups = [];
@@ -119,20 +166,32 @@ foreach ($scheduleListGroups as &$g) {
 unset($g);
 
 $hoursByFaculty = [];
+$lecHoursByFaculty = [];
+$labHoursByFaculty = [];
 $unitsByFaculty = [];
+$lecUnitsByFaculty = [];
+$labUnitsByFaculty = [];
 foreach ($scheduleListGroups as $group) {
     $r0 = $group[0];
     $fid = (int) $r0['faculty_id'];
-    $h = $weeklyContactFromGroup($group);
-    $units = (float) ($r0['course_units_total'] ?? 0);
+    $contact = $weeklyContactFromGroup($group);
+    $units = $courseOfferingUnits($r0);
+    $lecUnits = $courseOfferingLecUnits($r0);
+    $labUnits = $courseOfferingLabUnits($r0);
     if (!isset($hoursByFaculty[$fid])) {
         $hoursByFaculty[$fid] = 0.0;
-    }
-    if (!isset($unitsByFaculty[$fid])) {
+        $lecHoursByFaculty[$fid] = 0.0;
+        $labHoursByFaculty[$fid] = 0.0;
         $unitsByFaculty[$fid] = 0.0;
+        $lecUnitsByFaculty[$fid] = 0.0;
+        $labUnitsByFaculty[$fid] = 0.0;
     }
-    $hoursByFaculty[$fid] = round($hoursByFaculty[$fid] + $h, 2);
+    $hoursByFaculty[$fid] = round($hoursByFaculty[$fid] + $contact['total'], 2);
+    $lecHoursByFaculty[$fid] = round($lecHoursByFaculty[$fid] + $contact['lec'], 2);
+    $labHoursByFaculty[$fid] = round($labHoursByFaculty[$fid] + $contact['lab'], 2);
     $unitsByFaculty[$fid] = round($unitsByFaculty[$fid] + $units, 2);
+    $lecUnitsByFaculty[$fid] = round($lecUnitsByFaculty[$fid] + $lecUnits, 2);
+    $labUnitsByFaculty[$fid] = round($labUnitsByFaculty[$fid] + $labUnits, 2);
 }
 
 $underMax = 18.0;
@@ -172,7 +231,11 @@ foreach ($allFaculty as $fr) {
     }
     $fid = (int) $fr['id'];
     $hrs = $hoursByFaculty[$fid] ?? 0.0;
+    $lecHrs = $lecHoursByFaculty[$fid] ?? 0.0;
+    $labHrs = $labHoursByFaculty[$fid] ?? 0.0;
     $units = $unitsByFaculty[$fid] ?? 0.0;
+    $lecUnits = $lecUnitsByFaculty[$fid] ?? 0.0;
+    $labUnits = $labUnitsByFaculty[$fid] ?? 0.0;
     if ($hrs < $underMax) {
         $cat = 'under';
     } elseif ($hrs > $overMin) {
@@ -190,7 +253,11 @@ foreach ($allFaculty as $fr) {
         'name' => (string) $fr['full_name'],
         'employment_status' => trim((string) ($fr['employment_status'] ?? '')) !== '' ? (string) $fr['employment_status'] : 'Permanent',
         'hours' => $hrs,
+        'lec_hours' => $lecHrs,
+        'lab_hours' => $labHrs,
         'units' => $units,
+        'lec_units' => $lecUnits,
+        'lab_units' => $labUnits,
         'college' => $collegeLabel,
     ];
 }
@@ -380,7 +447,7 @@ require_once __DIR__ . '/includes/header.php';
 
     .report-table {
         width: 100%;
-        min-width: 760px;
+        min-width: 980px;
         border-collapse: collapse;
         font-size: 0.86rem;
     }
@@ -669,8 +736,10 @@ require_once __DIR__ . '/includes/header.php';
                 $allRows = array_merge($buckets['under'], $buckets['normal'], $buckets['over']);
                 usort($allRows, static fn(array $a, array $b): int => strcasecmp((string) $a['name'], (string) $b['name']));
                 $totalFaculty = count($allRows);
-                $totalUnits = array_reduce($allRows, static fn(float $carry, array $row): float => $carry + (float) ($row['units'] ?? 0), 0.0);
-                $totalHours = array_reduce($allRows, static fn(float $carry, array $row): float => $carry + (float) ($row['hours'] ?? 0), 0.0);
+                $totalUnits = round(array_reduce($allRows, static fn(float $carry, array $row): float => $carry + (float) ($row['units'] ?? 0), 0.0), 2);
+                $totalLecUnits = round(array_reduce($allRows, static fn(float $carry, array $row): float => $carry + (float) ($row['lec_units'] ?? 0), 0.0), 2);
+                $totalLabUnits = round(array_reduce($allRows, static fn(float $carry, array $row): float => $carry + (float) ($row['lab_units'] ?? 0), 0.0), 2);
+                $totalHours = round(array_reduce($allRows, static fn(float $carry, array $row): float => $carry + (float) ($row['hours'] ?? 0), 0.0), 2);
             ?>
             <section class="program-card<?= $programSearch !== '' && $programSearch === $programName ? ' selected-for-print' : '' ?>" data-program-name="<?= htmlspecialchars($programName, ENT_QUOTES) ?>" aria-labelledby="prog-<?= htmlspecialchars(md5($programName)) ?>">
                 <div class="program-head">
@@ -679,6 +748,8 @@ require_once __DIR__ . '/includes/header.php';
                     </h2>
                     <div class="stats-row">
                         <span class="stat-chip"><i class="fa-solid fa-users"></i> Faculty <span class="value"><?= $totalFaculty ?></span></span>
+                        <span class="stat-chip"><i class="fa-solid fa-book-open"></i> Lecture <span class="value"><?= $formatUnitCell($totalLecUnits) ?></span></span>
+                        <span class="stat-chip"><i class="fa-solid fa-flask"></i> Laboratory <span class="value"><?= $formatUnitCell($totalLabUnits) ?></span></span>
                         <span class="stat-chip"><i class="fa-solid fa-book"></i> Units <span class="value"><?= number_format($totalUnits, 2) ?></span></span>
                         <span class="stat-chip"><i class="fa-solid fa-clock"></i> Hours/week <span class="value"><?= number_format($totalHours, 2) ?></span></span>
                     </div>
@@ -692,23 +763,31 @@ require_once __DIR__ . '/includes/header.php';
                                 <th>Employment Status</th>
                                 <th>College</th>
                                 <th>Load Status</th>
+                                <th class="text-end">Lecture</th>
+                                <th class="text-end">Laboratory</th>
                                 <th class="text-end">Total Units</th>
+                                <th class="text-end">Lec h/wk</th>
+                                <th class="text-end">Lab h/wk</th>
                                 <th class="text-end">Hours/week</th>
-                                <th class="text-end">Total Hours x2</th>
+                                <th class="text-end">Total load hours</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if ($allRows === []): ?>
-                                <tr><td colspan="7" class="empty-state">No faculty records found for this program.</td></tr>
+                                <tr><td colspan="11" class="empty-state">No faculty records found for this program.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($allRows as $row): ?>
                                     <?php
                                         $hours = (float) ($row['hours'] ?? 0);
+                                        $lecHours = (float) ($row['lec_hours'] ?? 0);
+                                        $labHours = (float) ($row['lab_hours'] ?? 0);
+                                        $lecUnits = (float) ($row['lec_units'] ?? 0);
+                                        $labUnits = (float) ($row['lab_units'] ?? 0);
                                         $statusClass = $hours < $underMax ? 'status-under' : ($hours > $overMin ? 'status-over' : 'status-normal');
                                         $statusLabel = $hours < $underMax ? 'Under load' : ($hours > $overMin ? 'Over load' : 'Normal load');
                                         $employmentStatus = trim((string) ($row['employment_status'] ?? ''));
-                                        $doubleHours = in_array($employmentStatus, ['Permanent', 'Temporary'], true)
-                                            ? number_format($hours * 2, 2)
+                                        $weightedHours = in_array($employmentStatus, ['Permanent', 'Temporary'], true)
+                                            ? number_format($weightedTeachingHours($lecHours, $labHours), 2)
                                             : '—';
                                     ?>
                                     <tr>
@@ -716,9 +795,13 @@ require_once __DIR__ . '/includes/header.php';
                                         <td><?= htmlspecialchars((string) $row['employment_status']) ?></td>
                                         <td><?= htmlspecialchars((string) $row['college']) ?></td>
                                         <td><span class="status-pill <?= $statusClass ?>"><?= $statusLabel ?></span></td>
+                                        <td class="text-end font-monospace"><?= $formatUnitCell($lecUnits) ?></td>
+                                        <td class="text-end font-monospace"><?= $formatUnitCell($labUnits) ?></td>
                                         <td class="text-end font-monospace"><strong><?= number_format((float) ($row['units'] ?? 0), 2) ?></strong></td>
+                                        <td class="text-end font-monospace"><?= $lecHours > 0 ? number_format($lecHours, 2) : '—' ?></td>
+                                        <td class="text-end font-monospace"><?= $labHours > 0 ? number_format($labHours, 2) : '—' ?></td>
                                         <td class="text-end font-monospace"><?= number_format($hours, 2) ?></td>
-                                        <td class="text-end font-monospace"><?= $doubleHours ?></td>
+                                        <td class="text-end font-monospace"><?= $weightedHours ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -730,7 +813,7 @@ require_once __DIR__ . '/includes/header.php';
     <?php endif; ?>
 
     <div class="footer-note">
-        <span><i class="fa-regular fa-note-sticky"></i> Load summary based on official teaching assignments.</span>
+        <span><i class="fa-regular fa-note-sticky"></i> Load summary based on official teaching assignments. Total load hours: lecture ×2 + laboratory ×1.5 (Permanent/Temporary only).</span>
         <span><i class="fa-solid fa-download"></i> Western Philippines University · Teaching Load System</span>
     </div>
 </div>

@@ -1,0 +1,5099 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="CLASS / lms_scheduling" />
+  <meta name="dcterms.date" content="2026-07-01" />
+  <title>WPU SABLAe Portal Source Code Documentation</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="C:\xampp\htdocs\CLASS\docs\_export_style.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">WPU SABLAe Portal Source Code Documentation</h1>
+<p class="author">CLASS / lms_scheduling</p>
+<p class="date">2026-07-01</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#wpu-sablae-portal-source-code-documentation"
+id="toc-wpu-sablae-portal-source-code-documentation">WPU SABLAe Portal —
+Source Code Documentation</a>
+<ul>
+<li><a href="#table-of-contents" id="toc-table-of-contents">Table of
+Contents</a></li>
+<li><a href="#user-roles" id="toc-user-roles">User Roles</a></li>
+<li><a href="#directory-layout" id="toc-directory-layout">Directory
+Layout</a></li>
+<li><a href="#request-lifecycle" id="toc-request-lifecycle">Request
+Lifecycle</a></li>
+<li><a href="#database-overview" id="toc-database-overview">Database
+Overview</a></li>
+<li><a href="#maintenance-scripts"
+id="toc-maintenance-scripts">Maintenance Scripts</a></li>
+<li><a href="#exported-documents" id="toc-exported-documents">Exported
+documents</a></li>
+</ul></li>
+<li><a href="#module-1-core-infrastructure"
+id="toc-module-1-core-infrastructure">Module 1: Core Infrastructure</a>
+<ul>
+<li><a href="#source-files" id="toc-source-files">Source Files</a></li>
+<li><a href="#includesdb.php"
+id="toc-includesdb.php"><code>includes/db.php</code></a></li>
+<li><a href="#includesfunctions.php-key-function-groups"
+id="toc-includesfunctions.php-key-function-groups"><code>includes/functions.php</code>
+— Key Function Groups</a>
+<ul>
+<li><a href="#database-introspection"
+id="toc-database-introspection">Database introspection</a></li>
+<li><a href="#scheduling-primitives"
+id="toc-scheduling-primitives">Scheduling primitives</a></li>
+<li><a href="#room-management" id="toc-room-management">Room
+management</a></li>
+<li><a href="#program-year-level" id="toc-program-year-level">Program /
+year level</a></li>
+<li><a href="#classroom-lms-helpers"
+id="toc-classroom-lms-helpers">Classroom / LMS helpers</a></li>
+<li><a href="#general-education-ge"
+id="toc-general-education-ge">General Education (GE)</a></li>
+<li><a href="#suggestions" id="toc-suggestions">Suggestions</a></li>
+</ul></li>
+<li><a href="#includesschedule_helpers.php"
+id="toc-includesschedule_helpers.php"><code>includes/schedule_helpers.php</code></a></li>
+<li><a href="#session-config-constants"
+id="toc-session-config-constants">Session &amp; Config
+Constants</a></li>
+<li><a href="#dependencies-between-core-files"
+id="toc-dependencies-between-core-files">Dependencies Between Core
+Files</a></li>
+</ul></li>
+<li><a href="#module-2-authentication-authorization"
+id="toc-module-2-authentication-authorization">Module 2: Authentication
+&amp; Authorization</a>
+<ul>
+<li><a href="#source-files-1" id="toc-source-files-1">Source
+Files</a></li>
+<li><a href="#login-flow-login.php" id="toc-login-flow-login.php">Login
+Flow (<code>login.php</code>)</a></li>
+<li><a href="#session-keys" id="toc-session-keys">Session Keys</a></li>
+<li><a href="#includesauth.php-functions"
+id="toc-includesauth.php-functions"><code>includes/auth.php</code> —
+Functions</a>
+<ul>
+<li><a href="#access-control" id="toc-access-control">Access
+control</a></li>
+<li><a href="#role-predicates" id="toc-role-predicates">Role
+predicates</a></li>
+<li><a href="#scope-helpers" id="toc-scope-helpers">Scope
+helpers</a></li>
+<li><a href="#identity-resolution" id="toc-identity-resolution">Identity
+resolution</a></li>
+<li><a href="#activity" id="toc-activity">Activity</a></li>
+</ul></li>
+<li><a href="#profile-photos" id="toc-profile-photos">Profile
+Photos</a></li>
+<li><a href="#security-notes" id="toc-security-notes">Security
+Notes</a></li>
+</ul></li>
+<li><a href="#module-3-installation-configuration"
+id="toc-module-3-installation-configuration">Module 3: Installation
+&amp; Configuration</a>
+<ul>
+<li><a href="#source-files-2" id="toc-source-files-2">Source
+Files</a></li>
+<li><a href="#installation-install.php"
+id="toc-installation-install.php">Installation
+(<code>install.php</code>)</a></li>
+<li><a href="#schema-installschema.sql"
+id="toc-schema-installschema.sql">Schema
+(<code>install/schema.sql</code>)</a>
+<ul>
+<li><a href="#organization" id="toc-organization">Organization</a></li>
+<li><a href="#academic-resources" id="toc-academic-resources">Academic
+resources</a></li>
+<li><a href="#workflow-audit" id="toc-workflow-audit">Workflow &amp;
+audit</a></li>
+<li><a href="#ge-extensions" id="toc-ge-extensions">GE
+extensions</a></li>
+<li><a href="#lms-messaging" id="toc-lms-messaging">LMS &amp;
+messaging</a></li>
+</ul></li>
+<li><a href="#migrations-upgrade_roles.php"
+id="toc-migrations-upgrade_roles.php">Migrations
+(<code>upgrade_roles.php</code>)</a></li>
+<li><a href="#configuration-configconfig.example.php"
+id="toc-configuration-configconfig.example.php">Configuration
+(<code>config/config.example.php</code>)</a></li>
+<li><a href="#room-scope-repair-fix_room_code_scope.php"
+id="toc-room-scope-repair-fix_room_code_scope.php">Room Scope Repair
+(<code>fix_room_code_scope.php</code>)</a></li>
+<li><a href="#web-server" id="toc-web-server">Web Server</a></li>
+</ul></li>
+<li><a href="#module-4-super-admin" id="toc-module-4-super-admin">Module
+4: Super Admin</a>
+<ul>
+<li><a href="#source-files-3" id="toc-source-files-3">Source
+Files</a></li>
+<li><a href="#navigation-includesadmin_nav.php"
+id="toc-navigation-includesadmin_nav.php">Navigation
+(<code>includes/admin_nav.php</code>)</a></li>
+<li><a href="#super_admin_admins.php"
+id="toc-super_admin_admins.php"><code>super_admin_admins.php</code></a></li>
+<li><a href="#super_admin_faculty_inventory.php"
+id="toc-super_admin_faculty_inventory.php"><code>super_admin_faculty_inventory.php</code></a></li>
+<li><a href="#super_admin_teaching_load_report.php"
+id="toc-super_admin_teaching_load_report.php"><code>super_admin_teaching_load_report.php</code></a></li>
+<li><a href="#dashboard-metrics-super_admin-section-in-dashboard.php"
+id="toc-dashboard-metrics-super_admin-section-in-dashboard.php">Dashboard
+Metrics (super_admin section in <code>dashboard.php</code>)</a></li>
+<li><a href="#related-tables" id="toc-related-tables">Related
+Tables</a></li>
+<li><a href="#bootstrap" id="toc-bootstrap">Bootstrap</a></li>
+</ul></li>
+<li><a href="#module-5-admin-institution"
+id="toc-module-5-admin-institution">Module 5: Admin (Institution)</a>
+<ul>
+<li><a href="#source-files-4" id="toc-source-files-4">Source
+Files</a></li>
+<li><a href="#shared-includes" id="toc-shared-includes">Shared
+Includes</a></li>
+<li><a href="#admin_colleges.php"
+id="toc-admin_colleges.php"><code>admin_colleges.php</code></a></li>
+<li><a href="#admin_deans.php"
+id="toc-admin_deans.php"><code>admin_deans.php</code></a></li>
+<li><a href="#admin_gened.php"
+id="toc-admin_gened.php"><code>admin_gened.php</code></a></li>
+<li><a href="#admin_requests.php"
+id="toc-admin_requests.php"><code>admin_requests.php</code></a></li>
+<li><a href="#global_reports.php"
+id="toc-global_reports.php"><code>global_reports.php</code></a></li>
+<li><a href="#activity-logging-includesadmin_activity_log.php"
+id="toc-activity-logging-includesadmin_activity_log.php">Activity
+Logging (<code>includes/admin_activity_log.php</code>)</a></li>
+<li><a href="#navigation-render_admin_nav_sections"
+id="toc-navigation-render_admin_nav_sections">Navigation
+(<code>render_admin_nav_sections</code>)</a></li>
+<li><a href="#related-tables-1" id="toc-related-tables-1">Related
+Tables</a></li>
+</ul></li>
+<li><a href="#module-6-dean-college"
+id="toc-module-6-dean-college">Module 6: Dean (College)</a>
+<ul>
+<li><a href="#source-files-5" id="toc-source-files-5">Source
+Files</a></li>
+<li><a href="#scope-enforcement" id="toc-scope-enforcement">Scope
+Enforcement</a></li>
+<li><a href="#dean_programs.php"
+id="toc-dean_programs.php"><code>dean_programs.php</code></a></li>
+<li><a href="#program_chairs.php"
+id="toc-program_chairs.php"><code>program_chairs.php</code></a></li>
+<li><a href="#faculty.php"
+id="toc-faculty.php"><code>faculty.php</code></a></li>
+<li><a href="#courses.php"
+id="toc-courses.php"><code>courses.php</code></a></li>
+<li><a href="#rooms.php"
+id="toc-rooms.php"><code>rooms.php</code></a></li>
+<li><a href="#scheduling-pages" id="toc-scheduling-pages">Scheduling
+Pages</a></li>
+<li><a href="#dean_gened_chair.php"
+id="toc-dean_gened_chair.php"><code>dean_gened_chair.php</code></a></li>
+<li><a href="#activity-logging" id="toc-activity-logging">Activity
+Logging</a></li>
+<li><a href="#navigation-dean-sections-in-role_nav_sections"
+id="toc-navigation-dean-sections-in-role_nav_sections">Navigation (dean
+sections in <code>role_nav_sections</code>)</a></li>
+<li><a href="#related-tables-2" id="toc-related-tables-2">Related
+Tables</a></li>
+</ul></li>
+<li><a href="#module-7-program-chair"
+id="toc-module-7-program-chair">Module 7: Program Chair</a>
+<ul>
+<li><a href="#source-files-6" id="toc-source-files-6">Source
+Files</a></li>
+<li><a href="#scope-enforcement-1" id="toc-scope-enforcement-1">Scope
+Enforcement</a></li>
+<li><a href="#program_chair_students.php"
+id="toc-program_chair_students.php"><code>program_chair_students.php</code></a></li>
+<li><a href="#program_chair_student_registrations.php"
+id="toc-program_chair_student_registrations.php"><code>program_chair_student_registrations.php</code></a></li>
+<li><a href="#shared-pages-with-dean"
+id="toc-shared-pages-with-dean">Shared Pages with Dean</a></li>
+<li><a href="#navigation-program_chair-in-role_nav_sections"
+id="toc-navigation-program_chair-in-role_nav_sections">Navigation
+(program_chair in <code>role_nav_sections</code>)</a></li>
+<li><a href="#related-tables-3" id="toc-related-tables-3">Related
+Tables</a></li>
+</ul></li>
+<li><a href="#module-8-faculty" id="toc-module-8-faculty">Module 8:
+Faculty</a>
+<ul>
+<li><a href="#source-files-7" id="toc-source-files-7">Source
+Files</a></li>
+<li><a href="#identity-resolution-1"
+id="toc-identity-resolution-1">Identity Resolution</a></li>
+<li><a href="#faculty_classrooms.php"
+id="toc-faculty_classrooms.php"><code>faculty_classrooms.php</code></a></li>
+<li><a href="#faculty_classroom.php"
+id="toc-faculty_classroom.php"><code>faculty_classroom.php</code></a></li>
+<li><a href="#faculty_classroom_attendance.php"
+id="toc-faculty_classroom_attendance.php"><code>faculty_classroom_attendance.php</code></a></li>
+<li><a href="#faculty_classroom_assessments.php"
+id="toc-faculty_classroom_assessments.php"><code>faculty_classroom_assessments.php</code></a></li>
+<li><a href="#faculty_edutools.php"
+id="toc-faculty_edutools.php"><code>faculty_edutools.php</code></a></li>
+<li><a href="#schedule-change-requests"
+id="toc-schedule-change-requests">Schedule Change Requests</a></li>
+<li><a href="#navigation-faculty-in-role_nav_sections"
+id="toc-navigation-faculty-in-role_nav_sections">Navigation (faculty in
+<code>role_nav_sections</code>)</a></li>
+<li><a href="#related-tables-4" id="toc-related-tables-4">Related
+Tables</a></li>
+</ul></li>
+<li><a href="#module-9-general-education-gen-ed"
+id="toc-module-9-general-education-gen-ed">Module 9: General Education
+(GEN ED)</a>
+<ul>
+<li><a href="#source-files-8" id="toc-source-files-8">Source
+Files</a></li>
+<li><a href="#ge-data-model" id="toc-ge-data-model">GE Data Model</a>
+<ul>
+<li><a href="#courses-courses-where-is_gened-1"
+id="toc-courses-courses-where-is_gened-1">Courses (<code>courses</code>
+where <code>is_gened = 1</code>)</a></li>
+<li><a href="#faculty-faculty-where-is_gened-1"
+id="toc-faculty-faculty-where-is_gened-1">Faculty (<code>faculty</code>
+where <code>is_gened = 1</code>)</a></li>
+<li><a href="#rooms-rooms-where-is_gened-1"
+id="toc-rooms-rooms-where-is_gened-1">Rooms (<code>rooms</code> where
+<code>is_gened = 1</code>)</a></li>
+<li><a href="#schedules" id="toc-schedules">Schedules</a></li>
+</ul></li>
+<li><a href="#gened_assignments.php"
+id="toc-gened_assignments.php"><code>gened_assignments.php</code></a></li>
+<li><a href="#gened_edit_schedule.php"
+id="toc-gened_edit_schedule.php"><code>gened_edit_schedule.php</code></a></li>
+<li><a href="#ge-live-sessions" id="toc-ge-live-sessions">GE Live
+Sessions</a></li>
+<li><a href="#messaging-rules-messaging_helpers.php"
+id="toc-messaging-rules-messaging_helpers.php">Messaging Rules
+(<code>messaging_helpers.php</code>)</a></li>
+<li><a href="#navigation-gened-in-role_nav_sections"
+id="toc-navigation-gened-in-role_nav_sections">Navigation (gened in
+<code>role_nav_sections</code>)</a></li>
+<li><a href="#related-tables-5" id="toc-related-tables-5">Related
+Tables</a></li>
+</ul></li>
+<li><a href="#module-10-student" id="toc-module-10-student">Module 10:
+Student</a>
+<ul>
+<li><a href="#source-files-9" id="toc-source-files-9">Source
+Files</a></li>
+<li><a href="#registration-flow" id="toc-registration-flow">Registration
+Flow</a></li>
+<li><a href="#includesstudent_registration_helpers.php"
+id="toc-includesstudent_registration_helpers.php"><code>includes/student_registration_helpers.php</code></a></li>
+<li><a href="#student_classrooms.php"
+id="toc-student_classrooms.php"><code>student_classrooms.php</code></a></li>
+<li><a href="#student_classroom.php"
+id="toc-student_classroom.php"><code>student_classroom.php</code></a></li>
+<li><a href="#student_edutools.php"
+id="toc-student_edutools.php"><code>student_edutools.php</code></a></li>
+<li><a href="#student_wellness.php"
+id="toc-student_wellness.php"><code>student_wellness.php</code></a></li>
+<li><a href="#messaging" id="toc-messaging">Messaging</a></li>
+<li><a href="#navigation-student-in-role_nav_sections"
+id="toc-navigation-student-in-role_nav_sections">Navigation (student in
+<code>role_nav_sections</code>)</a></li>
+<li><a href="#related-tables-6" id="toc-related-tables-6">Related
+Tables</a></li>
+</ul></li>
+<li><a href="#module-11-scheduling" id="toc-module-11-scheduling">Module
+11: Scheduling</a>
+<ul>
+<li><a href="#source-files-10" id="toc-source-files-10">Source
+Files</a></li>
+<li><a href="#data-model-schedules" id="toc-data-model-schedules">Data
+Model: <code>schedules</code></a></li>
+<li><a href="#schedule-validation-validate_schedule_rules"
+id="toc-schedule-validation-validate_schedule_rules">Schedule Validation
+(<code>validate_schedule_rules</code>)</a></li>
+<li><a href="#conflict-detection-checkconflicts"
+id="toc-conflict-detection-checkconflicts">Conflict Detection
+(<code>checkConflicts</code>)</a></li>
+<li><a href="#render_schedule_form-schedule_helpers.php"
+id="toc-render_schedule_form-schedule_helpers.php"><code>render_schedule_form()</code>
+(<code>schedule_helpers.php</code>)</a></li>
+<li><a href="#auto_schedule.php"
+id="toc-auto_schedule.php"><code>auto_schedule.php</code></a></li>
+<li><a href="#weekly-view-view_schedule.php"
+id="toc-weekly-view-view_schedule.php">Weekly View
+(<code>view_schedule.php</code>)</a></li>
+<li><a href="#ge-schedule-targets" id="toc-ge-schedule-targets">GE
+Schedule Targets</a></li>
+<li><a href="#schedule-change-workflow"
+id="toc-schedule-change-workflow">Schedule Change Workflow</a></li>
+<li><a href="#helper-functions-reference"
+id="toc-helper-functions-reference">Helper Functions Reference</a></li>
+<li><a href="#related-tables-7" id="toc-related-tables-7">Related
+Tables</a></li>
+</ul></li>
+<li><a href="#module-12-online-classroom-lms"
+id="toc-module-12-online-classroom-lms">Module 12: Online Classroom
+(LMS)</a>
+<ul>
+<li><a href="#source-files-11" id="toc-source-files-11">Source
+Files</a></li>
+<li><a href="#classroom-lifecycle"
+id="toc-classroom-lifecycle">Classroom Lifecycle</a></li>
+<li><a href="#tables" id="toc-tables">Tables</a>
+<ul>
+<li><a href="#online_classrooms"
+id="toc-online_classrooms"><code>online_classrooms</code></a></li>
+<li><a href="#classroom_students-classroom_enrollments"
+id="toc-classroom_students-classroom_enrollments"><code>classroom_students</code>
+/ <code>classroom_enrollments</code></a></li>
+<li><a href="#classroom_content"
+id="toc-classroom_content"><code>classroom_content</code></a></li>
+<li><a href="#classroom_content_attachments"
+id="toc-classroom_content_attachments"><code>classroom_content_attachments</code></a></li>
+<li><a href="#classroom_assessments"
+id="toc-classroom_assessments"><code>classroom_assessments</code></a></li>
+<li><a href="#classroom_submissions-classroom_scores"
+id="toc-classroom_submissions-classroom_scores"><code>classroom_submissions</code>
+/ <code>classroom_scores</code></a></li>
+<li><a
+href="#classroom_attendance_sessions-classroom_attendance_records"
+id="toc-classroom_attendance_sessions-classroom_attendance_records"><code>classroom_attendance_sessions</code>
+/ <code>classroom_attendance_records</code></a></li>
+<li><a href="#classroom_messages"
+id="toc-classroom_messages"><code>classroom_messages</code></a></li>
+</ul></li>
+<li><a href="#content-helpers-includesfunctions.php"
+id="toc-content-helpers-includesfunctions.php">Content Helpers
+(<code>includes/functions.php</code>)</a></li>
+<li><a
+href="#discussion-helpers-includesclassroom_discussion_helpers.php"
+id="toc-discussion-helpers-includesclassroom_discussion_helpers.php">Discussion
+Helpers
+(<code>includes/classroom_discussion_helpers.php</code>)</a></li>
+<li><a href="#assessment-grading" id="toc-assessment-grading">Assessment
+Grading</a></li>
+<li><a href="#file-downloads" id="toc-file-downloads">File
+Downloads</a></li>
+<li><a href="#materials-monitor" id="toc-materials-monitor">Materials
+Monitor</a></li>
+</ul></li>
+<li><a href="#module-13-messaging" id="toc-module-13-messaging">Module
+13: Messaging</a>
+<ul>
+<li><a href="#source-files-12" id="toc-source-files-12">Source
+Files</a></li>
+<li><a href="#data-model-internal_messages"
+id="toc-data-model-internal_messages">Data Model:
+<code>internal_messages</code></a></li>
+<li><a href="#key-functions-includesmessaging_helpers.php"
+id="toc-key-functions-includesmessaging_helpers.php">Key Functions
+(<code>includes/messaging_helpers.php</code>)</a>
+<ul>
+<li><a href="#infrastructure"
+id="toc-infrastructure">Infrastructure</a></li>
+<li><a href="#permissions" id="toc-permissions">Permissions</a></li>
+<li><a href="#operations" id="toc-operations">Operations</a></li>
+<li><a href="#attachments" id="toc-attachments">Attachments</a></li>
+</ul></li>
+<li><a href="#permission-matrix-summary"
+id="toc-permission-matrix-summary">Permission Matrix (Summary)</a></li>
+<li><a href="#fifo-thread-limit" id="toc-fifo-thread-limit">FIFO Thread
+Limit</a></li>
+<li><a href="#ui-messages.php" id="toc-ui-messages.php">UI
+(<code>messages.php</code>)</a></li>
+<li><a href="#attachment-download"
+id="toc-attachment-download">Attachment Download</a></li>
+<li><a href="#config" id="toc-config">Config</a></li>
+</ul></li>
+<li><a href="#module-14-student-wellness"
+id="toc-module-14-student-wellness">Module 14: Student Wellness</a>
+<ul>
+<li><a href="#source-files-13" id="toc-source-files-13">Source
+Files</a></li>
+<li><a href="#architecture" id="toc-architecture">Architecture</a></li>
+<li><a href="#api-apistudent_wellness_chat.php"
+id="toc-api-apistudent_wellness_chat.php">API
+(<code>api/student_wellness_chat.php</code>)</a></li>
+<li><a href="#crisis-detection-wellness_chatbot.php"
+id="toc-crisis-detection-wellness_chatbot.php">Crisis Detection
+(<code>wellness_chatbot.php</code>)</a></li>
+<li><a href="#message-classification"
+id="toc-message-classification">Message Classification</a></li>
+<li><a href="#template-engine-wellness_engine.php"
+id="toc-template-engine-wellness_engine.php">Template Engine
+(<code>wellness_engine.php</code>)</a></li>
+<li><a href="#ai-provider-wellness_ai.php"
+id="toc-ai-provider-wellness_ai.php">AI Provider
+(<code>wellness_ai.php</code>)</a></li>
+<li><a href="#configuration"
+id="toc-configuration">Configuration</a></li>
+<li><a href="#disclaimers" id="toc-disclaimers">Disclaimers</a></li>
+<li><a href="#openapi" id="toc-openapi">OpenAPI</a></li>
+<li><a href="#access-control-1" id="toc-access-control-1">Access
+Control</a></li>
+</ul></li>
+<li><a href="#module-15-reports-analytics"
+id="toc-module-15-reports-analytics">Module 15: Reports &amp;
+Analytics</a>
+<ul>
+<li><a href="#source-files-14" id="toc-source-files-14">Source
+Files</a></li>
+<li><a href="#reports.php"
+id="toc-reports.php"><code>reports.php</code></a></li>
+<li><a href="#global_reports.php-1"
+id="toc-global_reports.php-1"><code>global_reports.php</code></a></li>
+<li><a href="#teaching-load-reports"
+id="toc-teaching-load-reports">Teaching Load Reports</a>
+<ul>
+<li><a href="#faculty_teaching_load.php"
+id="toc-faculty_teaching_load.php"><code>faculty_teaching_load.php</code></a></li>
+<li><a href="#super_admin_teaching_load_report.php-1"
+id="toc-super_admin_teaching_load_report.php-1"><code>super_admin_teaching_load_report.php</code></a></li>
+</ul></li>
+<li><a href="#classroom_materials_monitor.php"
+id="toc-classroom_materials_monitor.php"><code>classroom_materials_monitor.php</code></a></li>
+<li><a href="#dashboard-statistics-dashboard.php"
+id="toc-dashboard-statistics-dashboard.php">Dashboard Statistics
+(<code>dashboard.php</code>)</a>
+<ul>
+<li><a href="#admin" id="toc-admin">Admin</a></li>
+<li><a href="#dean-program-chair" id="toc-dean-program-chair">Dean /
+Program Chair</a></li>
+<li><a href="#faculty" id="toc-faculty">Faculty</a></li>
+<li><a href="#student" id="toc-student">Student</a></li>
+<li><a href="#super-admin" id="toc-super-admin">Super Admin</a></li>
+</ul></li>
+<li><a href="#print-styles" id="toc-print-styles">Print Styles</a></li>
+<li><a href="#activity-logs-reporting-sources"
+id="toc-activity-logs-reporting-sources">Activity Logs (Reporting
+Sources)</a></li>
+<li><a href="#related-helpers" id="toc-related-helpers">Related
+Helpers</a></li>
+</ul></li>
+<li><a href="#module-16-rest-api" id="toc-module-16-rest-api">Module 16:
+REST API</a>
+<ul>
+<li><a href="#source-files-15" id="toc-source-files-15">Source
+Files</a></li>
+<li><a href="#apiprograms_by_college.php"
+id="toc-apiprograms_by_college.php"><code>api/programs_by_college.php</code></a></li>
+<li><a href="#apistudent_wellness_chat.php"
+id="toc-apistudent_wellness_chat.php"><code>api/student_wellness_chat.php</code></a></li>
+<li><a href="#openapi-spec" id="toc-openapi-spec">OpenAPI Spec</a></li>
+<li><a href="#api-design-patterns" id="toc-api-design-patterns">API
+Design Patterns</a></li>
+<li><a href="#future-extension-points"
+id="toc-future-extension-points">Future Extension Points</a></li>
+</ul></li>
+<li><a href="#module-17-ui-assets-shared-layout"
+id="toc-module-17-ui-assets-shared-layout">Module 17: UI Assets &amp;
+Shared Layout</a>
+<ul>
+<li><a href="#source-files-16" id="toc-source-files-16">Source Files</a>
+<ul>
+<li><a href="#stylesheets-assetscss"
+id="toc-stylesheets-assetscss">Stylesheets
+(<code>assets/css/</code>)</a></li>
+<li><a href="#javascript-assetsjs"
+id="toc-javascript-assetsjs">JavaScript
+(<code>assets/js/</code>)</a></li>
+</ul></li>
+<li><a href="#layout-partials-includes"
+id="toc-layout-partials-includes">Layout Partials
+(<code>includes/</code>)</a></li>
+<li><a href="#includesheader.php"
+id="toc-includesheader.php"><code>includes/header.php</code></a></li>
+<li><a href="#includesadmin_nav.php"
+id="toc-includesadmin_nav.php"><code>includes/admin_nav.php</code></a></li>
+<li><a href="#includesadmin_offcanvas.php"
+id="toc-includesadmin_offcanvas.php"><code>includes/admin_offcanvas.php</code></a></li>
+<li><a href="#tooltips-includesstudent_tooltip.php"
+id="toc-tooltips-includesstudent_tooltip.php">Tooltips
+(<code>includes/student_tooltip.php</code>)</a></li>
+<li><a href="#theme-toggle-assetsjstheme-toggle.js"
+id="toc-theme-toggle-assetsjstheme-toggle.js">Theme Toggle
+(<code>assets/js/theme-toggle.js</code>)</a></li>
+<li><a href="#navigation-js-assetsjsapp_nav.js"
+id="toc-navigation-js-assetsjsapp_nav.js">Navigation JS
+(<code>assets/js/app_nav.js</code>)</a></li>
+<li><a href="#common-ui-patterns" id="toc-common-ui-patterns">Common UI
+Patterns</a>
+<ul>
+<li><a href="#flash-messages" id="toc-flash-messages">Flash
+messages</a></li>
+<li><a href="#cards" id="toc-cards">Cards</a></li>
+<li><a href="#forms" id="toc-forms">Forms</a></li>
+<li><a href="#icons" id="toc-icons">Icons</a></li>
+<li><a href="#page-titles" id="toc-page-titles">Page titles</a></li>
+</ul></li>
+<li><a href="#upload-directories" id="toc-upload-directories">Upload
+Directories</a></li>
+<li><a href="#external-dependencies-cdn"
+id="toc-external-dependencies-cdn">External Dependencies (CDN)</a></li>
+<li><a href="#settings.php"
+id="toc-settings.php"><code>settings.php</code></a></li>
+<li><a href="#profile_photo.php"
+id="toc-profile_photo.php"><code>profile_photo.php</code></a></li>
+</ul></li>
+<li><a href="#appendix-a-key-source-code-excerpts"
+id="toc-appendix-a-key-source-code-excerpts">Appendix A: Key Source Code
+Excerpts</a>
+<ul>
+<li><a href="#index.php-application-entry-point"
+id="toc-index.php-application-entry-point"><code>index.php</code> —
+Application entry point</a></li>
+<li><a href="#includesdb.php-database-connection"
+id="toc-includesdb.php-database-connection"><code>includes/db.php</code>
+— Database connection</a></li>
+<li><a href="#includesauth.php-role-gate"
+id="toc-includesauth.php-role-gate"><code>includes/auth.php</code> —
+Role gate</a></li>
+<li><a href="#admin_gened.php-admin-page-pattern"
+id="toc-admin_gened.php-admin-page-pattern"><code>admin_gened.php</code>
+— Admin page pattern</a></li>
+<li><a href="#apiprograms_by_college.php-json-api-pattern"
+id="toc-apiprograms_by_college.php-json-api-pattern"><code>api/programs_by_college.php</code>
+— JSON API pattern</a></li>
+<li><a href="#installschema.sql-core-tables-excerpt"
+id="toc-installschema.sql-core-tables-excerpt"><code>install/schema.sql</code>
+— Core tables (excerpt)</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="wpu-sablae-portal-source-code-documentation">WPU SABLAe Portal —
+Source Code Documentation</h1>
+<p><strong>Project:</strong> <code>lms_scheduling</code> (Faculty
+Scheduling &amp; Classroom LMS)<br />
+<strong>Stack:</strong> PHP 8+ (strict types), MySQL/MariaDB, Bootstrap
+5, PDO<br />
+<strong>Entry point:</strong> <code>index.php</code> →
+<code>login.php</code> or <code>dashboard.php</code></p>
+<p>This documentation describes all application source code organized by
+functional module. Each module page lists source files, database tables,
+roles, and key behaviors.</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 38%" />
+<col style="width: 47%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Module</th>
+<th>Document</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Core infrastructure</td>
+<td><a href="#">01-core-infrastructure.md</a></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Authentication &amp; authorization</td>
+<td><a href="#">02-authentication.md</a></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Installation &amp; configuration</td>
+<td><a href="#">03-installation.md</a></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Super Admin</td>
+<td><a href="#">04-super-admin.md</a></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Admin (institution)</td>
+<td><a href="#">05-admin.md</a></td>
+</tr>
+<tr>
+<td>6</td>
+<td>Dean (college)</td>
+<td><a href="#">06-dean.md</a></td>
+</tr>
+<tr>
+<td>7</td>
+<td>Program Chair</td>
+<td><a href="#">07-program-chair.md</a></td>
+</tr>
+<tr>
+<td>8</td>
+<td>Faculty</td>
+<td><a href="#">08-faculty.md</a></td>
+</tr>
+<tr>
+<td>9</td>
+<td>General Education (GEN ED)</td>
+<td><a href="#">09-gened.md</a></td>
+</tr>
+<tr>
+<td>10</td>
+<td>Student</td>
+<td><a href="10-student.md">10-student.md</a></td>
+</tr>
+<tr>
+<td>11</td>
+<td>Scheduling</td>
+<td><a href="11-scheduling.md">11-scheduling.md</a></td>
+</tr>
+<tr>
+<td>12</td>
+<td>Online classroom (LMS)</td>
+<td><a href="12-classroom-lms.md">12-classroom-lms.md</a></td>
+</tr>
+<tr>
+<td>13</td>
+<td>Messaging</td>
+<td><a href="13-messaging.md">13-messaging.md</a></td>
+</tr>
+<tr>
+<td>14</td>
+<td>Student wellness</td>
+<td><a href="14-wellness.md">14-wellness.md</a></td>
+</tr>
+<tr>
+<td>15</td>
+<td>Reports &amp; analytics</td>
+<td><a href="15-reports.md">15-reports.md</a></td>
+</tr>
+<tr>
+<td>16</td>
+<td>REST API</td>
+<td><a href="16-api.md">16-api.md</a></td>
+</tr>
+<tr>
+<td>17</td>
+<td>UI assets &amp; shared layout</td>
+<td><a href="17-ui-assets.md">17-ui-assets.md</a></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="user-roles">User Roles</h2>
+<table>
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 18%" />
+<col style="width: 64%" />
+</colgroup>
+<thead>
+<tr>
+<th>Role</th>
+<th>Scope</th>
+<th>Primary responsibilities</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>super_admin</code></td>
+<td>Institution</td>
+<td>Admin accounts, faculty inventory, teaching-load reports</td>
+</tr>
+<tr>
+<td><code>admin</code></td>
+<td>Institution</td>
+<td>Colleges, deans, GEN ED account, conflict requests, global
+reports</td>
+</tr>
+<tr>
+<td><code>dean</code></td>
+<td>One college</td>
+<td>Programs, chairs, faculty, rooms, courses, scheduling,
+auto-schedule</td>
+</tr>
+<tr>
+<td><code>program_chair</code></td>
+<td>One program (within college)</td>
+<td>Faculty, courses, schedules, students, registrations</td>
+</tr>
+<tr>
+<td><code>gened</code></td>
+<td>Institution (GE only)</td>
+<td>GE courses, faculty, rooms, schedules, assignments</td>
+</tr>
+<tr>
+<td><code>faculty</code></td>
+<td>Assigned classes</td>
+<td>Classrooms, attendance, assessments, teaching load</td>
+</tr>
+<tr>
+<td><code>student</code></td>
+<td>Enrolled classes</td>
+<td>Join classrooms, EduTools, wellness check-in</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="directory-layout">Directory Layout</h2>
+<pre><code>CLASS/
+├── api/                    # JSON REST endpoints
+├── assets/css/             # Application stylesheets
+├── assets/js/              # Client-side scripts
+├── config/                 # config.php (from config.example.php)
+├── docs/                   # This documentation set
+├── includes/               # Shared PHP libraries &amp; layout partials
+├── install/                # schema.sql
+├── uploads/                # User-uploaded files (attachments, photos)
+├── *.php                   # Role-specific page controllers
+├── install.php             # Database installer
+└── upgrade_roles.php       # Schema migrations &amp; role upgrades</code></pre>
+<hr />
+<h2 id="request-lifecycle">Request Lifecycle</h2>
+<ol type="1">
+<li><strong>Bootstrap</strong> — Page includes
+<code>includes/auth.php</code> (starts session) and often
+<code>includes/functions.php</code>.</li>
+<li><strong>Authorization</strong> — <code>require_login()</code> or
+<code>require_role([...])</code> gates access.</li>
+<li><strong>Business logic</strong> — Inline in page file or delegated
+to <code>includes/*_helpers.php</code>.</li>
+<li><strong>Presentation</strong> — <code>includes/header.php</code> +
+HTML + <code>includes/footer.php</code>.</li>
+<li><strong>Navigation</strong> — <code>includes/admin_nav.php</code>
+renders role-specific sidebar via
+<code>render_role_nav_sections()</code>.</li>
+</ol>
+<hr />
+<h2 id="database-overview">Database Overview</h2>
+<p>Core entities: <code>colleges</code>, <code>users</code>,
+<code>programs</code>, <code>college_programs</code>,
+<code>faculty</code>, <code>courses</code>, <code>rooms</code>,
+<code>schedules</code>.</p>
+<p>Supporting: <code>conflict_logs</code>,
+<code>conflict_requests</code>, <code>schedule_change_requests</code>,
+<code>dean_activity_logs</code>, <code>admin_activity_logs</code>.</p>
+<p>GE-specific: <code>ge_course_colleges</code>,
+<code>ge_schedule_targets</code>,
+<code>faculty_specializations</code>.</p>
+<p>LMS: <code>online_classrooms</code>, <code>classroom_students</code>,
+<code>classroom_enrollments</code>, <code>classroom_content</code>,
+<code>classroom_assessments</code>, <code>classroom_scores</code>,
+<code>classroom_submissions</code>,
+<code>classroom_attendance_*</code>.</p>
+<p>Messaging: <code>internal_messages</code>.</p>
+<p>Registration: <code>student_registration_requests</code>.</p>
+<p>Full DDL: <code>install/schema.sql</code>.</p>
+<hr />
+<h2 id="maintenance-scripts">Maintenance Scripts</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>install.php</code></td>
+<td>Initial database creation and default admin/GEN ED accounts</td>
+</tr>
+<tr>
+<td><code>upgrade_roles.php</code></td>
+<td>Idempotent ALTER TABLE migrations (email, messaging, wellness,
+etc.)</td>
+</tr>
+<tr>
+<td><code>fix_room_code_scope.php</code></td>
+<td>Repairs <code>rooms.room_code_scope</code> generated column
+data</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>Generated from source analysis of the CLASS codebase.</em></p>
+<hr />
+<h2 id="exported-documents">Exported documents</h2>
+<p>All modules combined into single files (with code appendix):</p>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>File</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PDF</td>
+<td><code>WPU_SABLAe_Source_Code_Documentation.pdf</code></td>
+</tr>
+<tr>
+<td>Word</td>
+<td><code>WPU_SABLAe_Source_Code_Documentation.docx</code></td>
+</tr>
+<tr>
+<td>HTML</td>
+<td><code>WPU_SABLAe_Source_Code_Documentation.html</code></td>
+</tr>
+<tr>
+<td>Markdown</td>
+<td><code>SOURCE_CODE_DOCUMENTATION.md</code></td>
+</tr>
+</tbody>
+</table>
+<p>Regenerate:
+<code>C:\xampp\php\php.exe docs\build_exports.php</code></p>
+<h1 id="module-1-core-infrastructure">Module 1: Core Infrastructure</h1>
+<p>Shared foundation used by every page in the application.</p>
+<hr />
+<h2 id="source-files">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>includes/db.php</code></td>
+<td>PDO singleton (<code>db()</code>), MySQL connection with
+XAMPP-friendly error messages</td>
+</tr>
+<tr>
+<td><code>includes/functions.php</code></td>
+<td>General utilities: DB introspection, scheduling rules, classroom
+helpers, room codes, conflict detection</td>
+</tr>
+<tr>
+<td><code>includes/header.php</code></td>
+<td>HTML <code>&lt;head&gt;</code>, Bootstrap/CSS, top navigation
+shell</td>
+</tr>
+<tr>
+<td><code>includes/footer.php</code></td>
+<td>Closing markup, script includes</td>
+</tr>
+<tr>
+<td><code>includes/student_tooltip.php</code></td>
+<td>Tooltip attributes for UI hints
+(<code>app_tooltip_attr()</code>)</td>
+</tr>
+<tr>
+<td><code>index.php</code></td>
+<td>Redirects to <code>dashboard.php</code> (logged in) or
+<code>login.php</code></td>
+</tr>
+<tr>
+<td><code>logout.php</code></td>
+<td>Clears session, records <code>last_logout_at</code>, redirects to
+login</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="includesdb.php"><code>includes/db.php</code></h2>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode php"><code class="sourceCode php"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> db()<span class="ot">:</span> <span class="bu">PDO</span></span></code></pre></div>
+<ul>
+<li>Loads <code>config/config.php</code>.</li>
+<li>Creates a static PDO connection to
+<code>DB_HOST:DB_PORT/DB_NAME</code>.</li>
+<li>Sets <code>ERRMODE_EXCEPTION</code> and
+<code>FETCH_ASSOC</code>.</li>
+<li>Throws a readable <code>RuntimeException</code> when MySQL is not
+running (errno 2002).</li>
+</ul>
+<hr />
+<h2
+id="includesfunctions.php-key-function-groups"><code>includes/functions.php</code>
+— Key Function Groups</h2>
+<h3 id="database-introspection">Database introspection</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>db_column_exists($table, $column)</code></td>
+<td>Checks <code>information_schema.COLUMNS</code></td>
+</tr>
+<tr>
+<td><code>db_table_exists($table)</code></td>
+<td>Checks <code>information_schema.TABLES</code></td>
+</tr>
+<tr>
+<td><code>db_first_existing_column($table, $cols, $fallback)</code></td>
+<td>Picks first column that exists (migration-safe)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="scheduling-primitives">Scheduling primitives</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schedule_days_list()</code></td>
+<td>Returns Mon–Sun array</td>
+</tr>
+<tr>
+<td><code>parse_day_set($value)</code> /
+<code>days_to_set($days)</code></td>
+<td>MySQL SET ↔︎ PHP array</td>
+</tr>
+<tr>
+<td><code>time_to_minutes($time)</code> /
+<code>minutes_to_time($min)</code></td>
+<td>Time arithmetic</td>
+</tr>
+<tr>
+<td><code>intervals_overlap($s1,$e1,$s2,$e2)</code></td>
+<td>Overlap test</td>
+</tr>
+<tr>
+<td><code>validate_schedule_rules(...)</code></td>
+<td>Enforces TIME_MIN/MAX, MIN_CLASS_MINUTES, MIN_GAP_MINUTES,
+MAX_CONSECUTIVE_HOURS</td>
+</tr>
+<tr>
+<td><code>checkConflicts(...)</code></td>
+<td>Faculty, room, and cross-college room conflict detection</td>
+</tr>
+<tr>
+<td><code>log_conflicts($scheduleId, $conflicts)</code></td>
+<td>Writes to <code>conflict_logs</code></td>
+</tr>
+<tr>
+<td><code>create_conflict_request($payload)</code></td>
+<td>Inserts <code>conflict_requests</code> for admin review</td>
+</tr>
+<tr>
+<td><code>sql_scope_for_college($alias, $collegeId)</code></td>
+<td>SQL fragment limiting rows to a college</td>
+</tr>
+</tbody>
+</table>
+<h3 id="room-management">Room management</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>room_code_taken_for_college(...)</code></td>
+<td>Uniqueness within college scope</td>
+</tr>
+<tr>
+<td><code>room_code_taken_for_gened(...)</code></td>
+<td>Uniqueness for GE rooms</td>
+</tr>
+<tr>
+<td><code>next_auto_room_code_for_college(...)</code></td>
+<td>Auto-generates room codes</td>
+</tr>
+<tr>
+<td><code>next_auto_room_code_gened()</code></td>
+<td>GE room code generator</td>
+</tr>
+<tr>
+<td><code>detect_cross_college_room_conflicts(...)</code></td>
+<td>Shared physical room across colleges</td>
+</tr>
+</tbody>
+</table>
+<h3 id="program-year-level">Program / year level</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dean_program_year_levels_map($collegeId)</code></td>
+<td>Map program → year levels</td>
+</tr>
+<tr>
+<td><code>program_defined_year_levels($programId)</code></td>
+<td>Levels for a <code>college_programs</code> row</td>
+</tr>
+<tr>
+<td><code>program_year_levels_replace($programId, $levels)</code></td>
+<td>Replace year levels</td>
+</tr>
+<tr>
+<td><code>sort_schedule_year_levels($levels)</code></td>
+<td>Natural sort (1st, 2nd, …)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="classroom-lms-helpers">Classroom / LMS helpers</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>classroom_alloc_unique_join_code()</code></td>
+<td>8-char join code for <code>online_classrooms</code></td>
+</tr>
+<tr>
+<td><code>course_alloc_unique_classroom_code()</code></td>
+<td>Unique <code>courses.classroom_code</code></td>
+</tr>
+<tr>
+<td><code>classroom_content_sanitize_html($html)</code></td>
+<td>Safe HTML for rich content</td>
+</tr>
+<tr>
+<td><code>classroom_content_store_attachment($file)</code></td>
+<td>Saves uploads under <code>uploads/classroom/</code></td>
+</tr>
+<tr>
+<td><code>classroom_assessment_normalize_type($type)</code></td>
+<td>written_work, performance_task, assignment, quiz</td>
+</tr>
+<tr>
+<td><code>classroom_grade_question_submission(...)</code></td>
+<td>Auto-grades objective questions</td>
+</tr>
+</tbody>
+</table>
+<h3 id="general-education-ge">General Education (GE)</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>is_ge_program_scope($program)</code></td>
+<td>Detects GE program label</td>
+</tr>
+<tr>
+<td><code>ge_courses_offered_to_college($collegeId)</code></td>
+<td>GE courses mapped via <code>ge_course_colleges</code></td>
+</tr>
+<tr>
+<td><code>dean_schedule_scope_sql($collegeId, ...)</code></td>
+<td>Dean sees college + applicable GE schedules</td>
+</tr>
+<tr>
+<td><code>weekly_schedule_gened_can_join_online_live(...)</code></td>
+<td>GE live session access rules</td>
+</tr>
+</tbody>
+</table>
+<h3 id="suggestions">Suggestions</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>suggest_available_usernames($preferred)</code></td>
+<td>Username collision avoidance</td>
+</tr>
+<tr>
+<td><code>suggest_available_course_codes($preferred, $collegeId, $isGened)</code></td>
+<td>Course code suggestions</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2
+id="includesschedule_helpers.php"><code>includes/schedule_helpers.php</code></h2>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>render_schedule_form($defaults, $options)</code></td>
+<td>Shared HTML form for add/edit schedule pages</td>
+</tr>
+</tbody>
+</table>
+<p>Used by <code>add_schedule.php</code>,
+<code>edit_schedule.php</code>,
+<code>gened_edit_schedule.php</code>.</p>
+<hr />
+<h2 id="session-config-constants">Session &amp; Config Constants</h2>
+<p>Defined in <code>config/config.example.php</code> (copy to
+<code>config/config.php</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DB_*</code></td>
+<td>Database connection</td>
+</tr>
+<tr>
+<td><code>SESSION_NAME</code></td>
+<td>PHP session cookie name (<code>FSS_SESSION</code>)</td>
+</tr>
+<tr>
+<td><code>BASE_PATH</code></td>
+<td>Application root directory</td>
+</tr>
+<tr>
+<td><code>TIME_MIN</code>, <code>TIME_MAX</code></td>
+<td>Allowed class hours (06:00–22:00)</td>
+</tr>
+<tr>
+<td><code>MIN_CLASS_MINUTES</code>, <code>MIN_GAP_MINUTES</code></td>
+<td>Scheduling constraints</td>
+</tr>
+<tr>
+<td><code>MAX_CONSECUTIVE_HOURS</code></td>
+<td>Faculty consecutive teaching limit</td>
+</tr>
+<tr>
+<td><code>MESSAGING_THREAD_MAX_MESSAGES</code></td>
+<td>FIFO cap per message thread</td>
+</tr>
+<tr>
+<td><code>MAIL_*</code></td>
+<td>SMTP / credential email settings</td>
+</tr>
+<tr>
+<td><code>WELLNESS_AI_*</code></td>
+<td>Groq/Ollama wellness companion</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="dependencies-between-core-files">Dependencies Between Core
+Files</h2>
+<pre><code>config/config.php
+    └── includes/db.php
+            └── includes/functions.php
+                    └── includes/schedule_helpers.php (optional)
+includes/auth.php
+    └── includes/db.php
+Page (*.php)
+    ├── includes/auth.php
+    ├── includes/functions.php
+    ├── includes/header.php
+    └── includes/footer.php</code></pre>
+<h1 id="module-2-authentication-authorization">Module 2: Authentication
+&amp; Authorization</h1>
+<p>Session-based login with role-scoped access control.</p>
+<hr />
+<h2 id="source-files-1">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>login.php</code></td>
+<td>Multi-role login UI; student self-registration</td>
+</tr>
+<tr>
+<td><code>login1.php</code></td>
+<td>Alternate/simplified login page</td>
+</tr>
+<tr>
+<td><code>logout.php</code></td>
+<td>Session destruction</td>
+</tr>
+<tr>
+<td><code>includes/auth.php</code></td>
+<td>Session helpers, role checks, ID resolution</td>
+</tr>
+<tr>
+<td><code>profile_photo.php</code></td>
+<td>Upload/remove user profile photo</td>
+</tr>
+<tr>
+<td><code>includes/profile_photo_helpers.php</code></td>
+<td>Photo storage under <code>uploads/profile/</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="login-flow-login.php">Login Flow (<code>login.php</code>)</h2>
+<ol type="1">
+<li>If <code>$_SESSION['user_id']</code> exists → redirect to
+<code>dashboard.php</code>.</li>
+<li>User selects role tab: Student, Admin, Program Chair, Dean,
+Faculty.</li>
+<li><strong>Login POST:</strong> Validates username/password against
+<code>users</code> where <code>is_active = 1</code>.</li>
+<li>On success, populates session:
+<ul>
+<li><code>user_id</code>, <code>username</code>, <code>full_name</code>,
+<code>role</code></li>
+<li><code>college_id</code>, <code>assigned_program</code>,
+<code>admin_log_title</code> (when applicable)</li>
+<li>Resolves <code>faculty_id</code> / <code>student_id</code> via
+helper functions</li>
+<li>Updates <code>last_login_at</code>, <code>last_seen_at</code></li>
+</ul></li>
+<li><strong>Student registration POST</strong> (students only): Calls
+<code>submit_student_registration()</code> →
+<code>student_registration_requests</code>.</li>
+</ol>
+<hr />
+<h2 id="session-keys">Session Keys</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Set when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>user_id</code></td>
+<td>All authenticated users</td>
+</tr>
+<tr>
+<td><code>username</code>, <code>full_name</code>,
+<code>role</code></td>
+<td>All authenticated users</td>
+</tr>
+<tr>
+<td><code>college_id</code></td>
+<td>Dean, program chair, college-scoped faculty</td>
+</tr>
+<tr>
+<td><code>assigned_program</code></td>
+<td>Program chair</td>
+</tr>
+<tr>
+<td><code>admin_log_title</code></td>
+<td>Admin / super_admin display title</td>
+</tr>
+<tr>
+<td><code>faculty_id</code></td>
+<td>Faculty user linked to <code>faculty</code> row</td>
+</tr>
+<tr>
+<td><code>student_id</code></td>
+<td>Student linked to <code>classroom_students</code> row</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="includesauth.php-functions"><code>includes/auth.php</code> —
+Functions</h2>
+<h3 id="access-control">Access control</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>require_login()</code></td>
+<td>Redirect to <code>login.php</code> if no session; touches
+<code>last_seen_at</code></td>
+</tr>
+<tr>
+<td><code>require_role(array $roles)</code></td>
+<td><code>require_login()</code> + 403 if role not in list</td>
+</tr>
+<tr>
+<td><code>current_user()</code></td>
+<td>Returns session user array or <code>null</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="role-predicates">Role predicates</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>True when <code>role</code> is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>is_super_admin()</code></td>
+<td><code>super_admin</code></td>
+</tr>
+<tr>
+<td><code>is_admin()</code></td>
+<td><code>admin</code></td>
+</tr>
+<tr>
+<td><code>is_dean()</code></td>
+<td><code>dean</code></td>
+</tr>
+<tr>
+<td><code>is_program_chair()</code></td>
+<td><code>program_chair</code></td>
+</tr>
+<tr>
+<td><code>is_faculty()</code></td>
+<td><code>faculty</code></td>
+</tr>
+<tr>
+<td><code>is_gened()</code></td>
+<td><code>gened</code></td>
+</tr>
+<tr>
+<td><code>is_student()</code></td>
+<td><code>student</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="scope-helpers">Scope helpers</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>current_college_id()</code></td>
+<td>Session college ID or null</td>
+</tr>
+<tr>
+<td><code>current_program_scope()</code></td>
+<td>Program chair’s <code>assigned_program</code></td>
+</tr>
+<tr>
+<td><code>dean_college_id_or_fail()</code></td>
+<td>Requires dean + college; exits 403 otherwise</td>
+</tr>
+<tr>
+<td><code>dean_or_program_chair_college_id_or_fail()</code></td>
+<td>Dean or chair with college</td>
+</tr>
+<tr>
+<td><code>program_scope_or_fail()</code></td>
+<td>Program chair with assigned program</td>
+</tr>
+<tr>
+<td><code>college_name_by_id($id)</code></td>
+<td>Lookup from <code>colleges</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="identity-resolution">Identity resolution</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>resolve_faculty_id_for_user($userId)</code></td>
+<td>Links <code>users</code> ↔︎ <code>faculty</code> by
+<code>user_id</code> or name match</td>
+</tr>
+<tr>
+<td><code>resolve_student_id_for_user($userId)</code></td>
+<td>Links <code>users</code> ↔︎ <code>classroom_students</code></td>
+</tr>
+<tr>
+<td><code>faculty_college_id($facultyId)</code></td>
+<td>Home college for a faculty row</td>
+</tr>
+</tbody>
+</table>
+<h3 id="activity">Activity</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auth_touch_user_presence($userId)</code></td>
+<td>Updates <code>users.last_seen_at</code></td>
+</tr>
+<tr>
+<td><code>auth_user_activity_columns_ready()</code></td>
+<td>Checks migration for activity columns</td>
+</tr>
+<tr>
+<td><code>log_dean_activity($actionType, $details)</code></td>
+<td>Inserts <code>dean_activity_logs</code></td>
+</tr>
+<tr>
+<td><code>verify_admin_password($password)</code></td>
+<td>Re-auth for sensitive admin actions</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="profile-photos">Profile Photos</h2>
+<p><strong><code>includes/profile_photo_helpers.php</code></strong></p>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>profile_photo_store($userId, $file)</code></td>
+<td>Validates image, saves to <code>uploads/profile/</code></td>
+</tr>
+<tr>
+<td><code>profile_photo_url($userId)</code></td>
+<td>Public URL for <code>&lt;img&gt;</code></td>
+</tr>
+<tr>
+<td><code>profile_photo_remove($userId)</code></td>
+<td>Deletes file and clears DB column</td>
+</tr>
+</tbody>
+</table>
+<p>Requires <code>users.profile_photo</code> column (added by
+<code>upgrade_roles.php</code>).</p>
+<hr />
+<h2 id="security-notes">Security Notes</h2>
+<ul>
+<li>Passwords stored with <code>password_hash()</code> / verified with
+<code>password_verify()</code>.</li>
+<li>Role checks happen server-side on every protected page via
+<code>require_role()</code>.</li>
+<li>No JWT; classic PHP server sessions (<code>SESSION_NAME</code>
+cookie).</li>
+<li>Admin password re-verification available via
+<code>verify_admin_password()</code> for destructive operations.</li>
+</ul>
+<h1 id="module-3-installation-configuration">Module 3: Installation
+&amp; Configuration</h1>
+<p>Database setup, schema migrations, and environment configuration.</p>
+<hr />
+<h2 id="source-files-2">Source Files</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>install.php</code></td>
+<td>Browser-based one-time installer</td>
+</tr>
+<tr>
+<td><code>install/schema.sql</code></td>
+<td>Full database DDL</td>
+</tr>
+<tr>
+<td><code>upgrade_roles.php</code></td>
+<td>Incremental schema migrations</td>
+</tr>
+<tr>
+<td><code>fix_room_code_scope.php</code></td>
+<td>Data repair for room scope column</td>
+</tr>
+<tr>
+<td><code>config/config.example.php</code></td>
+<td>Template configuration</td>
+</tr>
+<tr>
+<td><code>config/config.php</code></td>
+<td>Live config (gitignored; copy from example)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="installation-install.php">Installation
+(<code>install.php</code>)</h2>
+<p><strong>Trigger:</strong> POST or <code>?run=1</code></p>
+<p><strong>Steps:</strong> 1. Connect to MySQL without database
+selected. 2. <code>CREATE DATABASE IF NOT EXISTS</code> with utf8mb4. 3.
+Execute all statements from <code>install/schema.sql</code> (split on
+<code>;</code>). 4. Seed default <code>admin</code> user if none exists
+(<code>DEFAULT_ADMIN_*</code> constants). 5. Seed default
+<code>gened</code> user if none exists (<code>DEFAULT_GENED_*</code>
+constants).</p>
+<p><strong>Output:</strong> Success message with default credentials or
+error details.</p>
+<hr />
+<h2 id="schema-installschema.sql">Schema
+(<code>install/schema.sql</code>)</h2>
+<p>Creates tables (InnoDB, utf8mb4):</p>
+<h3 id="organization">Organization</h3>
+<ul>
+<li><code>colleges</code> — College codes, names, dean link</li>
+<li><code>users</code> — All login accounts (7 roles)</li>
+<li><code>programs</code> / <code>college_programs</code> — Program
+catalog per college</li>
+<li><code>programs_year_levels</code> / <code>program_year_levels</code>
+/ <code>program_sections</code> — Academic structure</li>
+</ul>
+<h3 id="academic-resources">Academic resources</h3>
+<ul>
+<li><code>faculty</code> — Instructor records, max hours, GE flag</li>
+<li><code>courses</code> — Course catalog (college or GE)</li>
+<li><code>rooms</code> — Physical rooms with
+<code>room_code_scope</code> generated uniqueness</li>
+<li><code>schedules</code> — Class offerings (faculty + course + room +
+time)</li>
+</ul>
+<h3 id="workflow-audit">Workflow &amp; audit</h3>
+<ul>
+<li><code>conflict_logs</code>, <code>conflict_requests</code></li>
+<li><code>schedule_change_requests</code></li>
+<li><code>dean_activity_logs</code>,
+<code>admin_activity_logs</code></li>
+</ul>
+<h3 id="ge-extensions">GE extensions</h3>
+<ul>
+<li><code>ge_course_colleges</code>,
+<code>ge_schedule_targets</code></li>
+<li><code>faculty_specializations</code></li>
+</ul>
+<h3 id="lms-messaging">LMS &amp; messaging</h3>
+<ul>
+<li><code>online_classrooms</code>, <code>classroom_students</code>,
+<code>classroom_enrollments</code></li>
+<li><code>classroom_content</code>,
+<code>classroom_content_attachments</code></li>
+<li><code>classroom_messages</code>, <code>classroom_assessments</code>,
+<code>classroom_scores</code>, <code>classroom_submissions</code></li>
+<li><code>classroom_attendance_sessions</code>,
+<code>classroom_attendance_records</code></li>
+<li><code>internal_messages</code></li>
+<li><code>student_registration_requests</code></li>
+</ul>
+<hr />
+<h2 id="migrations-upgrade_roles.php">Migrations
+(<code>upgrade_roles.php</code>)</h2>
+<p>Idempotent migration runner using <code>exec_safe()</code> — ignores
+duplicate column/index errors.</p>
+<p><strong>Typical additions (run after initial install):</strong> -
+<code>users.email</code>, <code>last_login_at</code>,
+<code>last_seen_at</code>, <code>last_logout_at</code>,
+<code>profile_photo</code> - <code>users.role</code> enum extensions
+(<code>super_admin</code>, <code>gened</code>, <code>student</code>) -
+Messaging tables and memo columns - Classroom / assessment / attendance
+tables - Wellness-related columns - Admin activity log schema - Student
+registration workflow</p>
+<p><strong>Usage:</strong> Open in browser and POST to apply pending
+migrations.</p>
+<hr />
+<h2 id="configuration-configconfig.example.php">Configuration
+(<code>config/config.example.php</code>)</h2>
+<table>
+<colgroup>
+<col style="width: 39%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>Section</th>
+<th>Key settings</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Database</td>
+<td><code>DB_HOST</code>, <code>DB_PORT</code>, <code>DB_NAME</code>,
+<code>DB_USER</code>, <code>DB_PASS</code></td>
+</tr>
+<tr>
+<td>Bootstrap accounts</td>
+<td><code>DEFAULT_ADMIN_*</code>, <code>DEFAULT_SUPER_ADMIN_*</code>,
+<code>DEFAULT_GENED_*</code></td>
+</tr>
+<tr>
+<td>GE messaging</td>
+<td><code>GE_DEAN_USER_ID</code>, <code>GE_DEAN_NAME_HINT</code></td>
+</tr>
+<tr>
+<td>Email</td>
+<td><code>MAIL_ENABLED</code>, <code>MAIL_SMTP_*</code>,
+<code>MAIL_LOGIN_URL</code>, <code>APP_BASE_URL</code></td>
+</tr>
+<tr>
+<td>Scheduling rules</td>
+<td><code>TIME_MIN</code>, <code>TIME_MAX</code>,
+<code>MIN_GAP_MINUTES</code>, <code>MAX_CONSECUTIVE_HOURS</code></td>
+</tr>
+<tr>
+<td>Wellness AI</td>
+<td><code>WELLNESS_AI_ENABLED</code>, <code>WELLNESS_AI_API_KEY</code>,
+<code>WELLNESS_AI_MODEL</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Setup:</strong></p>
+<pre class="text"><code>cp config/config.example.php config/config.php
+# Edit DB credentials and URLs
+# Open install.php in browser
+# Run upgrade_roles.php for latest schema</code></pre>
+<hr />
+<h2 id="room-scope-repair-fix_room_code_scope.php">Room Scope Repair
+(<code>fix_room_code_scope.php</code>)</h2>
+<p>Maintenance utility for <code>rooms.room_code_scope</code> — a
+generated column ensuring unique room codes per college or GE scope
+(<code>G|code</code> vs <code>C|college_id|code</code>).</p>
+<hr />
+<h2 id="web-server">Web Server</h2>
+<ul>
+<li><code>web.config</code> — IIS rewrite rules (if deployed on Windows
+IIS).</li>
+<li><code>uploads/web.config</code> — Restricts script execution in
+upload directory.</li>
+</ul>
+<h1 id="module-4-super-admin">Module 4: Super Admin</h1>
+<p>Highest privilege tier for institution-wide administration beyond
+standard <code>admin</code>.</p>
+<p><strong>Role:</strong> <code>super_admin</code></p>
+<hr />
+<h2 id="source-files-3">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 26%" />
+<col style="width: 34%" />
+<col style="width: 39%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Access</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>super_admin_admins.php</code></td>
+<td><code>super_admin</code></td>
+<td>Create/manage <code>admin</code> user accounts</td>
+</tr>
+<tr>
+<td><code>super_admin_faculty_inventory.php</code></td>
+<td><code>super_admin</code></td>
+<td>Cross-college faculty roster view</td>
+</tr>
+<tr>
+<td><code>super_admin_teaching_load_report.php</code></td>
+<td><code>super_admin</code></td>
+<td>Institution-wide teaching load in units</td>
+</tr>
+<tr>
+<td><code>settings.php</code></td>
+<td>All roles (incl. super_admin)</td>
+<td>Profile, password, photo</td>
+</tr>
+<tr>
+<td><code>dashboard.php</code></td>
+<td>All roles</td>
+<td>Super-admin-specific dashboard stats block</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="navigation-includesadmin_nav.php">Navigation
+(<code>includes/admin_nav.php</code>)</h2>
+<p><code>render_super_admin_nav_sections()</code> provides:</p>
+<table>
+<thead>
+<tr>
+<th>Nav item</th>
+<th>File</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dashboard</td>
+<td><code>dashboard.php</code></td>
+</tr>
+<tr>
+<td>Manage admins</td>
+<td><code>super_admin_admins.php</code></td>
+</tr>
+<tr>
+<td>Faculty inventory</td>
+<td><code>super_admin_faculty_inventory.php</code></td>
+</tr>
+<tr>
+<td>Teaching load report</td>
+<td><code>super_admin_teaching_load_report.php</code></td>
+</tr>
+<tr>
+<td>Messages</td>
+<td><code>messages.php</code></td>
+</tr>
+<tr>
+<td>Settings</td>
+<td><code>settings.php</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="super_admin_admins.php"><code>super_admin_admins.php</code></h2>
+<ul>
+<li>Lists all users with <code>role = 'admin'</code>.</li>
+<li>CRUD: username, full name, email, active flag, optional password
+reset.</li>
+<li>Can generate temporary password and email via
+<code>send_account_credentials_mail()</code>.</li>
+<li>Activity logged via <code>log_admin_activity()</code>.</li>
+</ul>
+<hr />
+<h2
+id="super_admin_faculty_inventory.php"><code>super_admin_faculty_inventory.php</code></h2>
+<ul>
+<li>Read-only (or manage) view of <code>faculty</code> across all
+colleges.</li>
+<li>Filters by college, department, employment status.</li>
+<li>Links faculty rows to linked <code>users</code> accounts.</li>
+</ul>
+<hr />
+<h2
+id="super_admin_teaching_load_report.php"><code>super_admin_teaching_load_report.php</code></h2>
+<ul>
+<li>Aggregates scheduled units per faculty from <code>schedules</code> +
+<code>courses</code>.</li>
+<li>Filters: college, semester, school year.</li>
+<li>Export-friendly tabular report.</li>
+</ul>
+<hr />
+<h2
+id="dashboard-metrics-super_admin-section-in-dashboard.php">Dashboard
+Metrics (super_admin section in <code>dashboard.php</code>)</h2>
+<p>When <code>role === 'super_admin'</code>, additional stats
+include:</p>
+<ul>
+<li>Total schedules (all time)</li>
+<li>Colleges / departments count</li>
+<li>Faculty members, student enrollments</li>
+<li>Active conflict alerts, resolved conflicts (30 days)</li>
+<li>Room double-booking risks, faculty time overlaps</li>
+<li>Scheduled classes current term</li>
+</ul>
+<p>Auto-refreshes every 30 seconds.</p>
+<hr />
+<h2 id="related-tables">Related Tables</h2>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>users</code></td>
+<td>Admin account records (<code>role = 'admin'</code>)</td>
+</tr>
+<tr>
+<td><code>faculty</code></td>
+<td>Inventory source</td>
+</tr>
+<tr>
+<td><code>schedules</code>, <code>courses</code></td>
+<td>Teaching load calculation</td>
+</tr>
+<tr>
+<td><code>conflict_logs</code>, <code>conflict_requests</code></td>
+<td>Conflict metrics</td>
+</tr>
+<tr>
+<td><code>admin_activity_logs</code></td>
+<td>Audit trail</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="bootstrap">Bootstrap</h2>
+<p>Default super admin credentials from config (created manually or via
+install extension):</p>
+<ul>
+<li><code>DEFAULT_SUPER_ADMIN_USERNAME</code> /
+<code>DEFAULT_SUPER_ADMIN_PASSWORD</code></li>
+</ul>
+<p>Change password immediately after first login.</p>
+<h1 id="module-5-admin-institution">Module 5: Admin (Institution)</h1>
+<p>College-level and institution-wide management for standard
+administrators.</p>
+<p><strong>Role:</strong> <code>admin</code></p>
+<hr />
+<h2 id="source-files-4">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>admin_colleges.php</code></td>
+<td>CRUD colleges (code, name, status)</td>
+</tr>
+<tr>
+<td><code>admin_deans.php</code></td>
+<td>Create/manage dean accounts per college</td>
+</tr>
+<tr>
+<td><code>admin_gened.php</code></td>
+<td>Manage the single GEN ED coordinator account</td>
+</tr>
+<tr>
+<td><code>admin_requests.php</code></td>
+<td>Review/approve <code>conflict_requests</code></td>
+</tr>
+<tr>
+<td><code>global_reports.php</code></td>
+<td>Cross-college analytics and exports</td>
+</tr>
+<tr>
+<td><code>faculty_teaching_load.php</code></td>
+<td>Teaching load report (admin sees all colleges)</td>
+</tr>
+<tr>
+<td><code>classroom_materials_monitor.php</code></td>
+<td>Monitor classroom content uploads</td>
+</tr>
+<tr>
+<td><code>dashboard.php</code></td>
+<td>Admin dashboard statistics</td>
+</tr>
+<tr>
+<td><code>settings.php</code></td>
+<td>Admin profile settings</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="shared-includes">Shared Includes</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>includes/admin_nav.php</code></td>
+<td><code>render_admin_nav_sections()</code> sidebar</td>
+</tr>
+<tr>
+<td><code>includes/admin_offcanvas.php</code></td>
+<td>Mobile off-canvas navigation</td>
+</tr>
+<tr>
+<td><code>includes/admin_activity_log.php</code></td>
+<td>Audit logging for admin actions</td>
+</tr>
+<tr>
+<td><code>includes/mail_helpers.php</code></td>
+<td>Credential emails for deans/GEN ED</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="admin_colleges.php"><code>admin_colleges.php</code></h2>
+<ul>
+<li>Lists <code>colleges</code> with code, name, status
+(<code>active</code>/<code>inactive</code>).</li>
+<li>Add/edit college records.</li>
+<li>Cannot delete colleges with dependent data (FK constraints).</li>
+<li>Logs changes via <code>log_admin_activity()</code>.</li>
+</ul>
+<hr />
+<h2 id="admin_deans.php"><code>admin_deans.php</code></h2>
+<ul>
+<li>Creates dean <code>users</code> rows linked to
+<code>colleges.dean_user_id</code>.</li>
+<li>Fields: username, full name, email, password (manual or
+generated).</li>
+<li>Email temporary credentials with
+<code>send_dean_credentials_mail()</code>.</li>
+<li>Sets <code>college_id</code> on user and updates college dean
+reference.</li>
+</ul>
+<hr />
+<h2 id="admin_gened.php"><code>admin_gened.php</code></h2>
+<ul>
+<li>Manages the single institution-wide GEN ED account
+(<code>role = 'gened'</code>).</li>
+<li>Update username, full name, email, active status.</li>
+<li>Password reset or generate-and-email temporary password.</li>
+<li>Requires <code>upgrade_roles.php</code> for <code>users.email</code>
+column.</li>
+</ul>
+<hr />
+<h2 id="admin_requests.php"><code>admin_requests.php</code></h2>
+<ul>
+<li>Lists pending <code>conflict_requests</code> from
+deans/chairs/faculty.</li>
+<li>Approve → creates schedule via conflict override path.</li>
+<li>Reject → sets status and <code>admin_remarks</code>.</li>
+<li>Uses <code>verify_admin_password()</code> for sensitive
+approvals.</li>
+</ul>
+<hr />
+<h2 id="global_reports.php"><code>global_reports.php</code></h2>
+<ul>
+<li>Institution-wide reporting beyond single-college dean scope.</li>
+<li>Exports and summary charts for schedules, faculty, courses.</li>
+<li>Access: <code>require_role(['admin'])</code>.</li>
+</ul>
+<hr />
+<h2 id="activity-logging-includesadmin_activity_log.php">Activity
+Logging (<code>includes/admin_activity_log.php</code>)</h2>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>log_admin_activity($action, $module, $ref, $before, $after)</code></td>
+<td>Primary audit entry point</td>
+</tr>
+<tr>
+<td><code>log_user_activity(...)</code></td>
+<td>Generic user activity</td>
+</tr>
+<tr>
+<td><code>admin_activity_log_list_sorted($order)</code></td>
+<td>Retrieve logs for display</td>
+</tr>
+<tr>
+<td><code>admin_activity_log_collect_diff_lines($before, $after)</code></td>
+<td>Human-readable change diff</td>
+</tr>
+</tbody>
+</table>
+<p>Stored in <code>admin_activity_logs</code> with JSON
+<code>details_json</code> snapshots.</p>
+<hr />
+<h2 id="navigation-render_admin_nav_sections">Navigation
+(<code>render_admin_nav_sections</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Items</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Overview</td>
+<td>Dashboard, Messages</td>
+</tr>
+<tr>
+<td>Institution</td>
+<td>Colleges, Deans, GEN ED account</td>
+</tr>
+<tr>
+<td>Scheduling</td>
+<td>Schedules, Weekly view, Conflicts, Admin requests</td>
+</tr>
+<tr>
+<td>Reports</td>
+<td>Faculty teaching load, Global reports</td>
+</tr>
+<tr>
+<td>Monitoring</td>
+<td>Classroom materials monitor</td>
+</tr>
+<tr>
+<td>Account</td>
+<td>Settings</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="related-tables-1">Related Tables</h2>
+<p><code>colleges</code>, <code>users</code>,
+<code>conflict_requests</code>, <code>schedules</code>,
+<code>admin_activity_logs</code>, <code>online_classrooms</code>,
+<code>classroom_content</code></p>
+<h1 id="module-6-dean-college">Module 6: Dean (College)</h1>
+<p>College-scoped academic administration.</p>
+<p><strong>Role:</strong> <code>dean</code><br />
+<strong>Scope:</strong> <code>users.college_id</code> → one college</p>
+<hr />
+<h2 id="source-files-5">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dean_programs.php</code></td>
+<td>Manage <code>college_programs</code>, year levels, sections</td>
+</tr>
+<tr>
+<td><code>program_chairs.php</code></td>
+<td>Assign program chair accounts to programs</td>
+</tr>
+<tr>
+<td><code>faculty.php</code></td>
+<td>Faculty CRUD for the college</td>
+</tr>
+<tr>
+<td><code>courses.php</code></td>
+<td>Course catalog (college-scoped, non-GE)</td>
+</tr>
+<tr>
+<td><code>rooms.php</code></td>
+<td>Room management for the college</td>
+</tr>
+<tr>
+<td><code>add_schedule.php</code></td>
+<td>Create new schedule entries</td>
+</tr>
+<tr>
+<td><code>edit_schedule.php</code></td>
+<td>Modify existing schedules</td>
+</tr>
+<tr>
+<td><code>schedule.php</code></td>
+<td>Schedule list view</td>
+</tr>
+<tr>
+<td><code>view_schedule.php</code></td>
+<td>Weekly calendar view</td>
+</tr>
+<tr>
+<td><code>auto_schedule.php</code></td>
+<td>Automated schedule generation</td>
+</tr>
+<tr>
+<td><code>conflicts.php</code></td>
+<td>View scheduling conflicts</td>
+</tr>
+<tr>
+<td><code>dean_gened_chair.php</code></td>
+<td>Assign GE program chair / CAS dean liaison</td>
+</tr>
+<tr>
+<td><code>faculty_teaching_load.php</code></td>
+<td>College teaching load report</td>
+</tr>
+<tr>
+<td><code>reports.php</code></td>
+<td>College reports</td>
+</tr>
+<tr>
+<td><code>classroom_materials_monitor.php</code></td>
+<td>Monitor uploaded materials</td>
+</tr>
+<tr>
+<td><code>dashboard.php</code></td>
+<td>Dean dashboard stats</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="scope-enforcement">Scope Enforcement</h2>
+<p>All dean pages use:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode php"><code class="sourceCode php"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="va">$collegeId</span> <span class="op">=</span> dean_college_id_or_fail()<span class="ot">;</span></span></code></pre></div>
+<p>SQL queries append college filter via
+<code>sql_scope_for_college()</code> or explicit
+<code>college_id = ?</code>.</p>
+<p>Dean also sees applicable GE schedules via
+<code>dean_schedule_scope_sql()</code>.</p>
+<hr />
+<h2 id="dean_programs.php"><code>dean_programs.php</code></h2>
+<ul>
+<li>CRUD on <code>college_programs</code> (program code, name,
+status).</li>
+<li>Manage <code>program_year_levels</code> and
+<code>program_sections</code>.</li>
+<li><code>parse_dean_program_year_levels_post()</code> processes form
+year-level checkboxes.</li>
+<li><code>program_year_levels_replace()</code> syncs year levels.</li>
+</ul>
+<hr />
+<h2 id="program_chairs.php"><code>program_chairs.php</code></h2>
+<ul>
+<li>Creates <code>users</code> with
+<code>role = program_chair</code>.</li>
+<li>Sets <code>assigned_program</code> and <code>college_id</code>.</li>
+<li>One chair per program (typical).</li>
+<li>Credential email on create.</li>
+</ul>
+<hr />
+<h2 id="faculty.php"><code>faculty.php</code></h2>
+<ul>
+<li>CRUD <code>faculty</code> rows: faculty_id, name, department, email,
+max hours, employment status.</li>
+<li>Link to <code>users</code> account (<code>user_id</code>) for
+login.</li>
+<li>Manage <code>faculty_specializations</code> (courses faculty can
+teach).</li>
+<li>Suggests usernames via
+<code>suggest_available_usernames()</code>.</li>
+</ul>
+<hr />
+<h2 id="courses.php"><code>courses.php</code></h2>
+<ul>
+<li>College course catalog in <code>courses</code> where
+<code>is_gened = 0</code>.</li>
+<li>Fields: code, name, units, lecture/lab units, year level, section,
+department.</li>
+<li><code>classroom_code</code> auto-allocated for LMS integration.</li>
+<li>Shared with program chair (scoped to program department).</li>
+</ul>
+<hr />
+<h2 id="rooms.php"><code>rooms.php</code></h2>
+<ul>
+<li>College rooms (<code>is_gened = 0</code>, <code>college_id</code>
+set).</li>
+<li>Auto room code generation via
+<code>next_auto_room_code_for_college()</code>.</li>
+<li>Types: lecture, laboratory, conference, tba.</li>
+</ul>
+<hr />
+<h2 id="scheduling-pages">Scheduling Pages</h2>
+<table>
+<thead>
+<tr>
+<th>Page</th>
+<th>Dean capabilities</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>add_schedule.php</code></td>
+<td>New offering with conflict check</td>
+</tr>
+<tr>
+<td><code>edit_schedule.php</code></td>
+<td>Update times, room, faculty</td>
+</tr>
+<tr>
+<td><code>schedule.php</code></td>
+<td>Filterable list</td>
+</tr>
+<tr>
+<td><code>view_schedule.php</code></td>
+<td>Weekly grid</td>
+</tr>
+<tr>
+<td><code>auto_schedule.php</code></td>
+<td>Batch auto-assign faculty/rooms</td>
+</tr>
+<tr>
+<td><code>conflicts.php</code></td>
+<td>Faculty/room/time conflicts</td>
+</tr>
+</tbody>
+</table>
+<p>Conflict detection: <code>checkConflicts()</code> in
+<code>includes/functions.php</code>.</p>
+<p>Schedule change requests from faculty appear on dean dashboard.</p>
+<hr />
+<h2 id="dean_gened_chair.php"><code>dean_gened_chair.php</code></h2>
+<ul>
+<li>Configures GE liaison dean for messaging and live sessions.</li>
+<li>Related to <code>GE_DEAN_USER_ID</code> /
+<code>GE_DEAN_NAME_HINT</code> config.</li>
+</ul>
+<hr />
+<h2 id="activity-logging">Activity Logging</h2>
+<p><code>log_dean_activity($actionType, $details)</code> →
+<code>dean_activity_logs</code>.</p>
+<hr />
+<h2 id="navigation-dean-sections-in-role_nav_sections">Navigation (dean
+sections in <code>role_nav_sections</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Items</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Overview</td>
+<td>Dashboard, Messages, Schedules, Weekly view</td>
+</tr>
+<tr>
+<td>Academic</td>
+<td>Faculty, Program chairs, Programs, Courses, Rooms</td>
+</tr>
+<tr>
+<td>Scheduling</td>
+<td>Add schedule, Auto schedule, Conflicts</td>
+</tr>
+<tr>
+<td>Reports</td>
+<td>Reports, Teaching load, Materials monitor</td>
+</tr>
+<tr>
+<td>GE</td>
+<td>GE chair assignment</td>
+</tr>
+<tr>
+<td>Account</td>
+<td>Settings</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="related-tables-2">Related Tables</h2>
+<p><code>college_programs</code>, <code>program_year_levels</code>,
+<code>program_sections</code>, <code>faculty</code>,
+<code>courses</code>, <code>rooms</code>, <code>schedules</code>,
+<code>schedule_change_requests</code>,
+<code>dean_activity_logs</code></p>
+<h1 id="module-7-program-chair">Module 7: Program Chair</h1>
+<p>Program-scoped management within a dean’s college.</p>
+<p><strong>Role:</strong> <code>program_chair</code><br />
+<strong>Scope:</strong> <code>users.college_id</code> +
+<code>users.assigned_program</code> (department/program name)</p>
+<hr />
+<h2 id="source-files-6">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>faculty.php</code></td>
+<td>Faculty in assigned program (department filter)</td>
+</tr>
+<tr>
+<td><code>courses.php</code></td>
+<td>Courses for assigned program</td>
+</tr>
+<tr>
+<td><code>add_schedule.php</code></td>
+<td>Create schedules for program offerings</td>
+</tr>
+<tr>
+<td><code>edit_schedule.php</code></td>
+<td>Edit program schedules</td>
+</tr>
+<tr>
+<td><code>schedule.php</code></td>
+<td>Schedule list (program-scoped)</td>
+</tr>
+<tr>
+<td><code>view_schedule.php</code></td>
+<td>Weekly view</td>
+</tr>
+<tr>
+<td><code>conflicts.php</code></td>
+<td>Conflict review</td>
+</tr>
+<tr>
+<td><code>program_chair_students.php</code></td>
+<td>Manage <code>classroom_students</code> in program</td>
+</tr>
+<tr>
+<td><code>program_chair_student_registrations.php</code></td>
+<td>Approve/reject registration requests</td>
+</tr>
+<tr>
+<td><code>faculty_teaching_load.php</code></td>
+<td>Teaching load for program faculty</td>
+</tr>
+<tr>
+<td><code>reports.php</code></td>
+<td>Program reports</td>
+</tr>
+<tr>
+<td><code>classroom_materials_monitor.php</code></td>
+<td>Content monitoring</td>
+</tr>
+<tr>
+<td><code>dashboard.php</code></td>
+<td>Chair dashboard (pending registrations count)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="scope-enforcement-1">Scope Enforcement</h2>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode php"><code class="sourceCode php"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="va">$collegeId</span> <span class="op">=</span> dean_or_program_chair_college_id_or_fail()<span class="ot">;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="va">$programScope</span> <span class="op">=</span> program_scope_or_fail()<span class="ot">;</span></span></code></pre></div>
+<p>Queries filter: - <code>faculty.department = $programScope</code> -
+<code>courses.department = $programScope</code> - <code>schedules</code>
+joined to courses with matching department</p>
+<hr />
+<h2
+id="program_chair_students.php"><code>program_chair_students.php</code></h2>
+<ul>
+<li>Lists students (<code>classroom_students</code>) enrolled in program
+classrooms.</li>
+<li>Create student accounts linked to <code>users</code>
+(<code>role = student</code>).</li>
+<li>Manage student number, year level, email.</li>
+</ul>
+<hr />
+<h2
+id="program_chair_student_registrations.php"><code>program_chair_student_registrations.php</code></h2>
+<p>Uses <code>includes/student_registration_helpers.php</code>:</p>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pending_registrations_for_program($collegeId, $programScope)</code></td>
+<td>Pending queue</td>
+</tr>
+<tr>
+<td><code>approve_student_registration_request(...)</code></td>
+<td>Creates user + student row</td>
+</tr>
+<tr>
+<td><code>reject_student_registration_request(...)</code></td>
+<td>Sets rejection reason</td>
+</tr>
+<tr>
+<td><code>count_pending_registrations_for_program(...)</code></td>
+<td>Badge count for nav</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Workflow:</strong> 1. Student submits registration on
+<code>login.php</code>. 2. Request stored in
+<code>student_registration_requests</code>
+(<code>status = pending</code>). 3. Chair approves →
+<code>create_student_account()</code> or rejects with reason.</p>
+<hr />
+<h2 id="shared-pages-with-dean">Shared Pages with Dean</h2>
+<p>Program chairs share these pages with deans but see filtered
+data:</p>
+<ul>
+<li><code>faculty.php</code>, <code>courses.php</code>,
+<code>rooms.php</code> (read-only rooms typically)</li>
+<li>All scheduling pages</li>
+<li><code>conflicts.php</code>, <code>reports.php</code></li>
+</ul>
+<hr />
+<h2 id="navigation-program_chair-in-role_nav_sections">Navigation
+(program_chair in <code>role_nav_sections</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Items</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Overview</td>
+<td>Dashboard, Messages, Schedules, Weekly view</td>
+</tr>
+<tr>
+<td>Academic</td>
+<td>Faculty, Courses, Students, Registrations</td>
+</tr>
+<tr>
+<td>Scheduling</td>
+<td>Add schedule, Conflicts</td>
+</tr>
+<tr>
+<td>Reports</td>
+<td>Reports, Teaching load, Materials monitor</td>
+</tr>
+<tr>
+<td>Account</td>
+<td>Settings</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="related-tables-3">Related Tables</h2>
+<p><code>faculty</code>, <code>courses</code>, <code>schedules</code>,
+<code>classroom_students</code>,
+<code>student_registration_requests</code>,
+<code>schedule_change_requests</code>,
+<code>classroom_enrollments</code></p>
+<h1 id="module-8-faculty">Module 8: Faculty</h1>
+<p>Instructor-facing tools for teaching, classrooms, and schedules.</p>
+<p><strong>Role:</strong> <code>faculty</code><br />
+<strong>Identity:</strong> <code>users</code> linked to
+<code>faculty</code> via <code>user_id</code> or name match</p>
+<hr />
+<h2 id="source-files-7">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>faculty_schedule.php</code></td>
+<td>Personal teaching schedule</td>
+</tr>
+<tr>
+<td><code>schedule.php</code></td>
+<td>Schedule list (faculty’s classes)</td>
+</tr>
+<tr>
+<td><code>view_schedule.php</code></td>
+<td>Weekly calendar</td>
+</tr>
+<tr>
+<td><code>conflicts.php</code></td>
+<td>View conflicts affecting faculty</td>
+</tr>
+<tr>
+<td><code>faculty_classrooms.php</code></td>
+<td>List online classrooms for faculty</td>
+</tr>
+<tr>
+<td><code>faculty_classroom.php</code></td>
+<td>Single classroom hub (content, students, settings)</td>
+</tr>
+<tr>
+<td><code>faculty_classroom_week.php</code></td>
+<td>Week-by-week content view</td>
+</tr>
+<tr>
+<td><code>faculty_classroom_attendance.php</code></td>
+<td>Attendance sessions and records</td>
+</tr>
+<tr>
+<td><code>faculty_classroom_assessments.php</code></td>
+<td>Quizzes, assignments, grading</td>
+</tr>
+<tr>
+<td><code>faculty_edutools.php</code></td>
+<td>EduTools launcher</td>
+</tr>
+<tr>
+<td><code>faculty_teaching_load.php</code></td>
+<td>Own teaching load summary</td>
+</tr>
+<tr>
+<td><code>classroom_content_attachment.php</code></td>
+<td>Download content attachments</td>
+</tr>
+<tr>
+<td><code>classroom_syllabus.php</code></td>
+<td>Upload/view syllabus PDF</td>
+</tr>
+<tr>
+<td><code>messages.php</code></td>
+<td>Internal messaging</td>
+</tr>
+<tr>
+<td><code>reports.php</code></td>
+<td>Faculty reports</td>
+</tr>
+<tr>
+<td><code>settings.php</code></td>
+<td>Profile settings</td>
+</tr>
+<tr>
+<td><code>dashboard.php</code></td>
+<td>Faculty dashboard</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="identity-resolution-1">Identity Resolution</h2>
+<p>On login, <code>resolve_faculty_id_for_user()</code> sets
+<code>$_SESSION['faculty_id']</code>.</p>
+<p><code>faculty_college_id($facultyId)</code> scopes schedule
+queries.</p>
+<hr />
+<h2 id="faculty_classrooms.php"><code>faculty_classrooms.php</code></h2>
+<ul>
+<li>Lists <code>online_classrooms</code> where <code>faculty_id</code>
+matches session.</li>
+<li>Each classroom links to a <code>schedules</code> row /
+<code>courses</code> row.</li>
+<li>Shows join code, enrollment count, status.</li>
+</ul>
+<hr />
+<h2 id="faculty_classroom.php"><code>faculty_classroom.php</code></h2>
+<p>Central LMS management page:</p>
+<table>
+<colgroup>
+<col style="width: 52%" />
+<col style="width: 47%" />
+</colgroup>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Tables</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Classroom settings</td>
+<td><code>online_classrooms</code> (title, meet link, grade
+weights)</td>
+</tr>
+<tr>
+<td>Content (materials, links, announcements)</td>
+<td><code>classroom_content</code></td>
+</tr>
+<tr>
+<td>Student roster</td>
+<td><code>classroom_enrollments</code> +
+<code>classroom_students</code></td>
+</tr>
+<tr>
+<td>Discussion</td>
+<td><code>classroom_messages</code> via
+<code>classroom_discussion_helpers.php</code></td>
+</tr>
+<tr>
+<td>Join code</td>
+<td><code>online_classrooms.join_code</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2
+id="faculty_classroom_attendance.php"><code>faculty_classroom_attendance.php</code></h2>
+<ul>
+<li>Creates <code>classroom_attendance_sessions</code> per class
+day.</li>
+<li>Records <code>classroom_attendance_records</code>
+(present/absent).</li>
+<li>Auto-attendance from online login
+(<code>source = auto_login_online</code>).</li>
+<li>Manual override supported.</li>
+</ul>
+<hr />
+<h2
+id="faculty_classroom_assessments.php"><code>faculty_classroom_assessments.php</code></h2>
+<ul>
+<li>CRUD <code>classroom_assessments</code> (written_work,
+performance_task, assignment, quiz).</li>
+<li>Grade <code>classroom_scores</code> per student.</li>
+<li>Review <code>classroom_submissions</code> for assignments.</li>
+<li>Objective question auto-grading via
+<code>classroom_grade_question_submission()</code>.</li>
+</ul>
+<hr />
+<h2 id="faculty_edutools.php"><code>faculty_edutools.php</code></h2>
+<p>Launcher for faculty academic tools (links to classrooms, schedule,
+etc.).</p>
+<hr />
+<h2 id="schedule-change-requests">Schedule Change Requests</h2>
+<p>Faculty can request schedule changes →
+<code>schedule_change_requests</code> reviewed by dean/chair.</p>
+<hr />
+<h2 id="navigation-faculty-in-role_nav_sections">Navigation (faculty in
+<code>role_nav_sections</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Items</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Overview</td>
+<td>Dashboard, Messages, Schedules, Weekly view</td>
+</tr>
+<tr>
+<td>Teaching</td>
+<td>Classrooms, EduTools, Teaching load</td>
+</tr>
+<tr>
+<td>Account</td>
+<td>Settings</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="related-tables-4">Related Tables</h2>
+<p><code>faculty</code>, <code>schedules</code>,
+<code>online_classrooms</code>, <code>classroom_*</code>,
+<code>schedule_change_requests</code>,
+<code>internal_messages</code></p>
+<h1 id="module-9-general-education-gen-ed">Module 9: General Education
+(GEN ED)</h1>
+<p>Institution-wide General Education scheduling and resources.</p>
+<p><strong>Role:</strong> <code>gened</code><br />
+<strong>Account:</strong> Single coordinator user
+(<code>role = gened</code>), managed via
+<code>admin_gened.php</code></p>
+<hr />
+<h2 id="source-files-8">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gened_courses.php</code></td>
+<td>GE course catalog (<code>is_gened = 1</code>)</td>
+</tr>
+<tr>
+<td><code>gened_faculty.php</code></td>
+<td>GE faculty (<code>faculty.is_gened = 1</code>)</td>
+</tr>
+<tr>
+<td><code>gened_rooms.php</code></td>
+<td>GE rooms (<code>rooms.is_gened = 1</code>)</td>
+</tr>
+<tr>
+<td><code>gened_schedule.php</code></td>
+<td>GE schedule list</td>
+</tr>
+<tr>
+<td><code>gened_edit_schedule.php</code></td>
+<td>Add/edit GE schedule entries</td>
+</tr>
+<tr>
+<td><code>gened_assignments.php</code></td>
+<td>Map GE courses to colleges (<code>ge_course_colleges</code>)</td>
+</tr>
+<tr>
+<td><code>add_schedule.php</code> / <code>edit_schedule.php</code></td>
+<td>Shared schedule forms (GE mode)</td>
+</tr>
+<tr>
+<td><code>schedule.php</code></td>
+<td>Schedule list (GE scope)</td>
+</tr>
+<tr>
+<td><code>view_schedule.php</code></td>
+<td>Weekly view</td>
+</tr>
+<tr>
+<td><code>conflicts.php</code></td>
+<td>GE scheduling conflicts</td>
+</tr>
+<tr>
+<td><code>faculty_teaching_load.php</code></td>
+<td>GE faculty load</td>
+</tr>
+<tr>
+<td><code>classroom_materials_monitor.php</code></td>
+<td>Content monitoring</td>
+</tr>
+<tr>
+<td><code>reports.php</code></td>
+<td>GE reports</td>
+</tr>
+<tr>
+<td><code>messages.php</code></td>
+<td>Messaging (GE faculty ↔︎ GE dean rules)</td>
+</tr>
+<tr>
+<td><code>dashboard.php</code></td>
+<td>GEN ED dashboard</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="ge-data-model">GE Data Model</h2>
+<h3 id="courses-courses-where-is_gened-1">Courses (<code>courses</code>
+where <code>is_gened = 1</code>)</h3>
+<ul>
+<li>No <code>college_id</code> (institution-wide).</li>
+<li>Mapped to colleges via <code>ge_course_colleges</code>.</li>
+</ul>
+<h3 id="faculty-faculty-where-is_gened-1">Faculty (<code>faculty</code>
+where <code>is_gened = 1</code>)</h3>
+<ul>
+<li><code>college_id</code> may be null.</li>
+<li>Teaches GE offerings only.</li>
+</ul>
+<h3 id="rooms-rooms-where-is_gened-1">Rooms (<code>rooms</code> where
+<code>is_gened = 1</code>)</h3>
+<ul>
+<li><code>room_code_scope = CONCAT('G|', room_code)</code>.</li>
+<li><code>next_auto_room_code_gened()</code> for code generation.</li>
+</ul>
+<h3 id="schedules">Schedules</h3>
+<ul>
+<li>Standard <code>schedules</code> row with GE
+course/faculty/room.</li>
+<li>Target audience stored in <code>ge_schedule_targets</code>:
+<ul>
+<li><code>college_id</code>, <code>program_name</code>,
+<code>year_level</code>, <code>section</code></li>
+</ul></li>
+</ul>
+<hr />
+<h2 id="gened_assignments.php"><code>gened_assignments.php</code></h2>
+<ul>
+<li>Links GE courses to colleges that offer them.</li>
+<li>CRUD on <code>ge_course_colleges</code>.</li>
+<li>Drives which colleges see GE courses in dean schedules.</li>
+</ul>
+<hr />
+<h2
+id="gened_edit_schedule.php"><code>gened_edit_schedule.php</code></h2>
+<ul>
+<li>GE-specific schedule form via
+<code>render_schedule_form()</code>.</li>
+<li>Sets <code>ge_schedule_targets</code> for program/year/section
+targeting.</li>
+<li>Conflict checks include cross-college room sharing.</li>
+</ul>
+<hr />
+<h2 id="ge-live-sessions">GE Live Sessions</h2>
+<p><code>weekly_schedule_gened_can_join_online_live()</code> controls
+who can join GE online live classes: - GE faculty teaching the class -
+Target college deans/chairs - Configured GE dean
+(<code>GE_DEAN_USER_ID</code>)</p>
+<hr />
+<h2 id="messaging-rules-messaging_helpers.php">Messaging Rules
+(<code>messaging_helpers.php</code>)</h2>
+<p>GE-specific messaging constraints: -
+<code>messaging_is_gened_faculty_user()</code> — identifies GE faculty -
+<code>messaging_ge_dean_user_id()</code> — resolves GE dean for
+messaging - GE faculty may only message the designated GE dean</p>
+<hr />
+<h2 id="navigation-gened-in-role_nav_sections">Navigation (gened in
+<code>role_nav_sections</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Items</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Overview</td>
+<td>Dashboard, Messages, Schedules, Weekly view</td>
+</tr>
+<tr>
+<td>GE Resources</td>
+<td>GE courses, GE faculty, GE rooms, GE assignments</td>
+</tr>
+<tr>
+<td>Scheduling</td>
+<td>Add/edit GE schedule, Conflicts</td>
+</tr>
+<tr>
+<td>Reports</td>
+<td>Reports, Teaching load, Materials monitor</td>
+</tr>
+<tr>
+<td>Account</td>
+<td>Settings</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="related-tables-5">Related Tables</h2>
+<p><code>courses</code>, <code>faculty</code>, <code>rooms</code>,
+<code>schedules</code>, <code>ge_course_colleges</code>,
+<code>ge_schedule_targets</code>,
+<code>faculty_specializations</code></p>
+<h1 id="module-10-student">Module 10: Student</h1>
+<p>Student portal for classrooms, schedules, and wellness.</p>
+<p><strong>Role:</strong> <code>student</code><br />
+<strong>Identity:</strong> <code>users</code> linked to
+<code>classroom_students</code> via <code>user_id</code></p>
+<hr />
+<h2 id="source-files-9">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>login.php</code></td>
+<td>Student login + self-registration form</td>
+</tr>
+<tr>
+<td><code>student_classrooms.php</code></td>
+<td>List enrolled / joinable classrooms</td>
+</tr>
+<tr>
+<td><code>student_classroom.php</code></td>
+<td>Single classroom view (content, assessments)</td>
+</tr>
+<tr>
+<td><code>student_classroom_week.php</code></td>
+<td>Week-organized content view</td>
+</tr>
+<tr>
+<td><code>student_edutools.php</code></td>
+<td>EduTools hub (wellness, etc.)</td>
+</tr>
+<tr>
+<td><code>student_wellness.php</code></td>
+<td>Wellness check-in UI</td>
+</tr>
+<tr>
+<td><code>classroom_content_attachment.php</code></td>
+<td>Download attachments</td>
+</tr>
+<tr>
+<td><code>view_schedule.php</code></td>
+<td>Student schedule view (if applicable)</td>
+</tr>
+<tr>
+<td><code>messages.php</code></td>
+<td>Messaging with faculty</td>
+</tr>
+<tr>
+<td><code>settings.php</code></td>
+<td>Profile settings</td>
+</tr>
+<tr>
+<td><code>dashboard.php</code></td>
+<td>Student dashboard</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="registration-flow">Registration Flow</h2>
+<p><strong>On <code>login.php</code> (mode=register):</strong></p>
+<ol type="1">
+<li>Student fills: username, password, full name, email, student number,
+college, program, year level.</li>
+<li><code>submit_student_registration()</code> validates via
+<code>validate_student_registration_input()</code>.</li>
+<li>Inserts <code>student_registration_requests</code>
+(<code>status = pending</code>).</li>
+<li>Program chair approves on
+<code>program_chair_student_registrations.php</code>.</li>
+<li><code>approve_student_registration_request()</code> creates
+<code>users</code> + <code>classroom_students</code>.</li>
+</ol>
+<p><strong>API support:</strong>
+<code>api/programs_by_college.php</code> — dynamic program/year-level
+dropdowns.</p>
+<hr />
+<h2
+id="includesstudent_registration_helpers.php"><code>includes/student_registration_helpers.php</code></h2>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>student_registration_table_ready()</code></td>
+<td>Checks table exists</td>
+</tr>
+<tr>
+<td><code>active_colleges_for_registration()</code></td>
+<td>Active colleges list</td>
+</tr>
+<tr>
+<td><code>active_programs_for_college($collegeId)</code></td>
+<td>Programs for dropdown</td>
+</tr>
+<tr>
+<td><code>active_year_levels_for_program(...)</code></td>
+<td>Year levels for program</td>
+</tr>
+<tr>
+<td><code>submit_student_registration(...)</code></td>
+<td>Create pending request</td>
+</tr>
+<tr>
+<td><code>create_student_account(...)</code></td>
+<td>Create approved user + student</td>
+</tr>
+<tr>
+<td><code>username_taken_for_registration($username)</code></td>
+<td>Uniqueness check</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="student_classrooms.php"><code>student_classrooms.php</code></h2>
+<ul>
+<li>Shows classrooms student is enrolled in
+(<code>classroom_enrollments</code>).</li>
+<li>Join by code: <code>classroom_normalize_join_code()</code> + lookup
+<code>online_classrooms.join_code</code>.</li>
+<li>Enrolls via <code>classroom_enrollments</code> insert.</li>
+</ul>
+<hr />
+<h2 id="student_classroom.php"><code>student_classroom.php</code></h2>
+<p>Student view of classroom: - Read content
+(<code>classroom_content</code>) grouped by week - View announcements
+and links - Submit assessments → <code>classroom_submissions</code> -
+View scores → <code>classroom_scores</code> - Participate in discussion
+(<code>classroom_messages</code>)</p>
+<hr />
+<h2 id="student_edutools.php"><code>student_edutools.php</code></h2>
+<p>Hub linking to: - Wellness check-in
+(<code>student_wellness.php</code>) - Other student academic tools</p>
+<hr />
+<h2 id="student_wellness.php"><code>student_wellness.php</code></h2>
+<ul>
+<li>Renders wellness companion UI via
+<code>includes/student_wellness_ui.php</code>.</li>
+<li>Chat powered by <code>api/student_wellness_chat.php</code>.</li>
+<li>See <a href="14-wellness.md">14-wellness.md</a>.</li>
+</ul>
+<hr />
+<h2 id="messaging">Messaging</h2>
+<p>Students can message faculty they are enrolled with: -
+<code>messaging_student_can_message_faculty($studentUserId, $facultyUserId)</code>
+- Enforced in <code>messaging_can_send()</code></p>
+<hr />
+<h2 id="navigation-student-in-role_nav_sections">Navigation (student in
+<code>role_nav_sections</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Items</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Overview</td>
+<td>Dashboard, Messages</td>
+</tr>
+<tr>
+<td>Learning</td>
+<td>Classrooms, EduTools</td>
+</tr>
+<tr>
+<td>Account</td>
+<td>Settings</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="related-tables-6">Related Tables</h2>
+<p><code>classroom_students</code>,
+<code>student_registration_requests</code>,
+<code>classroom_enrollments</code>, <code>online_classrooms</code>,
+<code>classroom_content</code>, <code>classroom_assessments</code>,
+<code>classroom_submissions</code>, <code>classroom_scores</code>,
+<code>internal_messages</code></p>
+<h1 id="module-11-scheduling">Module 11: Scheduling</h1>
+<p>Core class scheduling engine shared across dean, program chair, GEN
+ED, faculty, and admin roles.</p>
+<hr />
+<h2 id="source-files-10">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 27%" />
+<col style="width: 31%" />
+<col style="width: 40%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Roles</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schedule.php</code></td>
+<td>admin, dean, chair, gened, faculty</td>
+<td>Filterable schedule list</td>
+</tr>
+<tr>
+<td><code>view_schedule.php</code></td>
+<td>admin, dean, chair, gened, faculty</td>
+<td>Weekly grid calendar</td>
+</tr>
+<tr>
+<td><code>add_schedule.php</code></td>
+<td>dean, program_chair</td>
+<td>Create schedule (college)</td>
+</tr>
+<tr>
+<td><code>edit_schedule.php</code></td>
+<td>dean, program_chair</td>
+<td>Edit schedule (college)</td>
+</tr>
+<tr>
+<td><code>gened_schedule.php</code></td>
+<td>gened</td>
+<td>GE schedule list</td>
+</tr>
+<tr>
+<td><code>gened_edit_schedule.php</code></td>
+<td>gened</td>
+<td>Create/edit GE schedules</td>
+</tr>
+<tr>
+<td><code>auto_schedule.php</code></td>
+<td>dean</td>
+<td>Automated assignment</td>
+</tr>
+<tr>
+<td><code>conflicts.php</code></td>
+<td>admin, dean, chair, gened, faculty</td>
+<td>Conflict viewer</td>
+</tr>
+<tr>
+<td><code>includes/schedule_helpers.php</code></td>
+<td>—</td>
+<td>Shared schedule form renderer</td>
+</tr>
+<tr>
+<td><code>includes/functions.php</code></td>
+<td>—</td>
+<td>Conflict detection, validation rules</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="data-model-schedules">Data Model: <code>schedules</code></h2>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>faculty_id</code></td>
+<td>Instructor</td>
+</tr>
+<tr>
+<td><code>course_id</code></td>
+<td>Course offering</td>
+</tr>
+<tr>
+<td><code>room_id</code></td>
+<td>Physical room</td>
+</tr>
+<tr>
+<td><code>college_id</code></td>
+<td>Owning college (null for some GE)</td>
+</tr>
+<tr>
+<td><code>schedule_type</code></td>
+<td>MW, TTH, MWF, Custom, etc.</td>
+</tr>
+<tr>
+<td><code>day_of_week</code></td>
+<td>MySQL SET of weekdays</td>
+</tr>
+<tr>
+<td><code>start_time</code>, <code>end_time</code></td>
+<td>Class period</td>
+</tr>
+<tr>
+<td><code>semester</code>, <code>school_year</code>,
+<code>academic_year</code></td>
+<td>Term identifiers</td>
+</tr>
+<tr>
+<td><code>program</code>, <code>year_level</code>,
+<code>section</code></td>
+<td>Audience</td>
+</tr>
+<tr>
+<td><code>online_class_url</code>, <code>online_live_at</code></td>
+<td>Virtual class links</td>
+</tr>
+<tr>
+<td><code>created_by</code></td>
+<td>User who created entry</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="schedule-validation-validate_schedule_rules">Schedule Validation
+(<code>validate_schedule_rules</code>)</h2>
+<p>Enforces config constants:</p>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Constant</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Earliest start</td>
+<td><code>TIME_MIN</code> (06:00)</td>
+</tr>
+<tr>
+<td>Latest end</td>
+<td><code>TIME_MAX</code> (22:00)</td>
+</tr>
+<tr>
+<td>Minimum duration</td>
+<td><code>MIN_CLASS_MINUTES</code> (30)</td>
+</tr>
+<tr>
+<td>Gap between classes same day</td>
+<td><code>MIN_GAP_MINUTES</code></td>
+</tr>
+<tr>
+<td>Max block duration</td>
+<td><code>MAX_CLASS_BLOCK_HOURS</code></td>
+</tr>
+<tr>
+<td>Max consecutive hours</td>
+<td><code>MAX_CONSECUTIVE_HOURS</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="conflict-detection-checkconflicts">Conflict Detection
+(<code>checkConflicts</code>)</h2>
+<p>Checks before save:</p>
+<ol type="1">
+<li><strong>Faculty conflict</strong> — Same faculty, overlapping
+days/times</li>
+<li><strong>Room conflict</strong> — Same room, overlapping times
+(unless room type = tba)</li>
+<li><strong>Faculty gaps</strong> —
+<code>check_faculty_gaps_and_consecutive()</code> for gap/consecutive
+rules</li>
+<li><strong>Cross-college room</strong> —
+<code>detect_cross_college_room_conflicts()</code> for shared rooms</li>
+</ol>
+<p>Unresolved conflicts: - Logged to <code>conflict_logs</code> - Or
+submitted as <code>conflict_requests</code> for admin override</p>
+<hr />
+<h2
+id="render_schedule_form-schedule_helpers.php"><code>render_schedule_form()</code>
+(<code>schedule_helpers.php</code>)</h2>
+<p>Shared HTML form used by add/edit pages:</p>
+<p><strong>Inputs:</strong> faculty, course, room, days, times, term,
+program, year, section, schedule type.</p>
+<p><strong>Options array controls:</strong> - College vs GE mode -
+Pre-filled defaults for edit - Available faculty/courses/rooms scoped to
+role</p>
+<hr />
+<h2 id="auto_schedule.php"><code>auto_schedule.php</code></h2>
+<p>Dean-only automated scheduler: - Assigns faculty and rooms to
+unscheduled course offerings - Respects faculty specializations, max
+hours, room capacity - Uses conflict detection iteratively</p>
+<hr />
+<h2 id="weekly-view-view_schedule.php">Weekly View
+(<code>view_schedule.php</code>)</h2>
+<ul>
+<li>Renders 7-column week grid</li>
+<li>Color-coded by course/faculty</li>
+<li>Filters: semester, school year, college, program</li>
+<li>Online live session indicators via
+<code>weekly_schedule_online_live_mode()</code></li>
+</ul>
+<hr />
+<h2 id="ge-schedule-targets">GE Schedule Targets</h2>
+<p>GE schedules additionally write <code>ge_schedule_targets</code>: -
+Which college/program/year/section the GE class serves - Used by deans
+to see GE classes in their college view</p>
+<hr />
+<h2 id="schedule-change-workflow">Schedule Change Workflow</h2>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Actor</th>
+<th>Table</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. Request</td>
+<td>Faculty</td>
+<td><code>schedule_change_requests</code></td>
+</tr>
+<tr>
+<td>2. Review</td>
+<td>Dean / Chair</td>
+<td>Same table, status update</td>
+</tr>
+<tr>
+<td>3. Apply</td>
+<td>Dean / Chair</td>
+<td>Update <code>schedules</code> row</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="helper-functions-reference">Helper Functions Reference</h2>
+<table>
+<colgroup>
+<col style="width: 52%" />
+<col style="width: 47%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fetch_faculty_day_schedules($facultyId, $day, ...)</code></td>
+<td>Faculty day schedule</td>
+</tr>
+<tr>
+<td><code>fetch_room_day_schedules($roomId, $day, ...)</code></td>
+<td>Room day schedule</td>
+</tr>
+<tr>
+<td><code>room_status_allows_overlap($roomId)</code></td>
+<td>TBA rooms skip conflict</td>
+</tr>
+<tr>
+<td><code>parse_day_set()</code> / <code>days_to_set()</code></td>
+<td>Day SET conversion</td>
+</tr>
+<tr>
+<td><code>create_conflict_request($payload)</code></td>
+<td>Admin escalation</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="related-tables-7">Related Tables</h2>
+<p><code>schedules</code>, <code>faculty</code>, <code>courses</code>,
+<code>rooms</code>, <code>conflict_logs</code>,
+<code>conflict_requests</code>, <code>schedule_change_requests</code>,
+<code>ge_schedule_targets</code>,
+<code>faculty_specializations</code></p>
+<h1 id="module-12-online-classroom-lms">Module 12: Online Classroom
+(LMS)</h1>
+<p>Virtual classroom features tied to schedule entries.</p>
+<hr />
+<h2 id="source-files-11">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 42%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Role</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>faculty_classrooms.php</code></td>
+<td>faculty</td>
+<td>Classroom list</td>
+</tr>
+<tr>
+<td><code>faculty_classroom.php</code></td>
+<td>faculty</td>
+<td>Classroom management hub</td>
+</tr>
+<tr>
+<td><code>faculty_classroom_week.php</code></td>
+<td>faculty</td>
+<td>Weekly content organizer</td>
+</tr>
+<tr>
+<td><code>faculty_classroom_attendance.php</code></td>
+<td>faculty</td>
+<td>Attendance tracking</td>
+</tr>
+<tr>
+<td><code>faculty_classroom_assessments.php</code></td>
+<td>faculty</td>
+<td>Assessments &amp; grading</td>
+</tr>
+<tr>
+<td><code>student_classrooms.php</code></td>
+<td>student</td>
+<td>Enrolled classrooms + join</td>
+</tr>
+<tr>
+<td><code>student_classroom.php</code></td>
+<td>student</td>
+<td>Classroom learner view</td>
+</tr>
+<tr>
+<td><code>student_classroom_week.php</code></td>
+<td>student</td>
+<td>Weekly content view</td>
+</tr>
+<tr>
+<td><code>classroom_content_attachment.php</code></td>
+<td>faculty, student</td>
+<td>Secure file download</td>
+</tr>
+<tr>
+<td><code>classroom_syllabus.php</code></td>
+<td>faculty</td>
+<td>Syllabus upload</td>
+</tr>
+<tr>
+<td><code>classroom_materials_monitor.php</code></td>
+<td>admin, dean, chair, gened</td>
+<td>Upload monitoring</td>
+</tr>
+<tr>
+<td><code>includes/classroom_discussion_helpers.php</code></td>
+<td>—</td>
+<td>Discussion threads</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="classroom-lifecycle">Classroom Lifecycle</h2>
+<ol type="1">
+<li><strong>Creation</strong> — When a schedule is saved, an
+<code>online_classrooms</code> row may be created linking
+<code>schedule_id</code>, <code>faculty_id</code>,
+<code>course_id</code>.</li>
+<li><strong>Join code</strong> —
+<code>classroom_alloc_unique_join_code()</code> assigns 8-char
+code.</li>
+<li><strong>Enrollment</strong> — Students join via code →
+<code>classroom_enrollments</code>.</li>
+<li><strong>Content</strong> — Faculty posts materials →
+<code>classroom_content</code>.</li>
+<li><strong>Assessment</strong> — Faculty creates assessments → students
+submit → faculty grades.</li>
+</ol>
+<hr />
+<h2 id="tables">Tables</h2>
+<h3 id="online_classrooms"><code>online_classrooms</code></h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Field</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schedule_id</code></td>
+<td>Links to physical schedule</td>
+</tr>
+<tr>
+<td><code>title</code>, <code>description</code></td>
+<td>Display info</td>
+</tr>
+<tr>
+<td><code>meet_link</code></td>
+<td>Video conference URL</td>
+</tr>
+<tr>
+<td><code>join_code</code></td>
+<td>Student enrollment code</td>
+</tr>
+<tr>
+<td><code>written_work_percentage</code>,
+<code>performance_task_percentage</code></td>
+<td>Grade weights</td>
+</tr>
+<tr>
+<td><code>syllabus_*</code></td>
+<td>Syllabus file metadata</td>
+</tr>
+</tbody>
+</table>
+<h3
+id="classroom_students-classroom_enrollments"><code>classroom_students</code>
+/ <code>classroom_enrollments</code></h3>
+<ul>
+<li>Student roster independent of user accounts (can link via
+<code>user_id</code>).</li>
+<li>Many-to-many enrollment.</li>
+</ul>
+<h3 id="classroom_content"><code>classroom_content</code></h3>
+<table>
+<thead>
+<tr>
+<th><code>content_type</code></th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>material</code></td>
+<td>Files, documents</td>
+</tr>
+<tr>
+<td><code>link</code></td>
+<td>External URLs</td>
+</tr>
+<tr>
+<td><code>announcement</code></td>
+<td>Text announcements</td>
+</tr>
+</tbody>
+</table>
+<p>Fields: <code>title</code>, <code>body</code> (rich HTML),
+<code>weeks</code>, <code>days_per_topic</code>,
+<code>resource_url</code>.</p>
+<h3
+id="classroom_content_attachments"><code>classroom_content_attachments</code></h3>
+<ul>
+<li>Multiple files per content item.</li>
+<li>Stored under <code>uploads/classroom/</code>.</li>
+</ul>
+<h3 id="classroom_assessments"><code>classroom_assessments</code></h3>
+<p>Types: <code>written_work</code>, <code>performance_task</code>,
+<code>assignment</code>, <code>quiz</code>.</p>
+<h3
+id="classroom_submissions-classroom_scores"><code>classroom_submissions</code>
+/ <code>classroom_scores</code></h3>
+<ul>
+<li>Student answers and faculty grades.</li>
+<li>Unique per assessment + student.</li>
+</ul>
+<h3
+id="classroom_attendance_sessions-classroom_attendance_records"><code>classroom_attendance_sessions</code>
+/ <code>classroom_attendance_records</code></h3>
+<ul>
+<li>One session per classroom per day.</li>
+<li>Auto-present when student logs in during online window.</li>
+<li>Manual override by faculty.</li>
+</ul>
+<h3 id="classroom_messages"><code>classroom_messages</code></h3>
+<ul>
+<li>Per-classroom discussion board.</li>
+<li>FIFO limit via
+<code>classroom_discussion_enforce_fifo()</code>.</li>
+</ul>
+<hr />
+<h2 id="content-helpers-includesfunctions.php">Content Helpers
+(<code>includes/functions.php</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>classroom_content_sanitize_html()</code></td>
+<td>XSS-safe rich text</td>
+</tr>
+<tr>
+<td><code>classroom_content_render_body()</code></td>
+<td>Display sanitized HTML</td>
+</tr>
+<tr>
+<td><code>classroom_content_group_by_week()</code></td>
+<td>Group content by week label</td>
+</tr>
+<tr>
+<td><code>classroom_content_store_attachment()</code></td>
+<td>File upload handler</td>
+</tr>
+<tr>
+<td><code>classroom_content_attachment_href()</code></td>
+<td>Download URL builder</td>
+</tr>
+<tr>
+<td><code>classroom_syllabus_href()</code></td>
+<td>Syllabus download URL</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2
+id="discussion-helpers-includesclassroom_discussion_helpers.php">Discussion
+Helpers (<code>includes/classroom_discussion_helpers.php</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>classroom_discussion_can_access()</code></td>
+<td>Enrollment check</td>
+</tr>
+<tr>
+<td><code>classroom_discussion_post()</code></td>
+<td>New message</td>
+</tr>
+<tr>
+<td><code>classroom_discussion_messages()</code></td>
+<td>Fetch thread</td>
+</tr>
+<tr>
+<td><code>classroom_discussion_threads_for_user()</code></td>
+<td>Inbox across classrooms</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="assessment-grading">Assessment Grading</h2>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>classroom_assessment_normalize_type()</code></td>
+<td>Valid type enum</td>
+</tr>
+<tr>
+<td><code>classroom_grade_question_submission()</code></td>
+<td>Auto-grade MC/true-false</td>
+</tr>
+<tr>
+<td><code>classroom_problem_answer_matches()</code></td>
+<td>Fuzzy answer matching</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="file-downloads">File Downloads</h2>
+<p><code>classroom_content_attachment.php</code>: - Verifies user is
+faculty of classroom or enrolled student. - Streams file with correct
+<code>Content-Type</code> and download name. - Prevents directory
+traversal.</p>
+<hr />
+<h2 id="materials-monitor">Materials Monitor</h2>
+<p><code>classroom_materials_monitor.php</code>: -
+Admin/dean/chair/gened view of recent uploads. - Audit trail for
+institutional oversight.</p>
+<h1 id="module-13-messaging">Module 13: Messaging</h1>
+<p>Internal messaging between users with role-based permission
+rules.</p>
+<hr />
+<h2 id="source-files-12">Source Files</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>messages.php</code></td>
+<td>Main messaging UI (inbox, compose, thread view)</td>
+</tr>
+<tr>
+<td><code>message_attachment.php</code></td>
+<td>Download message attachments</td>
+</tr>
+<tr>
+<td><code>includes/messaging_helpers.php</code></td>
+<td>All messaging business logic</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Roles with access:</strong> admin, dean, program_chair,
+gened, faculty, student</p>
+<hr />
+<h2 id="data-model-internal_messages">Data Model:
+<code>internal_messages</code></h2>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sender_user_id</code></td>
+<td>Author</td>
+</tr>
+<tr>
+<td><code>recipient_user_id</code></td>
+<td>Recipient</td>
+</tr>
+<tr>
+<td><code>subject</code></td>
+<td>Thread subject (memos)</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td>Message text</td>
+</tr>
+<tr>
+<td><code>is_memo</code></td>
+<td>Broadcast memo flag</td>
+</tr>
+<tr>
+<td><code>attachment_*</code></td>
+<td>Optional file attachment</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td>Timestamp</td>
+</tr>
+<tr>
+<td><code>read_at</code></td>
+<td>Read receipt (null = unread)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="key-functions-includesmessaging_helpers.php">Key Functions
+(<code>includes/messaging_helpers.php</code>)</h2>
+<h3 id="infrastructure">Infrastructure</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>messaging_table_exists()</code></td>
+<td>Schema check</td>
+</tr>
+<tr>
+<td><code>messaging_has_memo_columns()</code></td>
+<td>Memo feature check</td>
+</tr>
+<tr>
+<td><code>messaging_thread_max_messages()</code></td>
+<td>FIFO limit from config</td>
+</tr>
+<tr>
+<td><code>messaging_enforce_thread_fifo()</code></td>
+<td>Delete oldest when over limit</td>
+</tr>
+</tbody>
+</table>
+<h3 id="permissions">Permissions</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>messaging_can_open_thread($viewerId, $otherId)</code></td>
+<td>Can view conversation</td>
+</tr>
+<tr>
+<td><code>messaging_can_send($senderId, $recipientId)</code></td>
+<td>Can send message</td>
+</tr>
+<tr>
+<td><code>messaging_allowed_recipients($forUserId)</code></td>
+<td>Dropdown recipient list</td>
+</tr>
+<tr>
+<td><code>messaging_faculty_can_message_student(...)</code></td>
+<td>Enrollment-based rule</td>
+</tr>
+<tr>
+<td><code>messaging_student_can_message_faculty(...)</code></td>
+<td>Reverse enrollment rule</td>
+</tr>
+<tr>
+<td><code>messaging_is_gened_faculty_user()</code></td>
+<td>GE faculty detection</td>
+</tr>
+<tr>
+<td><code>messaging_ge_dean_user_id()</code></td>
+<td>GE dean for GE faculty</td>
+</tr>
+</tbody>
+</table>
+<h3 id="operations">Operations</h3>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>messaging_send($fromId, $toId, $body, $options)</code></td>
+<td>Send direct message</td>
+</tr>
+<tr>
+<td><code>messaging_send_memo($fromId, $recipientIds, ...)</code></td>
+<td>Broadcast memo</td>
+</tr>
+<tr>
+<td><code>messaging_thread($userId, $otherId)</code></td>
+<td>Fetch conversation</td>
+</tr>
+<tr>
+<td><code>messaging_conversation_list($userId)</code></td>
+<td>Inbox with previews</td>
+</tr>
+<tr>
+<td><code>messaging_unread_count($userId)</code></td>
+<td>Badge count for nav</td>
+</tr>
+<tr>
+<td><code>messaging_mark_read($viewerId, $otherId)</code></td>
+<td>Mark thread read</td>
+</tr>
+<tr>
+<td><code>messaging_delete_message($messageId, $userId)</code></td>
+<td>Delete own message</td>
+</tr>
+</tbody>
+</table>
+<h3 id="attachments">Attachments</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>messaging_store_attachment($file)</code></td>
+<td>Save to uploads</td>
+</tr>
+<tr>
+<td><code>messaging_attachment_path($storedName)</code></td>
+<td>Filesystem path</td>
+</tr>
+<tr>
+<td><code>messaging_delete_attachment_if_unused()</code></td>
+<td>Cleanup orphaned files</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="permission-matrix-summary">Permission Matrix (Summary)</h2>
+<table>
+<thead>
+<tr>
+<th>Sender → Recipient</th>
+<th>Allowed when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Faculty → Student</td>
+<td>Student enrolled in faculty’s classroom</td>
+</tr>
+<tr>
+<td>Student → Faculty</td>
+<td>Same enrollment relationship</td>
+</tr>
+<tr>
+<td>Dean → Program chairs</td>
+<td>Same college</td>
+</tr>
+<tr>
+<td>Program chair → Dean</td>
+<td>Same college</td>
+</tr>
+<tr>
+<td>GE faculty → GE dean</td>
+<td>Configured GE dean only</td>
+</tr>
+<tr>
+<td>Admin → Various</td>
+<td>Broad access per <code>messaging_allowed_recipients()</code></td>
+</tr>
+<tr>
+<td>Memo broadcast</td>
+<td>Dean/chair/admin to scoped recipients</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="fifo-thread-limit">FIFO Thread Limit</h2>
+<p><code>MESSAGING_THREAD_MAX_MESSAGES</code> (default 10): - When
+exceeded, oldest messages in a thread are deleted. -
+<code>messaging_enforce_thread_fifo()</code> runs after each send.</p>
+<hr />
+<h2 id="ui-messages.php">UI (<code>messages.php</code>)</h2>
+<p>Features: - Conversation list with unread badges - Thread view with
+role badges (<code>messaging_role_badge_class()</code>) - Compose to
+allowed recipients - Memo mode for broadcast messages - File attachment
+upload - Nav badge via <code>messaging_unread_count()</code> in
+<code>admin_nav.php</code></p>
+<hr />
+<h2 id="attachment-download">Attachment Download</h2>
+<p><code>message_attachment.php</code>: - Verifies sender or recipient
+access. - Streams attachment with original filename.</p>
+<hr />
+<h2 id="config">Config</h2>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MESSAGING_THREAD_MAX_MESSAGES</code></td>
+<td>Per-thread message cap</td>
+</tr>
+<tr>
+<td><code>GE_DEAN_USER_ID</code></td>
+<td>GE dean user for GE faculty messaging</td>
+</tr>
+<tr>
+<td><code>GE_DEAN_NAME_HINT</code></td>
+<td>Fallback dean name matching</td>
+</tr>
+</tbody>
+</table>
+<h1 id="module-14-student-wellness">Module 14: Student Wellness</h1>
+<p>Non-diagnostic wellness companion with crisis escalation (Philippines
+resources).</p>
+<hr />
+<h2 id="source-files-13">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>student_wellness.php</code></td>
+<td>Wellness check-in page (student UI)</td>
+</tr>
+<tr>
+<td><code>student_edutools.php</code></td>
+<td>Entry point from EduTools</td>
+</tr>
+<tr>
+<td><code>api/student_wellness_chat.php</code></td>
+<td>REST chat endpoint</td>
+</tr>
+<tr>
+<td><code>api/wellness_chatbot.openapi.yaml</code></td>
+<td>OpenAPI specification</td>
+</tr>
+<tr>
+<td><code>includes/student_wellness_ui.php</code></td>
+<td>HTML/JS chat widget</td>
+</tr>
+<tr>
+<td><code>includes/wellness_chatbot.php</code></td>
+<td>Classification, crisis detection, orchestration</td>
+</tr>
+<tr>
+<td><code>includes/wellness_engine.php</code></td>
+<td>Template-based empathetic replies</td>
+</tr>
+<tr>
+<td><code>includes/wellness_ai.php</code></td>
+<td>Groq/OpenAI/Gemini/Ollama integration</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="architecture">Architecture</h2>
+<pre><code>student_wellness.php (UI)
+    └── POST → api/student_wellness_chat.php
+            ├── wellness_chatbot.php (crisis check, classify)
+            ├── wellness_ai.php (optional LLM enhancement)
+            └── wellness_engine.php (fallback templates)</code></pre>
+<hr />
+<h2 id="api-apistudent_wellness_chat.php">API
+(<code>api/student_wellness_chat.php</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Auth</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td>Public</td>
+<td>Service descriptor / health</td>
+</tr>
+<tr>
+<td>POST</td>
+<td>Student session</td>
+<td>Chat completion</td>
+</tr>
+</tbody>
+</table>
+<p><strong>POST body:</strong></p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;message&quot;</span><span class="fu">:</span> <span class="st">&quot;user text&quot;</span><span class="fu">,</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;lang&quot;</span><span class="fu">:</span> <span class="st">&quot;en|tl|optional&quot;</span><span class="fu">,</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;history&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="fu">{</span><span class="dt">&quot;role&quot;</span><span class="fu">:</span><span class="st">&quot;user|assistant&quot;</span><span class="fu">,</span><span class="dt">&quot;content&quot;</span><span class="fu">:</span><span class="st">&quot;...&quot;</span><span class="fu">}</span><span class="ot">]</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p><strong>Response:</strong></p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;reply&quot;</span><span class="fu">:</span> <span class="st">&quot;assistant text&quot;</span><span class="fu">,</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;crisis&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;lang&quot;</span><span class="fu">:</span> <span class="st">&quot;en&quot;</span><span class="fu">,</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;disclaimer&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;provider&quot;</span><span class="fu">:</span> <span class="st">&quot;builtin|groq|ollama&quot;</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<hr />
+<h2 id="crisis-detection-wellness_chatbot.php">Crisis Detection
+(<code>wellness_chatbot.php</code>)</h2>
+<table>
+<colgroup>
+<col style="width: 52%" />
+<col style="width: 47%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wellness_is_crisis_message($norm)</code></td>
+<td>Detects self-harm/suicide keywords</td>
+</tr>
+<tr>
+<td><code>wellness_crisis_response($lang)</code></td>
+<td>PH hotline resources (NCMH, Hopeline, etc.)</td>
+</tr>
+<tr>
+<td><code>wellness_ph_crises_resources_public()</code></td>
+<td>Public crisis resource list</td>
+</tr>
+</tbody>
+</table>
+<p>Crisis messages bypass normal chat — immediate escalation response
+with hotlines.</p>
+<hr />
+<h2 id="message-classification">Message Classification</h2>
+<table>
+<colgroup>
+<col style="width: 52%" />
+<col style="width: 47%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wellness_normalize_for_match($text)</code></td>
+<td>Lowercase, strip punctuation</td>
+</tr>
+<tr>
+<td><code>wellness_classify($norm)</code></td>
+<td>Topic + scenario scores</td>
+</tr>
+<tr>
+<td><code>wellness_score_scenarios($norm)</code></td>
+<td>stress, anxiety, sleep, academics, etc.</td>
+</tr>
+<tr>
+<td><code>wellness_chat_orchestrate($message, $langHint, $history)</code></td>
+<td>Main entry point</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="template-engine-wellness_engine.php">Template Engine
+(<code>wellness_engine.php</code>)</h2>
+<p>Fallback when AI is disabled:</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wellness_parse_student_message()</code></td>
+<td>Extract intent/context</td>
+</tr>
+<tr>
+<td><code>wellness_empathy_opening()</code></td>
+<td>Empathetic opener</td>
+</tr>
+<tr>
+<td><code>wellness_core_steps()</code></td>
+<td>Actionable coping steps</td>
+</tr>
+<tr>
+<td><code>wellness_soft_close()</code></td>
+<td>Closing encouragement</td>
+</tr>
+<tr>
+<td><code>wellness_engine_reply()</code></td>
+<td>Compose full reply</td>
+</tr>
+</tbody>
+</table>
+<p>Supports English and Tagalog (<code>tl</code>).</p>
+<hr />
+<h2 id="ai-provider-wellness_ai.php">AI Provider
+(<code>wellness_ai.php</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wellness_ai_is_enabled()</code></td>
+<td>Checks config</td>
+</tr>
+<tr>
+<td><code>wellness_ai_provider()</code></td>
+<td>groq, ollama, openai, gemini, auto</td>
+</tr>
+<tr>
+<td><code>wellness_ai_chat_completion(...)</code></td>
+<td>LLM API call</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Providers:</strong> - <strong>Groq</strong> (default cloud) —
+<code>WELLNESS_AI_API_KEY</code> starting with <code>gsk_</code> -
+<strong>Ollama</strong> (local) — <code>WELLNESS_OLLAMA_URL</code>,
+<code>WELLNESS_OLLAMA_MODEL</code> - <strong>builtin</strong> — Template
+engine only</p>
+<hr />
+<h2 id="configuration">Configuration</h2>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>WELLNESS_AI_ENABLED</code></td>
+<td>false</td>
+<td>Master switch</td>
+</tr>
+<tr>
+<td><code>WELLNESS_AI_PROVIDER</code></td>
+<td>groq</td>
+<td>Provider selection</td>
+</tr>
+<tr>
+<td><code>WELLNESS_AI_API_KEY</code></td>
+<td>env <code>GROQ_API_KEY</code></td>
+<td>API key</td>
+</tr>
+<tr>
+<td><code>WELLNESS_AI_MODEL</code></td>
+<td>llama-3.3-70b-versatile</td>
+<td>Model name</td>
+</tr>
+<tr>
+<td><code>WELLNESS_OLLAMA_URL</code></td>
+<td>http://127.0.0.1:11434</td>
+<td>Local LLM</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="disclaimers">Disclaimers</h2>
+<p>All responses include non-diagnostic disclaimers: -
+<code>wellness_disclaimer_banner($lang)</code> -
+<code>wellness_footer_disclaimer($lang)</code></p>
+<p>Not a substitute for professional mental health care.</p>
+<hr />
+<h2 id="openapi">OpenAPI</h2>
+<p><code>api/wellness_chatbot.openapi.yaml</code> documents the REST
+contract for external integration or testing.</p>
+<hr />
+<h2 id="access-control-1">Access Control</h2>
+<ul>
+<li>Page: <code>require_role(['student'])</code></li>
+<li>API POST: Validates
+<code>$_SESSION['role'] === 'student'</code></li>
+</ul>
+<h1 id="module-15-reports-analytics">Module 15: Reports &amp;
+Analytics</h1>
+<p>Reporting and monitoring across roles.</p>
+<hr />
+<h2 id="source-files-14">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 27%" />
+<col style="width: 31%" />
+<col style="width: 40%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Roles</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>reports.php</code></td>
+<td>admin, dean, chair, gened, faculty</td>
+<td>Role-scoped reports hub</td>
+</tr>
+<tr>
+<td><code>global_reports.php</code></td>
+<td>admin</td>
+<td>Institution-wide analytics</td>
+</tr>
+<tr>
+<td><code>faculty_teaching_load.php</code></td>
+<td>admin, dean, chair, gened</td>
+<td>Teaching load in units</td>
+</tr>
+<tr>
+<td><code>super_admin_teaching_load_report.php</code></td>
+<td>super_admin</td>
+<td>Cross-college load report</td>
+</tr>
+<tr>
+<td><code>classroom_materials_monitor.php</code></td>
+<td>admin, dean, chair, gened</td>
+<td>Upload activity monitor</td>
+</tr>
+<tr>
+<td><code>dashboard.php</code></td>
+<td>all roles</td>
+<td>Summary statistics widgets</td>
+</tr>
+<tr>
+<td><code>dashboard1.php</code></td>
+<td>—</td>
+<td>Alternate dashboard layout</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="reports.php"><code>reports.php</code></h2>
+<p>General reports page scoped by role:</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Scope</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>admin</td>
+<td>All colleges</td>
+</tr>
+<tr>
+<td>dean</td>
+<td>Own college</td>
+</tr>
+<tr>
+<td>program_chair</td>
+<td>Own program</td>
+</tr>
+<tr>
+<td>gened</td>
+<td>GE offerings</td>
+</tr>
+<tr>
+<td>faculty</td>
+<td>Own classes</td>
+</tr>
+</tbody>
+</table>
+<p>Typical report types: - Schedule summaries by term - Faculty
+assignment counts - Course offering statistics - Export to printable
+views (<code>assets/css/print.css</code>)</p>
+<hr />
+<h2 id="global_reports.php-1"><code>global_reports.php</code></h2>
+<p>Admin-only cross-college analytics: - Aggregate schedule counts -
+College comparison charts - Term-over-term summaries - Institution
+KPIs</p>
+<hr />
+<h2 id="teaching-load-reports">Teaching Load Reports</h2>
+<h3
+id="faculty_teaching_load.php"><code>faculty_teaching_load.php</code></h3>
+<p>Calculates load from <code>schedules</code> JOIN
+<code>courses</code>:</p>
+<pre><code>load_units = SUM(courses.units) per faculty per term</code></pre>
+<p>Filters: - College (admin sees all; dean/chair scoped) - Semester,
+school year - Department/program - GE mode for gened role</p>
+<h3
+id="super_admin_teaching_load_report.php-1"><code>super_admin_teaching_load_report.php</code></h3>
+<p>Super admin variant with institution-wide filters and export.</p>
+<hr />
+<h2
+id="classroom_materials_monitor.php"><code>classroom_materials_monitor.php</code></h2>
+<p>Monitors <code>classroom_content</code> and attachments: - Recent
+uploads across classrooms - Filter by college, faculty, date range -
+Oversight for academic integrity / policy compliance</p>
+<hr />
+<h2 id="dashboard-statistics-dashboard.php">Dashboard Statistics
+(<code>dashboard.php</code>)</h2>
+<p>Role-specific stat cards:</p>
+<h3 id="admin">Admin</h3>
+<ul>
+<li>Active faculty (college-assigned)</li>
+<li>Total courses, schedules</li>
+<li>Open conflict requests</li>
+</ul>
+<h3 id="dean-program-chair">Dean / Program Chair</h3>
+<ul>
+<li>Scoped faculty, courses, schedules</li>
+<li>Pending schedule change requests</li>
+<li>Pending student registrations (chair)</li>
+</ul>
+<h3 id="faculty">Faculty</h3>
+<ul>
+<li>Today’s classes</li>
+<li>Classroom count</li>
+<li>Upcoming assessments</li>
+</ul>
+<h3 id="student">Student</h3>
+<ul>
+<li>Enrolled classrooms</li>
+<li>Pending assessments</li>
+</ul>
+<h3 id="super-admin">Super Admin</h3>
+<ul>
+<li>Extended KPIs (see <a href="#">04-super-admin.md</a>)</li>
+</ul>
+<p>Auto-refresh: 30 seconds for admin dashboard.</p>
+<hr />
+<h2 id="print-styles">Print Styles</h2>
+<p><code>assets/css/print.css</code> — Optimized layouts for printing
+schedules and reports from browser.</p>
+<hr />
+<h2 id="activity-logs-reporting-sources">Activity Logs (Reporting
+Sources)</h2>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>admin_activity_logs</code></td>
+<td>Admin action audit</td>
+</tr>
+<tr>
+<td><code>dean_activity_logs</code></td>
+<td>Dean/chair action history</td>
+</tr>
+<tr>
+<td><code>conflict_logs</code></td>
+<td>Scheduling conflict history</td>
+</tr>
+</tbody>
+</table>
+<p>Admin activity log viewer integrated in admin settings/offcanvas.</p>
+<hr />
+<h2 id="related-helpers">Related Helpers</h2>
+<table>
+<colgroup>
+<col style="width: 37%" />
+<col style="width: 29%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Module</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sql_scope_for_college()</code></td>
+<td>functions.php</td>
+<td>College SQL filter</td>
+</tr>
+<tr>
+<td><code>dean_schedule_scope_sql()</code></td>
+<td>functions.php</td>
+<td>Dean + GE schedule scope</td>
+</tr>
+<tr>
+<td><code>admin_activity_log_list_sorted()</code></td>
+<td>admin_activity_log.php</td>
+<td>Audit log retrieval</td>
+</tr>
+</tbody>
+</table>
+<h1 id="module-16-rest-api">Module 16: REST API</h1>
+<p>JSON endpoints for AJAX and external clients.</p>
+<hr />
+<h2 id="source-files-15">Source Files</h2>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 27%" />
+<col style="width: 20%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Method</th>
+<th>Auth</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>api/student_wellness_chat.php</code></td>
+<td>GET, POST</td>
+<td>Student (POST)</td>
+<td>Wellness chat companion</td>
+</tr>
+<tr>
+<td><code>api/programs_by_college.php</code></td>
+<td>GET</td>
+<td>Public</td>
+<td>Programs/year-levels for registration</td>
+</tr>
+<tr>
+<td><code>api/wellness_chatbot.openapi.yaml</code></td>
+<td>—</td>
+<td>—</td>
+<td>OpenAPI 3 spec for wellness API</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2
+id="apiprograms_by_college.php"><code>api/programs_by_college.php</code></h2>
+<p><strong>Purpose:</strong> Powers dynamic dropdowns on student
+registration form.</p>
+<p><strong>Request:</strong></p>
+<pre><code>GET /api/programs_by_college.php?college_id=1</code></pre>
+<p><strong>Response:</strong></p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;programs&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span><span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span> <span class="dt">&quot;program_name&quot;</span><span class="fu">:</span> <span class="st">&quot;BSIT&quot;</span><span class="fu">,</span> <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;active&quot;</span><span class="fu">}</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;year_levels_by_program&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;BSIT&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;1st Year&quot;</span><span class="ot">,</span> <span class="st">&quot;2nd Year&quot;</span><span class="ot">,</span> <span class="st">&quot;3rd Year&quot;</span><span class="ot">,</span> <span class="st">&quot;4th Year&quot;</span><span class="ot">]</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p><strong>Implementation:</strong> - Includes
+<code>student_registration_helpers.php</code> - Calls
+<code>active_programs_for_college()</code> and
+<code>active_year_levels_by_program_for_college()</code> - No session
+required (public for registration UX)</p>
+<hr />
+<h2
+id="apistudent_wellness_chat.php"><code>api/student_wellness_chat.php</code></h2>
+<p>See <a href="14-wellness.md">14-wellness.md</a> for full
+documentation.</p>
+<p><strong>Summary:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td>Returns API metadata, disclaimer, crisis resources</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td>Processes chat message, returns AI/template reply</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Headers:</strong> -
+<code>Content-Type: application/json</code> -
+<code>X-Content-Type-Options: nosniff</code></p>
+<p><strong>Session:</strong> Uses <code>SESSION_NAME</code> cookie; POST
+requires <code>role = student</code>.</p>
+<p><strong>Error responses:</strong> - 401 — Not authenticated as
+student - 400 — Invalid JSON or empty message - 500 — Internal error</p>
+<hr />
+<h2 id="openapi-spec">OpenAPI Spec</h2>
+<p><code>api/wellness_chatbot.openapi.yaml</code> defines:</p>
+<ul>
+<li><code>/api/student_wellness_chat</code> paths</li>
+<li>Request/response schemas</li>
+<li>Crisis response format</li>
+<li>Example payloads</li>
+</ul>
+<p>Use with Swagger UI or code generators for client SDKs.</p>
+<hr />
+<h2 id="api-design-patterns">API Design Patterns</h2>
+<ol type="1">
+<li><strong>Bootstrap:</strong> Each endpoint includes
+<code>config/config.php</code> directly (not full page auth stack).</li>
+<li><strong>JSON only:</strong> All responses
+<code>Content-Type: application/json; charset=utf-8</code>.</li>
+<li><strong>Session auth:</strong> Wellness API uses PHP sessions, not
+API keys.</li>
+<li><strong>Error handling:</strong>
+<code>wellness_api_emit_json($code, $body)</code> helper with
+<code>JSON_THROW_ON_ERROR</code>.</li>
+</ol>
+<hr />
+<h2 id="future-extension-points">Future Extension Points</h2>
+<p>The <code>api/</code> directory is the designated location for new
+JSON endpoints. Follow existing patterns: -
+<code>declare(strict_types=1)</code> - Direct config include - Explicit
+auth check before business logic - JSON encode with
+<code>JSON_UNESCAPED_UNICODE</code></p>
+<h1 id="module-17-ui-assets-shared-layout">Module 17: UI Assets &amp;
+Shared Layout</h1>
+<p>Frontend resources and shared presentation layer.</p>
+<hr />
+<h2 id="source-files-16">Source Files</h2>
+<h3 id="stylesheets-assetscss">Stylesheets
+(<code>assets/css/</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>style.css</code></td>
+<td>Main application theme, layout, components</td>
+</tr>
+<tr>
+<td><code>print.css</code></td>
+<td>Print-optimized styles for schedules/reports</td>
+</tr>
+</tbody>
+</table>
+<h3 id="javascript-assetsjs">JavaScript (<code>assets/js/</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app_nav.js</code></td>
+<td>Sidebar navigation behavior, active states</td>
+</tr>
+<tr>
+<td><code>app_tooltips.js</code></td>
+<td>Bootstrap tooltip initialization</td>
+</tr>
+<tr>
+<td><code>theme-toggle.js</code></td>
+<td>Light/dark theme switching</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="layout-partials-includes">Layout Partials
+(<code>includes/</code>)</h2>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 60%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>header.php</code></td>
+<td><code>&lt;!DOCTYPE html&gt;</code>, meta, CSS links, opens
+<code>&lt;body&gt;</code>, top bar</td>
+</tr>
+<tr>
+<td><code>footer.php</code></td>
+<td>Closes containers, loads JS,
+<code>&lt;/body&gt;&lt;/html&gt;</code></td>
+</tr>
+<tr>
+<td><code>admin_nav.php</code></td>
+<td>Role-based sidebar navigation</td>
+</tr>
+<tr>
+<td><code>admin_offcanvas.php</code></td>
+<td>Mobile off-canvas menu wrapper</td>
+</tr>
+<tr>
+<td><code>student_tooltip.php</code></td>
+<td><code>app_tooltip_attr()</code> for accessible tooltips</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="includesheader.php"><code>includes/header.php</code></h2>
+<p>Responsibilities: - Sets <code>$pageTitle</code> in browser tab -
+Loads Bootstrap 5, Font Awesome icons - Loads
+<code>assets/css/style.css</code> - Renders top navigation bar with user
+avatar - Opens main content container - Includes role navigation via
+<code>render_role_nav_sections()</code></p>
+<hr />
+<h2 id="includesadmin_nav.php"><code>includes/admin_nav.php</code></h2>
+<p>Navigation rendering functions:</p>
+<table>
+<colgroup>
+<col style="width: 62%" />
+<col style="width: 37%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>render_super_admin_nav_sections()</code></td>
+<td>super_admin sidebar</td>
+</tr>
+<tr>
+<td><code>render_admin_nav_sections()</code></td>
+<td>admin sidebar</td>
+</tr>
+<tr>
+<td><code>role_nav_sections($role, $unread)</code></td>
+<td>Returns nav structure array</td>
+</tr>
+<tr>
+<td><code>render_role_nav_sections()</code></td>
+<td>Dispatches to correct renderer</td>
+</tr>
+<tr>
+<td><code>render_nav_sections_markup()</code></td>
+<td>HTML output with active highlighting</td>
+</tr>
+<tr>
+<td><code>app_sidebar_brand_meta($role)</code></td>
+<td>Brand subtitle per role</td>
+</tr>
+<tr>
+<td><code>app_render_topbar_avatar()</code></td>
+<td>Profile photo in top bar</td>
+</tr>
+</tbody>
+</table>
+<p>Nav items include: - <code>file</code> — PHP filename for active
+state matching - <code>href</code> — Link target - <code>icon</code> —
+Font Awesome class - <code>label</code> — Display text -
+<code>badge</code> — Optional unread count (messages) -
+<code>tooltip</code> — Help text via <code>app_tooltip_attr()</code></p>
+<hr />
+<h2
+id="includesadmin_offcanvas.php"><code>includes/admin_offcanvas.php</code></h2>
+<p>Mobile-responsive off-canvas sidebar: - Bootstrap offcanvas component
+- Duplicates nav for small screens - <code>$dismissOffcanvas</code> flag
+closes menu on link click</p>
+<hr />
+<h2 id="tooltips-includesstudent_tooltip.php">Tooltips
+(<code>includes/student_tooltip.php</code>)</h2>
+<table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app_cursor_tooltips_active()</code></td>
+<td>Feature flag check</td>
+</tr>
+<tr>
+<td><code>app_tooltip_attr($text)</code></td>
+<td>Returns <code>data-bs-toggle="tooltip"</code> attributes</td>
+</tr>
+<tr>
+<td><code>student_tooltip_attr($text)</code></td>
+<td>Alias for student-facing pages</td>
+</tr>
+</tbody>
+</table>
+<p>Initialized by <code>app_tooltips.js</code> on DOM ready.</p>
+<hr />
+<h2 id="theme-toggle-assetsjstheme-toggle.js">Theme Toggle
+(<code>assets/js/theme-toggle.js</code>)</h2>
+<ul>
+<li>Persists preference in <code>localStorage</code></li>
+<li>Toggles <code>data-bs-theme</code> on <code>&lt;html&gt;</code></li>
+<li>Respects system preference on first visit</li>
+</ul>
+<hr />
+<h2 id="navigation-js-assetsjsapp_nav.js">Navigation JS
+(<code>assets/js/app_nav.js</code>)</h2>
+<ul>
+<li>Highlights active nav item based on current page filename</li>
+<li>Collapsible sidebar sections</li>
+<li>Mobile menu interactions</li>
+</ul>
+<hr />
+<h2 id="common-ui-patterns">Common UI Patterns</h2>
+<h3 id="flash-messages">Flash messages</h3>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode php"><code class="sourceCode php"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="va">$flash</span> <span class="op">=</span> <span class="va">$_SESSION</span>[<span class="st">&#39;flash&#39;</span>] <span class="op">??</span> <span class="st">&#39;&#39;</span><span class="ot">;</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="kw">unset</span>(<span class="va">$_SESSION</span>[<span class="st">&#39;flash&#39;</span>])<span class="ot">;</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="co">// ...</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="op">&lt;</span><span class="ot">?</span>php <span class="cf">if</span> (<span class="va">$flash</span>)<span class="ot">:</span> <span class="kw">?&gt;</span><span class="op">&lt;</span>div <span class="kw">class</span><span class="op">=</span><span class="st">&quot;alert alert-info&quot;</span><span class="op">&gt;&lt;</span><span class="ot">?</span><span class="op">=</span> <span class="fu">htmlspecialchars</span>(<span class="va">$flash</span>) <span class="kw">?&gt;</span><span class="op">&lt;/</span>div<span class="op">&gt;&lt;</span><span class="ot">?</span>php <span class="cf">endif</span><span class="ot">;</span> <span class="kw">?&gt;</span></span></code></pre></div>
+<h3 id="cards">Cards</h3>
+<p>Bootstrap <code>card shadow-sm</code> wrappers for forms and data
+tables.</p>
+<h3 id="forms">Forms</h3>
+<p>Bootstrap 5 grid (<code>row g-3</code>, <code>col-md-*</code>),
+<code>form-control</code>, <code>form-check</code>.</p>
+<h3 id="icons">Icons</h3>
+<p>Font Awesome 6 solid (<code>fa-solid fa-*</code>) throughout
+navigation and headings.</p>
+<h3 id="page-titles">Page titles</h3>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode php"><code class="sourceCode php"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="va">$pageTitle</span> <span class="op">=</span> <span class="st">&#39;Page Name&#39;</span><span class="ot">;</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="kw">require_once</span> <span class="cn">__DIR__</span> <span class="op">.</span> <span class="st">&#39;/includes/header.php&#39;</span><span class="ot">;</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">?&gt;</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="op">&lt;</span>h1 <span class="kw">class</span><span class="op">=</span><span class="st">&quot;h3 mb-4&quot;</span><span class="op">&gt;&lt;</span>i <span class="kw">class</span><span class="op">=</span><span class="st">&quot;fa-solid fa-icon me-2 text-primary&quot;</span><span class="op">&gt;&lt;/</span>i<span class="op">&gt;</span>Title<span class="op">&lt;/</span>h1<span class="op">&gt;</span></span></code></pre></div>
+<hr />
+<h2 id="upload-directories">Upload Directories</h2>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>uploads/profile/</code></td>
+<td>User profile photos</td>
+</tr>
+<tr>
+<td><code>uploads/classroom/</code></td>
+<td>Classroom content attachments</td>
+</tr>
+<tr>
+<td><code>uploads/messages/</code></td>
+<td>Message attachments</td>
+</tr>
+<tr>
+<td><code>uploads/syllabus/</code></td>
+<td>Classroom syllabi</td>
+</tr>
+</tbody>
+</table>
+<p>Protected by <code>uploads/web.config</code> (no script
+execution).</p>
+<hr />
+<h2 id="external-dependencies-cdn">External Dependencies (CDN)</h2>
+<p>Loaded in <code>header.php</code>: - Bootstrap 5 CSS/JS - Font
+Awesome 6 - No npm/build step — plain static assets</p>
+<hr />
+<h2 id="settings.php"><code>settings.php</code></h2>
+<p>Shared profile page for all roles: - Update full name, email (if
+column exists) - Change password - Upload profile photo via
+<code>profile_photo.php</code> - Role-appropriate redirect after
+save</p>
+<hr />
+<h2 id="profile_photo.php"><code>profile_photo.php</code></h2>
+<p>POST endpoint for avatar upload/remove: - Uses
+<code>profile_photo_store()</code> / <code>profile_photo_remove()</code>
+- Returns to settings with flash message</p>
+<h1 id="appendix-a-key-source-code-excerpts">Appendix A: Key Source Code
+Excerpts</h1>
+<p>Representative source files referenced throughout this
+documentation.</p>
+<h2 id="index.php-application-entry-point"><code>index.php</code> —
+Application entry point</h2>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode php"><code class="sourceCode php"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">&lt;?php</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">declare</span>(strict_types<span class="op">=</span><span class="dv">1</span>)<span class="ot">;</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="kw">require_once</span> <span class="cn">__DIR__</span> <span class="op">.</span> <span class="st">&#39;/includes/auth.php&#39;</span><span class="ot">;</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="op">!</span><span class="kw">empty</span>(<span class="va">$_SESSION</span>[<span class="st">&#39;user_id&#39;</span>])) {</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">header</span>(<span class="st">&#39;Location: dashboard.php&#39;</span>)<span class="ot">;</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">header</span>(<span class="st">&#39;Location: login.php&#39;</span>)<span class="ot">;</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="cf">exit</span><span class="ot">;</span></span></code></pre></div>
+<h2 id="includesdb.php-database-connection"><code>includes/db.php</code>
+— Database connection</h2>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode php"><code class="sourceCode php"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">&lt;?php</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="kw">declare</span>(strict_types<span class="op">=</span><span class="dv">1</span>)<span class="ot">;</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="kw">require_once</span> <span class="fu">dirname</span>(<span class="cn">__DIR__</span>) <span class="op">.</span> <span class="st">&#39;/config/config.php&#39;</span><span class="ot">;</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> db()<span class="ot">:</span> <span class="bu">PDO</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>{</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">static</span> <span class="va">$pdo</span> <span class="op">=</span> <span class="kw">null</span><span class="ot">;</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="va">$pdo</span> <span class="op">===</span> <span class="kw">null</span>) {</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>        <span class="va">$dsn</span> <span class="op">=</span> <span class="fu">sprintf</span>(</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>            <span class="st">&#39;mysql:host=%s;port=%d;dbname=%s;charset=%s&#39;</span><span class="ot">,</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>            <span class="cn">DB_HOST</span><span class="ot">,</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>            <span class="cn">DB_PORT</span><span class="ot">,</span></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>            <span class="cn">DB_NAME</span><span class="ot">,</span></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>            <span class="cn">DB_CHARSET</span></span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>        )<span class="ot">;</span></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> {</span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>            <span class="va">$pdo</span> <span class="op">=</span> <span class="kw">new</span> <span class="bu">PDO</span>(<span class="va">$dsn</span><span class="ot">,</span> <span class="cn">DB_USER</span><span class="ot">,</span> <span class="cn">DB_PASS</span><span class="ot">,</span> [</span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>                <span class="bu">PDO</span>::<span class="cn">ATTR_ERRMODE</span> =&gt; <span class="bu">PDO</span>::<span class="cn">ERRMODE_EXCEPTION</span><span class="ot">,</span></span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>                <span class="bu">PDO</span>::<span class="cn">ATTR_DEFAULT_FETCH_MODE</span> =&gt; <span class="bu">PDO</span>::<span class="cn">FETCH_ASSOC</span><span class="ot">,</span></span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>            ])<span class="ot">;</span></span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>        } <span class="cf">catch</span> (<span class="bu">PDOException</span> <span class="va">$e</span>) {</span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>            <span class="co">// ... XAMPP-friendly connection error ...</span></span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="va">$e</span><span class="ot">;</span></span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="va">$pdo</span><span class="ot">;</span></span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<h2 id="includesauth.php-role-gate"><code>includes/auth.php</code> —
+Role gate</h2>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode php"><code class="sourceCode php"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> require_role(<span class="dt">array</span> <span class="va">$roles</span>)<span class="ot">:</span> <span class="dt">void</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>{</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    require_login()<span class="ot">;</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="op">!</span><span class="fu">in_array</span>((<span class="dt">string</span>) (<span class="va">$_SESSION</span>[<span class="st">&#39;role&#39;</span>] <span class="op">??</span> <span class="st">&#39;&#39;</span>)<span class="ot">,</span> <span class="va">$roles</span><span class="ot">,</span> <span class="kw">true</span>)) {</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>        <span class="fu">http_response_code</span>(<span class="dv">403</span>)<span class="ot">;</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>        <span class="kw">echo</span> <span class="st">&#39;Forbidden&#39;</span><span class="ot">;</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">exit</span><span class="ot">;</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<h2 id="admin_gened.php-admin-page-pattern"><code>admin_gened.php</code>
+— Admin page pattern</h2>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode php"><code class="sourceCode php"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">&lt;?php</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="kw">declare</span>(strict_types<span class="op">=</span><span class="dv">1</span>)<span class="ot">;</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="kw">require_once</span> <span class="cn">__DIR__</span> <span class="op">.</span> <span class="st">&#39;/includes/auth.php&#39;</span><span class="ot">;</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="kw">require_once</span> <span class="cn">__DIR__</span> <span class="op">.</span> <span class="st">&#39;/includes/functions.php&#39;</span><span class="ot">;</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="kw">require_once</span> <span class="cn">__DIR__</span> <span class="op">.</span> <span class="st">&#39;/includes/mail_helpers.php&#39;</span><span class="ot">;</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="kw">require_once</span> <span class="cn">__DIR__</span> <span class="op">.</span> <span class="st">&#39;/includes/admin_activity_log.php&#39;</span><span class="ot">;</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>require_role([<span class="st">&#39;admin&#39;</span>])<span class="ot">;</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="co">// POST handler → flash message → redirect</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a><span class="co">// GET → load data → header.php → HTML form → footer.php</span></span></code></pre></div>
+<h2
+id="apiprograms_by_college.php-json-api-pattern"><code>api/programs_by_college.php</code>
+— JSON API pattern</h2>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode php"><code class="sourceCode php"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="kw">&lt;?php</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="kw">declare</span>(strict_types<span class="op">=</span><span class="dv">1</span>)<span class="ot">;</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="kw">require_once</span> <span class="cn">__DIR__</span> <span class="op">.</span> <span class="st">&#39;/../config/config.php&#39;</span><span class="ot">;</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a><span class="kw">require_once</span> <span class="cn">__DIR__</span> <span class="op">.</span> <span class="st">&#39;/../includes/db.php&#39;</span><span class="ot">;</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a><span class="kw">require_once</span> <span class="cn">__DIR__</span> <span class="op">.</span> <span class="st">&#39;/../includes/student_registration_helpers.php&#39;</span><span class="ot">;</span></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a><span class="fu">header</span>(<span class="st">&#39;Content-Type: application/json; charset=utf-8&#39;</span>)<span class="ot">;</span></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a><span class="va">$collegeId</span> <span class="op">=</span> (<span class="dt">int</span>) (<span class="va">$_GET</span>[<span class="st">&#39;college_id&#39;</span>] <span class="op">??</span> <span class="dv">0</span>)<span class="ot">;</span></span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a><span class="va">$programs</span> <span class="op">=</span> active_programs_for_college(<span class="va">$collegeId</span>)<span class="ot">;</span></span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a><span class="va">$yearLevelsByProgram</span> <span class="op">=</span> active_year_levels_by_program_for_college(<span class="va">$collegeId</span>)<span class="ot">;</span></span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a><span class="kw">echo</span> <span class="fu">json_encode</span>([</span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">&#39;programs&#39;</span> =&gt; <span class="va">$programs</span><span class="ot">,</span></span>
+<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a>    <span class="st">&#39;year_levels_by_program&#39;</span> =&gt; <span class="va">$yearLevelsByProgram</span><span class="ot">,</span></span>
+<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a>]<span class="ot">,</span> <span class="cn">JSON_UNESCAPED_UNICODE</span>)<span class="ot">;</span></span></code></pre></div>
+<h2
+id="installschema.sql-core-tables-excerpt"><code>install/schema.sql</code>
+— Core tables (excerpt)</h2>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> <span class="kw">TABLE</span> <span class="cf">IF</span> <span class="kw">NOT</span> <span class="kw">EXISTS</span> users (</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>  <span class="kw">id</span> <span class="dt">INT</span> AUTO_INCREMENT <span class="kw">PRIMARY</span> <span class="kw">KEY</span>,</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>  username <span class="dt">VARCHAR</span>(<span class="dv">50</span>) <span class="kw">NOT</span> <span class="kw">NULL</span> <span class="kw">UNIQUE</span>,</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>  <span class="kw">password</span> <span class="dt">VARCHAR</span>(<span class="dv">255</span>) <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>  full_name <span class="dt">VARCHAR</span>(<span class="dv">100</span>) <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>  <span class="kw">role</span> ENUM(<span class="st">&#39;super_admin&#39;</span>,<span class="st">&#39;admin&#39;</span>,<span class="st">&#39;dean&#39;</span>,<span class="st">&#39;program_chair&#39;</span>,<span class="st">&#39;faculty&#39;</span>,<span class="st">&#39;gened&#39;</span>,<span class="st">&#39;student&#39;</span>) <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>  college_id <span class="dt">INT</span> <span class="kw">NULL</span>,</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>  is_active TINYINT(<span class="dv">1</span>) <span class="kw">NOT</span> <span class="kw">NULL</span> <span class="kw">DEFAULT</span> <span class="dv">1</span>,</span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>  <span class="op">..</span>.</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>);</span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> <span class="kw">TABLE</span> <span class="cf">IF</span> <span class="kw">NOT</span> <span class="kw">EXISTS</span> schedules (</span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>  <span class="kw">id</span> <span class="dt">INT</span> AUTO_INCREMENT <span class="kw">PRIMARY</span> <span class="kw">KEY</span>,</span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>  faculty_id <span class="dt">INT</span> <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a>  course_id <span class="dt">INT</span> <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a>  room_id <span class="dt">INT</span> <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a>  day_of_week <span class="kw">SET</span>(<span class="st">&#39;Monday&#39;</span>,<span class="st">&#39;Tuesday&#39;</span>,<span class="op">..</span>.) <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>  start_time <span class="dt">TIME</span> <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a>  end_time <span class="dt">TIME</span> <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a>  semester <span class="dt">VARCHAR</span>(<span class="dv">20</span>) <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a>  school_year <span class="dt">VARCHAR</span>(<span class="dv">20</span>) <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a>  <span class="op">..</span>.</span>
+<span id="cb20-23"><a href="#cb20-23" aria-hidden="true" tabindex="-1"></a>);</span></code></pre></div>
+<hr />
+<p><em>Document generated: 2026-07-01 05:11:10 CEST</em></p>
+</body>
+</html>

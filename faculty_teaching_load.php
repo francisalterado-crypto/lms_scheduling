@@ -3,16 +3,33 @@ declare(strict_types=1);
 
 /**
  * Faculty teaching load (units) from scheduled offerings.
- * Scoped: admin (optional college/faculty filters), dean (college), program chair (program), gened (GE courses).
+ * Scoped: admin (optional college/faculty filters), dean (college), program chair (program), gened (GE courses), faculty (own load only).
  */
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-require_role(['admin', 'dean', 'program_chair', 'gened']);
+require_role(['admin', 'dean', 'program_chair', 'gened', 'faculty']);
 
 $role = (string) ($_SESSION['role'] ?? '');
 $collegeId = current_college_id();
 $programScope = null;
+$facultySelfId = 0;
+$facultySelfName = '';
+
+if ($role === 'faculty') {
+    $facultySelfId = isset($_SESSION['faculty_id']) ? (int) $_SESSION['faculty_id'] : 0;
+    $userId = (int) ($_SESSION['user_id'] ?? 0);
+    if ($facultySelfId < 1) {
+        $facultySelfId = resolve_faculty_id_for_user($userId) ?? 0;
+        $_SESSION['faculty_id'] = $facultySelfId > 0 ? $facultySelfId : null;
+    }
+    if ($facultySelfId < 1) {
+        exit('Faculty profile not linked to this account. Ask your dean to create/link your faculty profile.');
+    }
+    $nameSt = db()->prepare('SELECT full_name FROM faculty WHERE id=?');
+    $nameSt->execute([$facultySelfId]);
+    $facultySelfName = trim((string) ($nameSt->fetchColumn() ?: ''));
+}
 
 if (is_dean()) {
     $collegeId = dean_college_id_or_fail();
@@ -98,6 +115,9 @@ if ($role === 'admin') {
     $params[] = $collegeId;
     $sql .= ' AND c.department = ?';
     $params[] = $programScope;
+} elseif ($role === 'faculty' && $facultySelfId > 0) {
+    $sql .= ' AND s.faculty_id = ?';
+    $params[] = $facultySelfId;
 }
 
 if (is_gened()) {
@@ -266,7 +286,7 @@ $mergeScheduleGroupForDetail = static function (array $group) use (
         $isLabSlot = $h >= $labSessionMinHours;
         $slotTag = $isLabSlot ? 'LAB' : 'LEC';
         $timeParts[] = $formatTime12h((string) ($r['start_time'] ?? '')) . ' – ' . $formatTime12h((string) ($r['end_time'] ?? '')) . ' (' . $slotTag . ')';
-        $dayParts[] = str_replace(',', ', ', (string) ($r['day_of_week'] ?? ''));
+        $dayParts[] = format_day_set_abbrev((string) ($r['day_of_week'] ?? ''));
         $dayCount = count(parse_day_set((string) ($r['day_of_week'] ?? '')));
         if ($dayCount < 1) {
             $dayCount = 1;
@@ -288,7 +308,7 @@ $mergeScheduleGroupForDetail = static function (array $group) use (
         }
     }
     $timeDisplay = implode('; ', array_values(array_unique($timeParts)));
-    $dayDisplay = implode('; ', array_values(array_unique($dayParts)));
+    $dayDisplay = implode(' / ', array_values(array_unique($dayParts)));
     $roomDisplay = $roomOrder ? implode('; ', $roomOrder) : '—';
 
     $r0 = $group[0];
@@ -460,6 +480,11 @@ if ($tlmMemoFaculty !== null) {
         }
     }
 }
+$tlmMemoVpaaName = '________________________';
+$tlmMemoVpaaNameDb = vpaa_signatory_full_name();
+if ($tlmMemoVpaaNameDb !== '') {
+    $tlmMemoVpaaName = $tlmMemoVpaaNameDb;
+}
 
 $collegeFilterOptions = [];
 if ($role === 'admin') {
@@ -485,6 +510,8 @@ $years = db()->query('SELECT DISTINCT school_year FROM schedules ORDER BY school
 
 $filterColClass = is_program_chair() ? 'col-md-2' : 'col-md-3';
 $showCollegeColumn = $role === 'admin' && $adminCollegeId === 0;
+$showFacultyColumn = $role !== 'faculty';
+$isFacultySelfView = $role === 'faculty';
 
 $ftlScriptName = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
 $ftlScriptDir = rtrim(dirname($ftlScriptName), '/');
@@ -495,7 +522,7 @@ $ftlWpuLogoAbsUrl = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') 
     . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
     . $ftlMemoLogoWebPath;
 
-$pageTitle = 'Faculty teaching load (units)';
+$pageTitle = $isFacultySelfView ? 'My teaching load (units)' : 'Faculty teaching load (units)';
 $mainContainerClass = 'container py-4 py-md-5 app-main';
 require_once __DIR__ . '/includes/header.php';
 ?>
@@ -600,7 +627,7 @@ require_once __DIR__ . '/includes/header.php';
 </style>
 <div class="ftl-page">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <h1 class="h3 mb-0"><i class="fa-solid fa-scale-balanced me-2 text-primary"></i>Faculty teaching load (units)</h1>
+        <h1 class="h3 mb-0"><i class="fa-solid fa-scale-balanced me-2 text-primary"></i><?= $isFacultySelfView ? 'My teaching load (units)' : 'Faculty teaching load (units)' ?></h1>
         <div class="d-flex flex-wrap gap-2 align-items-center">
             <span class="badge text-bg-primary rounded-pill">Total Units in view: <?= htmlspecialchars($formatLoadUnits($grandTotalUnits)) ?> Units</span>
         </div>
@@ -627,6 +654,10 @@ require_once __DIR__ . '/includes/header.php';
                 Showing schedules created by <strong>GEN ED</strong> coordinator accounts. Run upgrade_roles.php so courses can be flagged as GE in the catalog for this report to follow those offerings instead.
             <?php endif; ?>
         </p>
+    <?php elseif ($isFacultySelfView): ?>
+        <p class="text-muted ftl-scope-note mb-3">
+            Showing your personal teaching load<?= $facultySelfName !== '' ? ': <strong>' . htmlspecialchars($facultySelfName) . '</strong>' : '' ?>.
+        </p>
     <?php endif; ?>
 
     <form class="row g-2 mb-4 no-print align-items-end ftl-filters" method="get">
@@ -649,7 +680,7 @@ require_once __DIR__ . '/includes/header.php';
                 <input type="text" class="form-control form-control-sm bg-body-secondary" readonly value="<?= htmlspecialchars($programScope) ?>" aria-readonly="true"<?= app_tooltip_attr('Your account is limited to this program. Teaching load lists only offerings for this program.') ?>>
                 <input type="hidden" name="dept" value="<?= htmlspecialchars($programScope) ?>">
             </div>
-        <?php else: ?>
+        <?php elseif (!$isFacultySelfView): ?>
             <div class="<?= htmlspecialchars($filterColClass) ?>">
                 <label class="form-label small mb-0">Program</label>
                 <select name="dept" class="form-select form-select-sm">
@@ -719,7 +750,7 @@ require_once __DIR__ . '/includes/header.php';
     </form>
 
     <section class="schedule-faculty-load no-print mb-4" aria-label="Faculty teaching load summary">
-        <h2><i class="fa-solid fa-chalkboard-user me-2 text-primary"></i>By faculty member</h2>
+        <h2><i class="fa-solid fa-chalkboard-user me-2 text-primary"></i><?= $isFacultySelfView ? 'Your load summary' : 'By faculty member' ?></h2>
         <p class="small text-muted mb-2">
             Each course section counts once per semester and school year. Lecture and laboratory timetable rows for the same section are merged.
             <?php if ($hasLectureUnits && $hasLaboratoryUnits): ?>
@@ -779,7 +810,9 @@ require_once __DIR__ . '/includes/header.php';
                 <table class="table table-sm table-hover mb-0 align-middle ftl-detail-table">
                     <thead class="table-light">
                         <tr>
-                            <th scope="col" class="ftl-dt-faculty">Faculty</th>
+                            <?php if ($showFacultyColumn): ?>
+                                <th scope="col" class="ftl-dt-faculty">Faculty</th>
+                            <?php endif; ?>
                             <th scope="col" class="ftl-dt-code">Code</th>
                             <th scope="col" class="ftl-dt-title">Title</th>
                             <th scope="col" class="text-end ftl-dt-units">Units</th>
@@ -802,7 +835,9 @@ require_once __DIR__ . '/includes/header.php';
                         <?php foreach ($facultyLoadSummary as $fl): ?>
                             <?php foreach ($fl['offerings'] as $o): ?>
                                 <tr>
-                                    <td class="ftl-dt-faculty"><?= htmlspecialchars($fl['faculty_name']) ?></td>
+                                    <?php if ($showFacultyColumn): ?>
+                                        <td class="ftl-dt-faculty"><?= htmlspecialchars($fl['faculty_name']) ?></td>
+                                    <?php endif; ?>
                                     <td class="ftl-dt-code"><?= htmlspecialchars($o['course_code']) ?></td>
                                     <td class="ftl-dt-title"><?= htmlspecialchars($o['course_name']) ?></td>
                                     <td class="text-end fw-semibold ftl-dt-units"><?= htmlspecialchars($formatLoadUnits($o['units'])) ?></td>
@@ -826,8 +861,10 @@ require_once __DIR__ . '/includes/header.php';
                     <?php if ($detailTableTotals !== null): ?>
                         <tfoot>
                             <tr class="ftl-dt-total-row">
-                                <td class="ftl-dt-faculty"><?= htmlspecialchars($detailTableTotals['faculty_name']) ?> — total</td>
-                                <td class="ftl-dt-code">—</td>
+                                <?php if ($showFacultyColumn): ?>
+                                    <td class="ftl-dt-faculty"><?= htmlspecialchars($detailTableTotals['faculty_name']) ?> — total</td>
+                                <?php endif; ?>
+                                <td class="ftl-dt-code"><?= $showFacultyColumn ? '—' : 'Total' ?></td>
                                 <td class="ftl-dt-title">—</td>
                                 <td class="text-end ftl-dt-units"><?= htmlspecialchars($formatLoadUnits($detailTableTotals['sum_units'])) ?></td>
                                 <td class="ftl-dt-time">—</td>
@@ -944,6 +981,7 @@ require_once __DIR__ . '/includes/header.php';
                     </div>
                     <div class="ftl-tlm-sig">
                         <div class="ftl-tlm-sig-line mx-auto"></div>
+                        <div class="small mt-1 fw-bold text-uppercase"><?= htmlspecialchars($tlmMemoVpaaName) ?></div>
                         <div class="small mt-1">Vice President for Academic Affairs</div>
                     </div>
                 </div>

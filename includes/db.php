@@ -19,6 +19,10 @@ function db(): PDO
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             ]);
+            if (defined('APP_TIMEZONE')) {
+                $offset = (new DateTime('now', new DateTimeZone(APP_TIMEZONE)))->format('P');
+                $pdo->exec('SET time_zone = ' . $pdo->quote($offset));
+            }
         } catch (PDOException $e) {
             $code = (string) $e->getCode();
             $msg = $e->getMessage();

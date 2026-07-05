@@ -4,13 +4,19 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-require_role(['faculty']);
+require_role(['faculty', 'program_chair', 'dean', 'gened']);
 
 $facultyId = isset($_SESSION['faculty_id']) ? (int) $_SESSION['faculty_id'] : 0;
 $userId = (int) ($_SESSION['user_id'] ?? 0);
 if ($facultyId < 1) {
     $facultyId = resolve_faculty_id_for_user($userId) ?? 0;
     $_SESSION['faculty_id'] = $facultyId > 0 ? $facultyId : null;
+}
+if ($facultyId < 1 && in_array($_SESSION['role'] ?? '', ['program_chair', 'dean', 'gened'], true)) {
+    $facultyId = ensure_faculty_profile_for_teaching_role($userId) ?? 0;
+    if ($facultyId > 0) {
+        $_SESSION['faculty_id'] = $facultyId;
+    }
 }
 if ($facultyId < 1) {
     exit('Faculty profile not linked to this account. Ask your dean to create/link your faculty profile.');

@@ -14,6 +14,8 @@ $hasContentWeeks = db_column_exists('classroom_content', 'weeks');
 $hasContentDaysPerTopic = db_column_exists('classroom_content', 'days_per_topic');
 $hasContentTopicSchedule = $hasContentWeeks && $hasContentDaysPerTopic;
 $hasSyllabusCols = db_column_exists('online_classrooms', 'syllabus_stored_name');
+$hasCreditedWeek = db_column_exists('classroom_assessments', 'credited_week');
+$hasAssessmentTables = db_table_exists('classroom_assessments') && db_table_exists('classroom_scores') && db_table_exists('classroom_submissions');
 $classIsLive = static function (?string $liveAt): bool {
     if ($liveAt === null || $liveAt === '') {
         return false;
@@ -51,6 +53,7 @@ $missingTables = array_values(array_filter(
 $classroom = null;
 $weekItems = [];
 $contentAttachmentMap = [];
+$weekAssessments = [];
 
 if ($classroomId > 0 && $missingTables === []) {
     $st = db()->prepare(
@@ -101,6 +104,19 @@ if ($missingTables === []) {
     if ($hasContentAttachments) {
         $contentAttachmentMap = classroom_content_attachment_map(array_column($weekItems, 'id'));
     }
+
+    if ($hasCreditedWeek && $hasAssessmentTables && $requestedWeek !== '') {
+        $st = db()->prepare(
+            'SELECT ca.*, sc.score, sc.feedback, sc.graded_at, sub.status AS submission_status, sub.submitted_at
+             FROM classroom_assessments ca
+             LEFT JOIN classroom_scores sc ON sc.assessment_id = ca.id AND sc.student_id = ?
+             LEFT JOIN classroom_submissions sub ON sub.assessment_id = ca.id AND sub.student_id = ?
+             WHERE ca.classroom_id = ? AND ca.credited_week = ?
+             ORDER BY ca.created_at DESC'
+        );
+        $st->execute([$studentId, $studentId, $classroomId, $requestedWeek]);
+        $weekAssessments = $st->fetchAll();
+    }
 }
 
 $pageTitle = $requestedWeek !== '' ? 'Materials - ' . $requestedWeek : 'Materials by Week';
@@ -130,6 +146,7 @@ $studentWeekSyllabusReady = $classroom && $hasSyllabusCols && trim((string) ($cl
         <?php if ($studentWeekSyllabusReady): ?>
             <a href="<?= htmlspecialchars(classroom_syllabus_href((int) $classroomId)) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm"<?= student_tooltip_attr('Opens the course syllabus in a new tab.') ?>><i class="fa-solid fa-file-contract me-1"></i>Syllabus</a>
         <?php endif; ?>
+        <a href="student_materials_reviewer.php?classroom_id=<?= (int) $classroomId ?>&week=<?= rawurlencode($requestedWeek) ?>" class="btn btn-outline-primary btn-sm"<?= student_tooltip_attr('Generate practice review questions from this week\'s posted materials.') ?>><i class="fa-solid fa-clipboard-question me-1"></i>Review this week</a>
         <a href="student_classroom.php?id=<?= (int) $classroomId ?>" class="btn btn-outline-secondary btn-sm"<?= student_tooltip_attr('Returns to the full classroom page with announcements, discussion, and assessments. Use this when you are done browsing this week’s materials.') ?>>Back to Classroom</a>
         <a href="student_classrooms.php" class="btn btn-outline-primary btn-sm"<?= student_tooltip_attr('Opens the list of all your enrolled classes. Use this to switch subjects or join another Meet.') ?>>My Classes</a>
     </div>
@@ -203,6 +220,50 @@ $studentWeekSyllabusReady = $classroom && $hasSyllabusCols && trim((string) ($cl
             <?php endif; ?>
         </div>
     </div>
+
+    <?php if ($weekAssessments !== []): ?>
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <strong><i class="fa-solid fa-clipboard-check me-1 text-warning"></i>Assessments for <?= htmlspecialchars($requestedWeek) ?></strong>
+                <span class="badge text-bg-warning"><?= count($weekAssessments) ?> <?= count($weekAssessments) === 1 ? 'assessment' : 'assessments' ?></span>
+            </div>
+            <div class="card-body">
+                <?php foreach ($weekAssessments as $wa): ?>
+                    <a href="student_classroom.php?id=<?= (int) $classroomId ?>#assessment-<?= (int) $wa['id'] ?>" class="border rounded p-3 mb-3 d-block text-decoration-none text-body hover-shadow-sm">
+                        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                            <div>
+                                <div class="fw-semibold">
+                                    <i class="fa-solid fa-file-pen me-1 text-warning"></i><?= htmlspecialchars((string) $wa['title']) ?>
+                                </div>
+                                <span class="badge <?= classroom_assessment_type_badge_class((string) ($wa['assessment_type'] ?? 'essay')) ?> mt-1">
+                                    <?= htmlspecialchars(classroom_assessment_type_label((string) ($wa['assessment_type'] ?? 'essay'))) ?>
+                                </span>
+                                <div class="small text-muted mt-1">
+                                    <?= number_format((float) $wa['total_points'], 2) ?> points
+                                    <?php if (!empty($wa['due_at'])): ?>
+                                        | Due: <?= htmlspecialchars((string) $wa['due_at']) ?>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <?php if ($wa['score'] !== null): ?>
+                                    <span class="badge bg-success">Graded</span>
+                                    <div class="small mt-1"><?= number_format((float) $wa['score'], 2) ?> / <?= number_format((float) $wa['total_points'], 2) ?></div>
+                                <?php elseif (!empty($wa['submitted_at'])): ?>
+                                    <span class="badge bg-info">Submitted</span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary">Not submitted</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <?php if (trim((string) ($wa['description'] ?? '')) !== ''): ?>
+                            <div class="small text-muted mt-2"><?= mb_strimwidth(strip_tags((string) $wa['description']), 0, 150, '...') ?></div>
+                        <?php endif; ?>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endif; ?>
 <?php endif; ?>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

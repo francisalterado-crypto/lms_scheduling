@@ -7,6 +7,8 @@ require_once __DIR__ . '/includes/admin_activity_log.php';
 
 require_role(['gened']);
 
+ensure_faculty_profile_for_teaching_role((int) ($_SESSION['user_id'] ?? 0));
+
 $errors = [];
 $old = $_POST ?? [];
 if (isset($old['days']) && is_array($old['days'])) {

@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Shared sidebar navigation: grouped sections with icons (admin + role dashboards).
  *
- * @param array<string, list<array{file:string,href:string,icon:string,label:string,badge?:int,tooltip?:string}>> $sections
+ * @param array<string, list<array{file:string,href:string,icon:string,label:string,badge?:int,tooltip?:string,target?:string}>> $sections
  */
 function render_nav_sections_markup(array $sections, string $currentPage, bool $dismissOffcanvas): void
 {
@@ -27,6 +27,9 @@ function render_nav_sections_markup(array $sections, string $currentPage, bool $
             if (!empty($item['tooltip'])) {
                 echo ' data-app-tooltip="' . htmlspecialchars((string) $item['tooltip'], ENT_QUOTES, 'UTF-8') . '"';
             }
+            if (!empty($item['target'])) {
+                echo ' target="' . htmlspecialchars((string) $item['target'], ENT_QUOTES, 'UTF-8') . '" rel="noopener noreferrer"';
+            }
             echo '>';
             echo '<span class="admin-nav-icon" aria-hidden="true"><i class="fa-solid ' . htmlspecialchars($item['icon'], ENT_QUOTES, 'UTF-8') . '"></i></span>';
             echo '<span class="admin-nav-text">' . htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8') . '</span>';
@@ -37,6 +40,23 @@ function render_nav_sections_markup(array $sections, string $currentPage, bool $
         }
         echo '</ul></div>';
     }
+}
+
+/**
+ * External link to the WPU E-Faculty Workload system (separate app under htdocs).
+ *
+ * @return array{file:string,href:string,icon:string,label:string,tooltip:string,target:string}
+ */
+function nav_faculty_workload_external_item(): array
+{
+    return [
+        'file' => 'faculty_workload_external',
+        'href' => '/FACULTY%20WORKLOAD/public/login.php',
+        'icon' => 'fa-briefcase',
+        'label' => 'E-Faculty Workload',
+        'tooltip' => 'Opens the WPU E-Faculty Workload system in a new tab to submit and track official workload forms.',
+        'target' => '_blank',
+    ];
 }
 
 /**
@@ -120,6 +140,13 @@ function render_super_admin_nav_sections(string $currentPage, int $messagingUnre
         ],
         'Accounts' => [
             [
+                'file' => 'super_admin_accounts.php',
+                'href' => 'super_admin_accounts.php',
+                'icon' => 'fa-user-secret',
+                'label' => 'Super Administrator accounts',
+                'tooltip' => 'Create or update Super Administrator logins for institution-wide oversight and admin provisioning.',
+            ],
+            [
                 'file' => 'super_admin_admins.php',
                 'href' => 'super_admin_admins.php',
                 'icon' => 'fa-user-shield',
@@ -142,6 +169,7 @@ function render_super_admin_nav_sections(string $currentPage, int $messagingUnre
                 'label' => 'Teaching load (under / over)',
                 'tooltip' => 'All programs: weekly contact hours from schedules. Under load is below 18 hrs/week; overload is above 27. Filter by college and term.',
             ],
+            nav_faculty_workload_external_item(),
         ],
     ];
     render_nav_sections_markup($sections, $currentPage, $dismissOffcanvas);
@@ -181,6 +209,10 @@ function render_admin_nav_sections(string $currentPage, int $messagingUnread, bo
                 'file' => 'admin_gened.php', 'href' => 'admin_gened.php', 'icon' => 'fa-graduation-cap', 'label' => 'GEN ED',
                 'tooltip' => 'Configure General Education coordinators and scope. Use this for cross-college GE administration.',
             ],
+            [
+                'file' => 'admin_login_slideshow.php', 'href' => 'admin_login_slideshow.php', 'icon' => 'fa-images', 'label' => 'Login slideshow',
+                'tooltip' => 'Upload and manage images that auto-scroll on the public login page.',
+            ],
         ],
         'Management' => [
             [
@@ -199,6 +231,7 @@ function render_admin_nav_sections(string $currentPage, int $messagingUnread, bo
                 'file' => 'faculty_teaching_load.php', 'href' => 'faculty_teaching_load.php', 'icon' => 'fa-scale-balanced', 'label' => 'Teaching load (units)',
                 'tooltip' => 'Faculty teaching load in units from scheduled offerings. Filter by college, term, or instructor.',
             ],
+            nav_faculty_workload_external_item(),
             [
                 'file' => 'global_reports.php', 'href' => 'global_reports.php', 'icon' => 'fa-chart-column', 'label' => 'Global reports',
                 'tooltip' => 'Cross-college analytics and exports. Use this for institution-wide summaries beyond a single college.',
@@ -231,6 +264,7 @@ function role_nav_sections(string $role, int $messagingUnread): array
         'file' => 'view_schedule.php', 'href' => 'view_schedule.php', 'icon' => 'fa-calendar-week', 'label' => 'Weekly view',
         'tooltip' => 'Shows the schedule in a weekly layout. Use this to see how classes spread across days.',
     ];
+    $facultyWorkload = nav_faculty_workload_external_item();
 
     return match ($role) {
         'dean' => [
@@ -256,6 +290,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'file' => 'rooms.php', 'href' => 'rooms.php', 'icon' => 'fa-door-open', 'label' => 'Rooms',
                     'tooltip' => 'Manage physical or virtual rooms for scheduling. Use this so auto-schedule and manual edits use correct capacity.',
                 ],
+                [
+                    'file' => 'faculty_classrooms.php',
+                    'href' => 'faculty_classrooms.php',
+                    'icon' => 'fa-chalkboard',
+                    'label' => 'My classrooms',
+                    'tooltip' => 'Create and manage online classrooms for your own teaching load.',
+                ],
             ],
             'Scheduling' => [
                 [
@@ -276,6 +317,7 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'file' => 'faculty_teaching_load.php', 'href' => 'faculty_teaching_load.php', 'icon' => 'fa-scale-balanced', 'label' => 'Teaching load (units)',
                     'tooltip' => 'Units per faculty from schedules in your college. Filter by department and term.',
                 ],
+                $facultyWorkload,
                 [
                     'file' => 'conflicts.php', 'href' => 'conflicts.php', 'icon' => 'fa-triangle-exclamation', 'label' => 'Conflicts',
                     'tooltip' => 'Review room, faculty, or change-request conflicts. Use this to clear issues before finalizing schedules.',
@@ -295,6 +337,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'tooltip' => 'Review and approve student self-registration requests for your program.',
                 ],
                 ['file' => 'courses.php', 'href' => 'courses.php', 'icon' => 'fa-book', 'label' => 'Courses'],
+                [
+                    'file' => 'faculty_classrooms.php',
+                    'href' => 'faculty_classrooms.php',
+                    'icon' => 'fa-chalkboard',
+                    'label' => 'My classrooms',
+                    'tooltip' => 'Create and manage online classrooms for your own teaching load.',
+                ],
             ],
             'Scheduling' => [
                 ['file' => 'add_schedule.php', 'href' => 'add_schedule.php', 'icon' => 'fa-plus', 'label' => 'Add schedule'],
@@ -305,6 +354,7 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'file' => 'faculty_teaching_load.php', 'href' => 'faculty_teaching_load.php', 'icon' => 'fa-scale-balanced', 'label' => 'Teaching load (units)',
                     'tooltip' => 'Units per faculty for your program scheduled offerings. Filter by term or search faculty.',
                 ],
+                $facultyWorkload,
                 ['file' => 'conflicts.php', 'href' => 'conflicts.php', 'icon' => 'fa-triangle-exclamation', 'label' => 'Conflicts'],
             ],
         ],
@@ -331,6 +381,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'file' => 'gened_assignments.php', 'href' => 'gened_assignments.php', 'icon' => 'fa-building-user', 'label' => 'GE offerings',
                     'tooltip' => 'Map GE sections to colleges or cohorts. Use this to coordinate cross-college GE delivery.',
                 ],
+                [
+                    'file' => 'faculty_classrooms.php',
+                    'href' => 'faculty_classrooms.php',
+                    'icon' => 'fa-chalkboard',
+                    'label' => 'My classrooms',
+                    'tooltip' => 'Create and manage online classrooms for your own teaching load.',
+                ],
             ],
             'Management' => [
                 [
@@ -341,6 +398,7 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'file' => 'faculty_teaching_load.php', 'href' => 'faculty_teaching_load.php', 'icon' => 'fa-scale-balanced', 'label' => 'Teaching load (units)',
                     'tooltip' => 'GE faculty load in units from scheduled GE offerings. Filter by term or department.',
                 ],
+                $facultyWorkload,
                 [
                     'file' => 'conflicts.php', 'href' => 'conflicts.php', 'icon' => 'fa-triangle-exclamation', 'label' => 'Conflicts',
                     'tooltip' => 'Review conflicts affecting GE sections. Use this to resolve overlaps before publishing.',
@@ -368,6 +426,11 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'file' => 'reports.php', 'href' => 'reports.php', 'icon' => 'fa-file-lines', 'label' => 'Reports',
                     'tooltip' => 'Reports available to faculty (e.g. workload). Use this when you need a printable or official summary.',
                 ],
+                [
+                    'file' => 'faculty_teaching_load.php', 'href' => 'faculty_teaching_load.php', 'icon' => 'fa-scale-balanced', 'label' => 'Teaching load (units)',
+                    'tooltip' => 'Your personal teaching load in units from your scheduled offerings. Filter by term.',
+                ],
+                $facultyWorkload,
                 [
                     'file' => 'conflicts.php', 'href' => 'conflicts.php', 'icon' => 'fa-triangle-exclamation', 'label' => 'Conflicts',
                     'tooltip' => 'Items that need coordination with the office. Use this to see if your classes have pending issues.',
@@ -397,6 +460,20 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'icon' => 'fa-wand-magic-sparkles',
                     'label' => 'Learning tools',
                     'tooltip' => 'Opens EduTools: built-in notebook, NotebookLM, ChatGPT, Perplexity, Khan Academy, Wolfram Alpha, and Notion for studying and research.',
+                ],
+                [
+                    'file' => 'student_materials_reviewer.php',
+                    'href' => 'student_materials_reviewer.php',
+                    'icon' => 'fa-clipboard-question',
+                    'label' => 'Materials reviewer',
+                    'tooltip' => 'Review course materials week by week and generate automatic practice questions from what your instructor posted for each week.',
+                ],
+                [
+                    'file' => 'student_calculator.php',
+                    'href' => 'student_calculator.php',
+                    'icon' => 'fa-calculator',
+                    'label' => 'Scientific calculator',
+                    'tooltip' => 'A full-featured scientific calculator with trigonometry, logarithms, powers, roots, and more—right inside the portal.',
                 ],
                 [
                     'file' => 'student_wellness.php',

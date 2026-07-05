@@ -410,6 +410,7 @@ CREATE TABLE IF NOT EXISTS classroom_assessments (
   description TEXT NULL,
   total_points DECIMAL(8,2) NOT NULL DEFAULT 100.00,
   due_at DATETIME NULL,
+  credited_week VARCHAR(100) NOT NULL DEFAULT '',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_ca_classroom FOREIGN KEY (classroom_id) REFERENCES online_classrooms(id) ON DELETE CASCADE,
   CONSTRAINT fk_ca_faculty FOREIGN KEY (faculty_id) REFERENCES faculty(id) ON DELETE CASCADE
@@ -472,6 +473,18 @@ CREATE TABLE IF NOT EXISTS classroom_attendance_records (
   KEY idx_attendance_status (session_id, status),
   CONSTRAINT fk_car_session FOREIGN KEY (session_id) REFERENCES classroom_attendance_sessions(id) ON DELETE CASCADE,
   CONSTRAINT fk_car_student FOREIGN KEY (student_id) REFERENCES classroom_students(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS login_slideshow_images (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  stored_name VARCHAR(120) NOT NULL,
+  caption VARCHAR(255) NOT NULL DEFAULT '',
+  sort_order INT NOT NULL DEFAULT 0,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  uploaded_by INT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_login_slide_order (sort_order, id),
+  CONSTRAINT fk_login_slide_uploader FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

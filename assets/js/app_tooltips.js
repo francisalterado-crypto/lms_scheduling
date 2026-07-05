@@ -17,8 +17,10 @@
     }
 
     var DELAY = 300;
+    var AUTO_DISMISS = 3000;
     var tip = null;
     var timer = null;
+    var dismissTimer = null;
     var hovered = null;
     var lastX = 0;
     var lastY = 0;
@@ -67,6 +69,24 @@
             tip.style.display = 'none';
             tip.setAttribute('aria-hidden', 'true');
         }
+        if (dismissTimer) {
+            clearTimeout(dismissTimer);
+            dismissTimer = null;
+        }
+    }
+
+    function showTip(text) {
+        var node = getTip();
+        node.textContent = text;
+        node.style.display = 'block';
+        node.setAttribute('aria-hidden', 'false');
+        place();
+        requestAnimationFrame(place);
+
+        if (dismissTimer) {
+            clearTimeout(dismissTimer);
+        }
+        dismissTimer = setTimeout(hideTip, AUTO_DISMISS);
     }
 
     document.addEventListener(
@@ -95,12 +115,7 @@
                 if (!text) {
                     return;
                 }
-                var node = getTip();
-                node.textContent = text;
-                node.style.display = 'block';
-                node.setAttribute('aria-hidden', 'false');
-                place();
-                requestAnimationFrame(place);
+                showTip(text);
             }, DELAY);
         },
         true
@@ -141,6 +156,14 @@
         },
         true
     );
+
+    document.addEventListener('click', function (e) {
+        var el = e.target.closest('[data-app-tooltip]');
+        if (el) {
+            hideTip();
+            hovered = null;
+        }
+    }, true);
 
     document.addEventListener('scroll', hideTip, true);
 })();

@@ -26,6 +26,15 @@ $formatTime12h = static function (?string $time): string {
     $dt = DateTime::createFromFormat('H:i', $raw);
     return $dt ? $dt->format('g:i A') : $raw;
 };
+$labSessionMinHours = 3.0;
+$isLabSession = static function (?string $start, ?string $end) use ($labSessionMinHours): bool {
+    $s = strtotime((string) $start);
+    $e = strtotime((string) $end);
+    if ($s === false || $e === false) {
+        return false;
+    }
+    return (($e - $s) / 3600) >= $labSessionMinHours;
+};
 
 if ($studentId < 1) {
     $studentId = resolve_student_id_for_user($userId) ?? 0;
@@ -197,6 +206,11 @@ require_once __DIR__ . '/includes/header.php';
                                         <div class="text-muted small"><?= htmlspecialchars((string) $class['course_code']) ?> - <?= htmlspecialchars((string) $class['course_name']) ?></div>
                                     </div>
                                     <div class="d-flex flex-wrap justify-content-end gap-1">
+                                        <?php if ($isLabSession((string) ($class['start_time'] ?? ''), (string) ($class['end_time'] ?? ''))): ?>
+                                            <span class="badge bg-warning text-dark"><i class="fa-solid fa-flask me-1"></i>Laboratory</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-info text-dark"><i class="fa-solid fa-chalkboard me-1"></i>Lecture</span>
+                                        <?php endif; ?>
                                         <?php if ($isLive): ?>
                                             <span class="badge bg-danger live-pulse-badge">LIVE</span>
                                         <?php endif; ?>
@@ -223,7 +237,11 @@ require_once __DIR__ . '/includes/header.php';
                                 <div class="d-flex gap-2 flex-wrap">
                                     <a href="student_classroom.php?id=<?= (int) $class['id'] ?>" class="btn btn-primary btn-sm"<?= student_tooltip_attr('Opens this class workspace with announcements, materials, discussion, and assessments. Use this as your main entry for daily class work.') ?>>Open class</a>
                                     <?php if (trim((string) $class['meet_link']) !== ''): ?>
-                                        <a href="<?= htmlspecialchars((string) $class['meet_link']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline-success btn-sm"<?= student_tooltip_attr('Opens the live video meeting your instructor linked for this class. Use this during scheduled class time or when the instructor goes live.') ?>>Join Meet</a>
+                                        <?php if ($isLive): ?>
+                                            <a href="<?= htmlspecialchars((string) $class['meet_link']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm"<?= student_tooltip_attr('Your instructor is live. Opens the video meeting for this class in a new tab.') ?>><i class="fa-solid fa-video me-1"></i>Join Meet</a>
+                                        <?php else: ?>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" disabled<?= student_tooltip_attr('Join Meet is available only when your instructor goes live for this class.') ?>><i class="fa-solid fa-video me-1"></i>Join Meet</button>
+                                        <?php endif; ?>
                                     <?php endif; ?>
                                 </div>
                             </div>

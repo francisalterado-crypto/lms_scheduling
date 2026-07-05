@@ -326,12 +326,12 @@ require_once __DIR__ . '/includes/header.php';
                                 ?>
                                 <?php if ($ocHasSyllabus && in_array($role, $syllabusRoles, true) && !$hideButtons): ?>
                                     <div class="mt-1">
-                                        <a class="btn btn-sm btn-outline-secondary py-0 px-2" href="<?= htmlspecialchars(classroom_syllabus_href($ocPortalId)) ?>" target="_blank" rel="noopener noreferrer"<?= app_tooltip_attr('Opens the faculty-uploaded syllabus for this section in a new tab (oversight).') ?>><i class="fa-solid fa-file-contract me-1"></i>Syllabus</a>
+                                        <a class="btn btn-sm btn-outline-secondary py-0 px-2" href="<?= htmlspecialchars(classroom_syllabus_href($ocPortalId)) ?>" onclick="var w=400,h=300,l=(screen.width-w)/2,t=(screen.height-h)/2;window.open(this.href,'syllabusWin','width='+w+',height='+h+',left='+l+',top='+t+',scrollbars=yes,resizable=yes');return false;"<?= app_tooltip_attr('Opens the faculty-uploaded syllabus for this section in a small window (oversight).') ?>><i class="fa-solid fa-file-contract me-1"></i>Syllabus</a>
                                     </div>
                                 <?php endif; ?>
                                 <?php if ($ocPortalId > 0 && in_array($role, $monitorRoles, true) && !$hideButtons): ?>
                                     <div class="mt-1">
-                                        <a class="btn btn-sm btn-outline-dark py-0 px-2" href="<?= htmlspecialchars($monitorHref) ?>" target="_blank" rel="noopener noreferrer"<?= app_tooltip_attr('Opens read-only monitoring of posted materials and week topics for this classroom.') ?>><i class="fa-solid fa-list-check me-1"></i>Monitor</a>
+                                        <a class="btn btn-sm btn-outline-dark py-0 px-2" href="<?= htmlspecialchars($monitorHref) ?>" onclick="var w=400,h=300,l=(screen.width-w)/2,t=(screen.height-h)/2;window.open(this.href,'monitorWin','width='+w+',height='+h+',left='+l+',top='+t+',scrollbars=yes,resizable=yes');return false;"<?= app_tooltip_attr('Opens read-only monitoring of posted materials and week topics for this classroom.') ?>><i class="fa-solid fa-list-check me-1"></i>Monitor</a>
                                     </div>
                                 <?php endif; ?>
                             </div>

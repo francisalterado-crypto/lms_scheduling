@@ -24,7 +24,6 @@ if ($role === 'admin') {
 
 $hasLectureUnits = db_column_exists('courses', 'lecture_units');
 $hasLaboratoryUnits = db_column_exists('courses', 'laboratory_units');
-$hasCourseLabFlag = db_column_exists('courses', 'is_laboratory');
 $hasIsGenedCourse = db_column_exists('courses', 'is_gened');
 
 $courseUnitsSelect = ', c.units AS course_units_total';
@@ -34,11 +33,9 @@ if ($hasLectureUnits) {
 if ($hasLaboratoryUnits) {
     $courseUnitsSelect .= ', c.laboratory_units';
 }
-$courseLabSelect = $hasCourseLabFlag ? ', c.is_laboratory' : '';
 
 $sql = "SELECT s.*, f.full_name AS faculty_name, f.department AS fac_dept, c.course_code, c.course_name, c.department AS course_dept, r.room_code, r.type AS room_type
         {$courseUnitsSelect}
-        {$courseLabSelect}
         FROM schedules s
         INNER JOIN faculty f ON f.id = s.faculty_id
         INNER JOIN courses c ON c.id = s.course_id
@@ -121,26 +118,14 @@ $sessionHoursBetween = static function (?string $start, ?string $end): float {
     return round($secs / 3600, 2);
 };
 
-$dayCount = static function (?string $days): int {
-    $parts = array_filter(array_map('trim', explode(',', (string) $days)), static fn(string $d): bool => $d !== '');
-    return max(1, count($parts));
-};
+// One class block with this many hours or more counts as LAB; shorter blocks count as LEC (not by room type).
+$labSessionMinHours = 3.0;
 
 $courseTotalUnits = static function (array $row) use ($hasLectureUnits, $hasLaboratoryUnits): float {
     if ($hasLectureUnits && $hasLaboratoryUnits) {
         return (float) ($row['lecture_units'] ?? 0) + (float) ($row['laboratory_units'] ?? 0);
     }
     return (float) ($row['course_units_total'] ?? 0);
-};
-
-$isLaboratoryRow = static function (array $row): bool {
-    if (strtolower((string) ($row['room_type'] ?? '')) === 'laboratory') {
-        return true;
-    }
-    if (!empty($row['is_laboratory']) && (float) ($row['laboratory_units'] ?? 0) > 0) {
-        return true;
-    }
-    return false;
 };
 
 /** One row per scheduled offering (course may have multiple time slots). */
@@ -155,8 +140,7 @@ $scheduleOfferingKey = static function (array $row): string {
 $mergeOfferingRows = static function (array $group) use (
     $courseTotalUnits,
     $sessionHoursBetween,
-    $dayCount,
-    $isLaboratoryRow,
+    $labSessionMinHours,
     $formatTime12h
 ): array {
     $r0 = $group[0];
@@ -167,14 +151,18 @@ $mergeOfferingRows = static function (array $group) use (
     $roomParts = [];
     $roomSeen = [];
     foreach ($group as $r) {
-        $hours = $sessionHoursBetween((string) ($r['start_time'] ?? ''), (string) ($r['end_time'] ?? ''))
-            * $dayCount((string) ($r['day_of_week'] ?? ''));
-        if ($isLaboratoryRow($r)) {
+        $sessionH = $sessionHoursBetween((string) ($r['start_time'] ?? ''), (string) ($r['end_time'] ?? ''));
+        $dayCount = count(parse_day_set((string) ($r['day_of_week'] ?? '')));
+        if ($dayCount < 1) {
+            $dayCount = 1;
+        }
+        $hours = $sessionH * $dayCount;
+        if ($sessionH >= $labSessionMinHours) {
             $labHours += $hours;
         } else {
             $lecHours += $hours;
         }
-        $dayParts[] = str_replace(',', ', ', (string) ($r['day_of_week'] ?? ''));
+        $dayParts[] = format_day_set_abbrev((string) ($r['day_of_week'] ?? ''));
         $timeParts[] = $formatTime12h((string) ($r['start_time'] ?? ''))
             . ' – '
             . $formatTime12h((string) ($r['end_time'] ?? ''));
@@ -192,7 +180,7 @@ $mergeOfferingRows = static function (array $group) use (
         'lec_hours' => $lecHours,
         'lab_hours' => $labHours,
         'total_hours' => $lecHours + $labHours,
-        'day_display' => implode('; ', array_values(array_unique($dayParts))),
+        'day_display' => implode(' / ', array_values(array_unique($dayParts))),
         'time_display' => implode('; ', array_values(array_unique($timeParts))),
         'room_display' => $roomParts !== [] ? implode('; ', $roomParts) : '—',
     ];

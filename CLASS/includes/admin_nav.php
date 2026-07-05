@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Shared sidebar navigation: grouped sections with icons (admin + role dashboards).
  *
- * @param array<string, list<array{file:string,href:string,icon:string,label:string,badge?:int,tooltip?:string}>> $sections
+ * @param array<string, list<array{file:string,href:string,icon:string,label:string,badge?:int,tooltip?:string,target?:string}>> $sections
  */
 function render_nav_sections_markup(array $sections, string $currentPage, bool $dismissOffcanvas): void
 {
@@ -26,6 +26,9 @@ function render_nav_sections_markup(array $sections, string $currentPage, bool $
             }
             if (!empty($item['tooltip'])) {
                 echo ' data-app-tooltip="' . htmlspecialchars((string) $item['tooltip'], ENT_QUOTES, 'UTF-8') . '"';
+            }
+            if (!empty($item['target'])) {
+                echo ' target="' . htmlspecialchars((string) $item['target'], ENT_QUOTES, 'UTF-8') . '" rel="noopener noreferrer"';
             }
             echo '>';
             echo '<span class="admin-nav-icon" aria-hidden="true"><i class="fa-solid ' . htmlspecialchars($item['icon'], ENT_QUOTES, 'UTF-8') . '"></i></span>';
@@ -369,6 +372,15 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'tooltip' => 'Reports available to faculty (e.g. workload). Use this when you need a printable or official summary.',
                 ],
                 [
+                    'file' => 'faculty_teaching_load.php', 'href' => 'faculty_teaching_load.php', 'icon' => 'fa-scale-balanced', 'label' => 'Teaching load (units)',
+                    'tooltip' => 'Your personal teaching load in units from your scheduled offerings. Filter by term.',
+                ],
+                [
+                    'file' => 'faculty_workload_external', 'href' => '/FACULTY%20WORKLOAD/public/login.php', 'icon' => 'fa-briefcase', 'label' => 'E-Faculty Workload',
+                    'tooltip' => 'Opens the WPU E-Faculty Workload system in a new tab to submit and track official workload forms.',
+                    'target' => '_blank',
+                ],
+                [
                     'file' => 'conflicts.php', 'href' => 'conflicts.php', 'icon' => 'fa-triangle-exclamation', 'label' => 'Conflicts',
                     'tooltip' => 'Items that need coordination with the office. Use this to see if your classes have pending issues.',
                 ],
@@ -397,6 +409,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'icon' => 'fa-wand-magic-sparkles',
                     'label' => 'Learning tools',
                     'tooltip' => 'Opens EduTools: built-in notebook, NotebookLM, ChatGPT, Perplexity, Khan Academy, Wolfram Alpha, and Notion for studying and research.',
+                ],
+                [
+                    'file' => 'student_calculator.php',
+                    'href' => 'student_calculator.php',
+                    'icon' => 'fa-calculator',
+                    'label' => 'Scientific calculator',
+                    'tooltip' => 'A full-featured scientific calculator with trigonometry, logarithms, powers, roots, and more—right inside the portal.',
                 ],
                 [
                     'file' => 'student_wellness.php',

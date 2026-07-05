@@ -246,6 +246,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             log_user_activity('delete', 'Courses', 'Course #' . $delId, $beforeDel ? (array) $beforeDel : null, null);
             log_dean_activity('course_delete', 'Deleted course ID #' . $delId);
             $_SESSION['flash'] = 'Course removed.';
+        } elseif ($action === 'delete_bulk') {
+            $ids = isset($_POST['ids']) && is_array($_POST['ids'])
+                ? array_values(array_unique(array_filter(array_map('intval', $_POST['ids']), static fn (int $id): bool => $id > 0)))
+                : [];
+            if ($ids === []) {
+                throw new RuntimeException('Select at least one course to delete.');
+            }
+            $deleted = 0;
+            foreach ($ids as $delId) {
+                $sqlSel = 'SELECT * FROM courses WHERE id=? AND college_id=?';
+                $parSel = [$delId, $collegeId];
+                if ($programScope !== null) {
+                    $sqlSel .= ' AND department=?';
+                    $parSel[] = $programScope;
+                }
+                $stSelDel = db()->prepare($sqlSel);
+                $stSelDel->execute($parSel);
+                $beforeDel = $stSelDel->fetch(PDO::FETCH_ASSOC);
+                if (!$beforeDel) {
+                    continue;
+                }
+                $sql = 'DELETE FROM courses WHERE id=? AND college_id=?';
+                $params = [$delId, $collegeId];
+                if ($programScope !== null) {
+                    $sql .= ' AND department=?';
+                    $params[] = $programScope;
+                }
+                db()->prepare($sql)->execute($params);
+                log_user_activity('delete', 'Courses', 'Course #' . $delId, (array) $beforeDel, null);
+                log_dean_activity('course_delete', 'Deleted course ID #' . $delId);
+                $deleted++;
+            }
+            if ($deleted === 0) {
+                throw new RuntimeException('No matching courses could be deleted.');
+            }
+            $_SESSION['flash'] = $deleted === 1 ? 'Course removed.' : $deleted . ' courses removed.';
         }
     } catch (Throwable $e) {
         $msg = $e->getMessage();
@@ -255,7 +291,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $_SESSION['flash'] = 'Error: ' . $msg;
     }
-    header('Location: courses.php');
+    $redirectUrl = 'courses.php';
+    if ($action === 'delete_bulk') {
+        $redirectQuery = [];
+        $returnQ = trim((string) ($_POST['return_q'] ?? ''));
+        if ($returnQ !== '') {
+            $redirectQuery['q'] = $returnQ;
+        }
+        $returnSort = trim((string) ($_POST['return_sort'] ?? ''));
+        if ($returnSort !== '') {
+            $redirectQuery['sort'] = $returnSort;
+        }
+        $returnDir = strtolower(trim((string) ($_POST['return_dir'] ?? '')));
+        if ($returnDir === 'asc' || $returnDir === 'desc') {
+            $redirectQuery['dir'] = $returnDir;
+        }
+        if ($redirectQuery !== []) {
+            $redirectUrl .= '?' . http_build_query($redirectQuery);
+        }
+    }
+    header('Location: ' . $redirectUrl);
     exit;
 }
 
@@ -373,6 +428,11 @@ $pageTitle = 'Courses';
 require_once __DIR__ . '/includes/header.php';
 ?>
 <style>
+    .courses-page {
+        min-width: 0;
+        max-width: 100%;
+    }
+
     .courses-page .app-page-title {
         font-size: 1.5rem;
     }
@@ -394,6 +454,127 @@ require_once __DIR__ . '/includes/header.php';
         font-size: 0.8rem;
     }
 
+    .courses-page .courses-table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        max-width: 100%;
+    }
+
+    .courses-page .courses-table-wrap .app-table {
+        width: 100%;
+        min-width: 1020px;
+        table-layout: auto;
+    }
+
+    .courses-page .courses-table-wrap .app-table th,
+    .courses-page .courses-table-wrap .app-table td {
+        vertical-align: middle;
+    }
+
+    .courses-page .courses-col-code,
+    .courses-page .courses-col-classroom,
+    .courses-page .courses-col-units,
+    .courses-page .courses-col-type,
+    .courses-page .courses-col-year,
+    .courses-page .courses-col-section,
+    .courses-page .courses-col-actions {
+        white-space: nowrap;
+    }
+
+    .courses-page .courses-col-code {
+        min-width: 5.5rem;
+    }
+
+    .courses-page .courses-col-classroom {
+        min-width: 7.5rem;
+    }
+
+    .courses-page .courses-col-title {
+        min-width: 10rem;
+        max-width: 22rem;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    .courses-page .courses-col-units {
+        min-width: 6.25rem;
+        text-align: center;
+    }
+
+    .courses-page .courses-table-wrap .app-table thead th.courses-col-units {
+        white-space: normal;
+        line-height: 1.25;
+    }
+
+    .courses-page .courses-col-type {
+        min-width: 5.5rem;
+    }
+
+    .courses-page .courses-col-year {
+        min-width: 3.25rem;
+        text-align: center;
+    }
+
+    .courses-page .courses-col-section {
+        min-width: 4.5rem;
+    }
+
+    .courses-page .courses-col-program {
+        min-width: 8rem;
+        max-width: 18rem;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    .courses-page .courses-col-actions {
+        min-width: 6.5rem;
+    }
+
+    .courses-page .courses-col-select {
+        width: 2.75rem;
+        min-width: 2.75rem;
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    .courses-page .courses-col-select .form-check-input {
+        float: none;
+        margin: 0;
+    }
+
+    .courses-page .courses-form-scroll {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        max-width: 100%;
+    }
+
+    .courses-page .courses-form-scroll > form.row {
+        min-width: min(100%, 36rem);
+    }
+
+    @media (min-width: 768px) {
+        .courses-page .courses-form-scroll > form.row {
+            min-width: 52rem;
+        }
+    }
+
+    .courses-page .courses-form-scroll .form-label {
+        white-space: normal;
+        line-height: 1.35;
+    }
+
+    .courses-page .courses-form-scroll [class*="col-"] {
+        min-width: 0;
+    }
+
+    .courses-page .courses-form-scroll .form-control,
+    .courses-page .courses-form-scroll .form-select {
+        width: 100%;
+        min-width: 0;
+    }
+
     @media (max-width: 767.98px) {
         .courses-page .app-page-title {
             font-size: 1.5rem;
@@ -406,10 +587,6 @@ require_once __DIR__ . '/includes/header.php';
 
         .courses-page .app-card-body {
             padding: 1rem;
-        }
-
-        .courses-page .app-table {
-            min-width: 980px;
         }
 
         .courses-page .app-form-actions .btn {
@@ -451,14 +628,14 @@ require_once __DIR__ . '/includes/header.php';
     <form method="get" class="row g-3 align-items-end">
         <div class="col-md-5">
             <label class="form-label" for="courses-q">Search</label>
-            <input id="courses-q" type="search" name="q" class="form-control" placeholder="Code, name, program, year, section, faculty<?= $hasClassroomCode ? ', classroom code' : '' ?>" value="<?= htmlspecialchars($search) ?>" autocomplete="off">
+            <input id="courses-q" type="search" name="q" class="form-control" placeholder="Code, course title, program, year, section, faculty<?= $hasClassroomCode ? ', classroom code' : '' ?>" value="<?= htmlspecialchars($search) ?>" autocomplete="off">
         </div>
         <div class="col-md-3">
             <label class="form-label" for="courses-sort">Sort by</label>
             <select id="courses-sort" name="sort" class="form-select">
                 <option value="course_code" <?= $sort === 'course_code' ? 'selected' : '' ?>>Code</option>
                 <?php if ($hasClassroomCode): ?><option value="classroom_code" <?= $sort === 'classroom_code' ? 'selected' : '' ?>>Classroom code</option><?php endif; ?>
-                <option value="course_name" <?= $sort === 'course_name' ? 'selected' : '' ?>>Name</option>
+                <option value="course_name" <?= $sort === 'course_name' ? 'selected' : '' ?>>Course Title</option>
                 <option value="lecture_units" <?= $sort === 'lecture_units' ? 'selected' : '' ?>>Lecture units</option>
                 <option value="laboratory_units" <?= $sort === 'laboratory_units' ? 'selected' : '' ?>>Laboratory units</option>
                 <option value="program" <?= $sort === 'program' ? 'selected' : '' ?>>Program</option>
@@ -483,12 +660,12 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="app-card">
     <div class="app-card-header"><?= $editRow ? 'Edit course' : 'Add course' ?></div>
-    <div class="app-card-body">
+    <div class="app-card-body courses-form-scroll">
     <form method="post" class="row g-3">
         <input type="hidden" name="action" value="<?= $editRow ? 'edit' : 'add' ?>">
         <?php if ($editRow): ?><input type="hidden" name="id" value="<?= (int) $editRow['id'] ?>"><?php endif; ?>
         <div class="col-md-2"><label class="form-label">Code</label><input name="course_code" class="form-control" required maxlength="20" value="<?= htmlspecialchars((string) ($editRow['course_code'] ?? '')) ?>"></div>
-        <div class="col-md-4"><label class="form-label">Name</label><input name="course_name" class="form-control" required maxlength="100" value="<?= htmlspecialchars((string) ($editRow['course_name'] ?? '')) ?>"></div>
+        <div class="col-md-4"><label class="form-label">Course Title</label><input name="course_name" class="form-control" required maxlength="100" value="<?= htmlspecialchars((string) ($editRow['course_name'] ?? '')) ?>"></div>
         <?php if ($hasLectureUnits): ?>
             <div class="col-md-2"><label class="form-label">Lecture Units</label><input name="lecture_units" type="number" step="0.1" min="0" max="12" class="form-control" value="<?= htmlspecialchars((string) ($editRow['lecture_units'] ?? $editRow['units'] ?? '3.0')) ?>"></div>
         <?php else: ?>
@@ -567,48 +744,69 @@ require_once __DIR__ . '/includes/header.php';
 <section class="app-card mb-0" aria-labelledby="courses-catalog-heading">
     <div class="app-card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <span id="courses-catalog-heading">Course catalog</span>
-        <span class="badge rounded-pill bg-light text-secondary border fw-normal"><?= count($list) ?> <?= count($list) === 1 ? 'course' : 'courses' ?></span>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <?php if ($list !== []): ?>
+                <form id="courses-bulk-delete-form" method="post" class="d-inline" onsubmit="return confirm('Delete the selected courses? This cannot be undone.');">
+                    <input type="hidden" name="action" value="delete_bulk">
+                    <input type="hidden" name="return_q" value="<?= htmlspecialchars($search) ?>">
+                    <input type="hidden" name="return_sort" value="<?= htmlspecialchars($sort) ?>">
+                    <input type="hidden" name="return_dir" value="<?= $dir === 'DESC' ? 'desc' : 'asc' ?>">
+                    <button type="submit" id="courses-bulk-delete-btn" class="btn btn-sm btn-outline-danger rounded-pill" disabled<?= app_tooltip_attr('Deletes every checked course in the list. Select rows first, then use this to remove several at once.') ?>>
+                        <i class="fa-solid fa-trash" aria-hidden="true"></i> Delete selected
+                    </button>
+                </form>
+            <?php endif; ?>
+            <span class="badge rounded-pill bg-light text-secondary border fw-normal"><?= count($list) ?> <?= count($list) === 1 ? 'course' : 'courses' ?></span>
+        </div>
     </div>
-    <div class="table-responsive">
+    <div class="table-responsive courses-table-wrap">
     <table class="table app-table mb-0">
         <thead><tr>
             <?php
             $baseQuery = ['q' => $search];
             ?>
-            <th scope="col"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'course_code', 'dir' => $nextDirFor('course_code', $sort, $dir)])) ?>">Code<?= htmlspecialchars($sortArrowFor('course_code', $sort, $dir)) ?></a></th>
-            <?php if ($hasClassroomCode): ?>
-                <th scope="col"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'classroom_code', 'dir' => $nextDirFor('classroom_code', $sort, $dir)])) ?>">Classroom code<?= htmlspecialchars($sortArrowFor('classroom_code', $sort, $dir)) ?></a></th>
+            <?php if ($list !== []): ?>
+                <th scope="col" class="courses-col-select">
+                    <input type="checkbox" class="form-check-input" id="courses-select-all" aria-label="Select all courses on this page">
+                </th>
             <?php endif; ?>
-            <th scope="col"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'course_name', 'dir' => $nextDirFor('course_name', $sort, $dir)])) ?>">Name<?= htmlspecialchars($sortArrowFor('course_name', $sort, $dir)) ?></a></th>
-            <th scope="col"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'lecture_units', 'dir' => $nextDirFor('lecture_units', $sort, $dir)])) ?>">Lecture units<?= htmlspecialchars($sortArrowFor('lecture_units', $sort, $dir)) ?></a></th>
-            <th scope="col"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'laboratory_units', 'dir' => $nextDirFor('laboratory_units', $sort, $dir)])) ?>">Laboratory units<?= htmlspecialchars($sortArrowFor('laboratory_units', $sort, $dir)) ?></a></th>
+            <th scope="col" class="courses-col-code"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'course_code', 'dir' => $nextDirFor('course_code', $sort, $dir)])) ?>">Code<?= htmlspecialchars($sortArrowFor('course_code', $sort, $dir)) ?></a></th>
+            <?php if ($hasClassroomCode): ?>
+                <th scope="col" class="courses-col-classroom"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'classroom_code', 'dir' => $nextDirFor('classroom_code', $sort, $dir)])) ?>">Classroom code<?= htmlspecialchars($sortArrowFor('classroom_code', $sort, $dir)) ?></a></th>
+            <?php endif; ?>
+            <th scope="col" class="courses-col-title"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'course_name', 'dir' => $nextDirFor('course_name', $sort, $dir)])) ?>">Course Title<?= htmlspecialchars($sortArrowFor('course_name', $sort, $dir)) ?></a></th>
+            <th scope="col" class="courses-col-units"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'lecture_units', 'dir' => $nextDirFor('lecture_units', $sort, $dir)])) ?>">Lecture units<?= htmlspecialchars($sortArrowFor('lecture_units', $sort, $dir)) ?></a></th>
+            <th scope="col" class="courses-col-units"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'laboratory_units', 'dir' => $nextDirFor('laboratory_units', $sort, $dir)])) ?>">Laboratory units<?= htmlspecialchars($sortArrowFor('laboratory_units', $sort, $dir)) ?></a></th>
             <?php if ($hasLabFlag): ?>
-                <th scope="col"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'type', 'dir' => $nextDirFor('type', $sort, $dir)])) ?>">Type<?= htmlspecialchars($sortArrowFor('type', $sort, $dir)) ?></a></th>
+                <th scope="col" class="courses-col-type"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'type', 'dir' => $nextDirFor('type', $sort, $dir)])) ?>">Type<?= htmlspecialchars($sortArrowFor('type', $sort, $dir)) ?></a></th>
             <?php endif; ?>
             <?php if ($hasYearLevel): ?>
-                <th scope="col"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'year_level', 'dir' => $nextDirFor('year_level', $sort, $dir)])) ?>">Year<?= htmlspecialchars($sortArrowFor('year_level', $sort, $dir)) ?></a></th>
+                <th scope="col" class="courses-col-year"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'year_level', 'dir' => $nextDirFor('year_level', $sort, $dir)])) ?>">Year<?= htmlspecialchars($sortArrowFor('year_level', $sort, $dir)) ?></a></th>
             <?php endif; ?>
             <?php if ($hasSection): ?>
-                <th scope="col"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'section', 'dir' => $nextDirFor('section', $sort, $dir)])) ?>">Section<?= htmlspecialchars($sortArrowFor('section', $sort, $dir)) ?></a></th>
+                <th scope="col" class="courses-col-section"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'section', 'dir' => $nextDirFor('section', $sort, $dir)])) ?>">Section<?= htmlspecialchars($sortArrowFor('section', $sort, $dir)) ?></a></th>
             <?php endif; ?>
-            <th scope="col"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'program', 'dir' => $nextDirFor('program', $sort, $dir)])) ?>">Program<?= htmlspecialchars($sortArrowFor('program', $sort, $dir)) ?></a></th>
-            <th scope="col" class="app-table-actions"><span class="visually-hidden">Actions</span></th>
+            <th scope="col" class="courses-col-program"><a class="text-decoration-none text-body-secondary" href="?<?= htmlspecialchars(http_build_query($baseQuery + ['sort' => 'program', 'dir' => $nextDirFor('program', $sort, $dir)])) ?>">Program<?= htmlspecialchars($sortArrowFor('program', $sort, $dir)) ?></a></th>
+            <th scope="col" class="app-table-actions courses-col-actions"><span class="visually-hidden">Actions</span></th>
         </tr></thead>
         <tbody>
         <?php foreach ($list as $r): ?>
             <tr>
-                <td><?= htmlspecialchars((string) $r['course_code']) ?></td>
+                <td class="courses-col-select">
+                    <input type="checkbox" class="form-check-input courses-row-select" name="ids[]" form="courses-bulk-delete-form" value="<?= (int) $r['id'] ?>" aria-label="Select course <?= htmlspecialchars((string) $r['course_code']) ?>">
+                </td>
+                <td class="courses-col-code"><?= htmlspecialchars((string) $r['course_code']) ?></td>
                 <?php if ($hasClassroomCode): ?>
-                    <td class="font-monospace"><?php $rcc = trim((string) ($r['classroom_code'] ?? '')); ?><?= $rcc !== '' ? htmlspecialchars($rcc) : '—' ?></td>
+                    <td class="courses-col-classroom font-monospace"><?php $rcc = trim((string) ($r['classroom_code'] ?? '')); ?><?= $rcc !== '' ? htmlspecialchars($rcc) : '—' ?></td>
                 <?php endif; ?>
-                <td><?= htmlspecialchars((string) $r['course_name']) ?></td>
-                <td><?= htmlspecialchars((string) ($r['lecture_units'] ?? $r['units'])) ?></td>
-                <td><?= htmlspecialchars((string) ($r['laboratory_units'] ?? (!empty($r['is_laboratory']) ? $r['units'] : 0))) ?></td>
-                <?php if ($hasLabFlag): ?><td><?= !empty($r['is_laboratory']) ? 'Laboratory' : 'Lecture' ?></td><?php endif; ?>
-                <?php if ($hasYearLevel): ?><td><?= htmlspecialchars((string) ($r['year_level'] ?? '')) ?></td><?php endif; ?>
-                <?php if ($hasSection): ?><td><?= htmlspecialchars((string) ($r['section'] ?? '')) ?></td><?php endif; ?>
-                <td><?= htmlspecialchars((string) $r['department']) ?></td>
-                <td class="app-table-actions text-nowrap"><a class="btn btn-sm btn-outline-primary rounded-pill" href="courses.php?edit=<?= (int) $r['id'] ?>" aria-label="Edit course"<?= app_tooltip_attr('Opens this course for editing. Use this to fix codes, units, program, or classroom metadata.') ?>><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i><span class="visually-hidden">Edit</span></a>
+                <td class="courses-col-title"><?= htmlspecialchars((string) $r['course_name']) ?></td>
+                <td class="courses-col-units"><?= htmlspecialchars((string) ($r['lecture_units'] ?? $r['units'])) ?></td>
+                <td class="courses-col-units"><?= htmlspecialchars((string) ($r['laboratory_units'] ?? (!empty($r['is_laboratory']) ? $r['units'] : 0))) ?></td>
+                <?php if ($hasLabFlag): ?><td class="courses-col-type"><?= !empty($r['is_laboratory']) ? 'Laboratory' : 'Lecture' ?></td><?php endif; ?>
+                <?php if ($hasYearLevel): ?><td class="courses-col-year"><?= htmlspecialchars((string) ($r['year_level'] ?? '')) ?></td><?php endif; ?>
+                <?php if ($hasSection): ?><td class="courses-col-section"><?= htmlspecialchars((string) ($r['section'] ?? '')) ?></td><?php endif; ?>
+                <td class="courses-col-program"><?= htmlspecialchars((string) $r['department']) ?></td>
+                <td class="app-table-actions courses-col-actions text-nowrap"><a class="btn btn-sm btn-outline-primary rounded-pill" href="courses.php?edit=<?= (int) $r['id'] ?>" aria-label="Edit course"<?= app_tooltip_attr('Opens this course for editing. Use this to fix codes, units, program, or classroom metadata.') ?>><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i><span class="visually-hidden">Edit</span></a>
                     <form method="post" class="d-inline" onsubmit="return confirm('Delete this course?');"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int) $r['id'] ?>"><button type="submit" class="btn btn-sm btn-outline-danger rounded-pill" aria-label="Delete course"<?= app_tooltip_attr('Permanently removes this course after confirmation. Use this only if no schedules should reference it anymore.') ?>><i class="fa-solid fa-trash" aria-hidden="true"></i><span class="visually-hidden">Delete</span></button></form>
                 </td>
             </tr>
@@ -627,16 +825,16 @@ require_once __DIR__ . '/includes/header.php';
     <div class="app-card-body border-bottom">
         <p class="small text-muted mb-0">General Education subjects assigned to your college for scheduling and conflict monitoring. Official GE timetables are built under <strong>GEN ED → GE schedule</strong>; use <strong>Weekly view</strong> to watch live GE blocks alongside your college schedules.</p>
     </div>
-    <div class="table-responsive">
+    <div class="table-responsive courses-table-wrap">
         <table class="table app-table mb-0">
             <thead>
                 <tr>
-                    <th scope="col">Code</th>
-                    <th scope="col">Name</th>
-                    <th scope="col">Lecture units</th>
-                    <th scope="col">Laboratory units</th>
-                    <?php if ($hasLabFlag): ?><th scope="col">Type</th><?php endif; ?>
-                    <th scope="col">Program</th>
+                    <th scope="col" class="courses-col-code">Code</th>
+                    <th scope="col" class="courses-col-title">Name</th>
+                    <th scope="col" class="courses-col-units">Lecture units</th>
+                    <th scope="col" class="courses-col-units">Laboratory units</th>
+                    <?php if ($hasLabFlag): ?><th scope="col" class="courses-col-type">Type</th><?php endif; ?>
+                    <th scope="col" class="courses-col-program">Program</th>
                 </tr>
             </thead>
             <tbody>
@@ -647,12 +845,12 @@ require_once __DIR__ . '/includes/header.php';
             <?php else: ?>
                 <?php foreach ($geOfferings as $ge): ?>
                     <tr>
-                        <td><?= htmlspecialchars((string) $ge['course_code']) ?></td>
-                        <td><?= htmlspecialchars((string) $ge['course_name']) ?></td>
-                        <td><?= htmlspecialchars((string) ($ge['lecture_units'] ?? $ge['units'] ?? '')) ?></td>
-                        <td><?= htmlspecialchars((string) ($ge['laboratory_units'] ?? (!empty($ge['is_laboratory']) ? ($ge['units'] ?? '') : 0))) ?></td>
-                        <?php if ($hasLabFlag): ?><td><?= !empty($ge['is_laboratory']) ? 'Laboratory' : 'Lecture' ?></td><?php endif; ?>
-                        <td><?= htmlspecialchars((string) ($ge['department'] ?? 'General Education')) ?></td>
+                        <td class="courses-col-code"><?= htmlspecialchars((string) $ge['course_code']) ?></td>
+                        <td class="courses-col-title"><?= htmlspecialchars((string) $ge['course_name']) ?></td>
+                        <td class="courses-col-units"><?= htmlspecialchars((string) ($ge['lecture_units'] ?? $ge['units'] ?? '')) ?></td>
+                        <td class="courses-col-units"><?= htmlspecialchars((string) ($ge['laboratory_units'] ?? (!empty($ge['is_laboratory']) ? ($ge['units'] ?? '') : 0))) ?></td>
+                        <?php if ($hasLabFlag): ?><td class="courses-col-type"><?= !empty($ge['is_laboratory']) ? 'Laboratory' : 'Lecture' ?></td><?php endif; ?>
+                        <td class="courses-col-program"><?= htmlspecialchars((string) ($ge['department'] ?? 'General Education')) ?></td>
                     </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
@@ -663,4 +861,39 @@ require_once __DIR__ . '/includes/header.php';
 <?php endif; ?>
 
 </div>
+<script>
+(function () {
+    var selectAll = document.getElementById('courses-select-all');
+    var deleteBtn = document.getElementById('courses-bulk-delete-btn');
+    if (!selectAll || !deleteBtn) {
+        return;
+    }
+
+    var rowChecks = function () {
+        return Array.prototype.slice.call(document.querySelectorAll('.courses-row-select'));
+    };
+
+    var syncBulkDelete = function () {
+        var checks = rowChecks();
+        var selected = checks.filter(function (el) { return el.checked; });
+        deleteBtn.disabled = selected.length === 0;
+        selectAll.indeterminate = selected.length > 0 && selected.length < checks.length;
+        selectAll.checked = checks.length > 0 && selected.length === checks.length;
+    };
+
+    selectAll.addEventListener('change', function () {
+        var checked = selectAll.checked;
+        rowChecks().forEach(function (el) {
+            el.checked = checked;
+        });
+        syncBulkDelete();
+    });
+
+    rowChecks().forEach(function (el) {
+        el.addEventListener('change', syncBulkDelete);
+    });
+
+    syncBulkDelete();
+})();
+</script>
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

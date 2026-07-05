@@ -59,7 +59,7 @@ $topbarProfilePhotoUrl = profile_photo_url((int) ($u['id'] ?? 0));
     <aside class="admin-sidebar d-none d-lg-flex flex-column flex-shrink-0 no-print" aria-label="Main navigation">
         <div class="admin-sidebar-brand">
             <a class="admin-sidebar-brand-link" href="dashboard.php"<?= $appCursorTooltips ? app_tooltip_attr('Returns to your dashboard home. Use this when you want a quick way back from another page.') : '' ?>>
-                <span class="admin-sidebar-brand-icon"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i></span>
+                <span class="admin-sidebar-brand-icon"><img src="assets/wpu-logo.png" alt="WPU Logo" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;"></span>
                 <span class="admin-sidebar-brand-text">WPU SABLAe Portal</span>
             </a>
             <div class="admin-sidebar-brand-meta"><?= htmlspecialchars(app_sidebar_brand_meta($navRole)) ?></div>

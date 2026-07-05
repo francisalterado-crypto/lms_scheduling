@@ -84,7 +84,27 @@ if ($role === 'admin') {
 
 if (!$allowed) {
     http_response_code(403);
-    exit('You do not have access to this syllabus.');
+    echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Access Denied</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.05);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.notif{background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.12);padding:28px 36px;text-align:center;max-width:340px;animation:pop .3s ease}
+.notif .icon{width:48px;height:48px;margin:0 auto 14px;border-radius:50%;background:#fee2e2;display:flex;align-items:center;justify-content:center}
+.notif .icon svg{width:24px;height:24px;color:#dc2626}
+.notif h2{font-size:1rem;font-weight:600;color:#1f2937;margin-bottom:6px}
+.notif p{font-size:.85rem;color:#6b7280;margin-bottom:18px}
+.notif button{background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:.8rem;cursor:pointer;transition:background .2s}
+.notif button:hover{background:#2563eb}
+@keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+</style></head><body>
+<div class="notif">
+<div class="icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636"/></svg></div>
+<h2>Access Denied</h2>
+<p>You do not have access to this syllabus.</p>
+<button onclick="window.close()">Close</button>
+</div></body></html>';
+    exit;
 }
 
 $path = classroom_content_attachment_storage_path($storedName);
