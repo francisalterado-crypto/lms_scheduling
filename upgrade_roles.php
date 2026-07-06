@@ -67,6 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exec_safe($pdo, "ALTER TABLE users ADD COLUMN last_seen_at DATETIME NULL");
         exec_safe($pdo, "ALTER TABLE users ADD COLUMN last_logout_at DATETIME NULL");
         exec_safe($pdo, 'ALTER TABLE users ADD COLUMN profile_photo VARCHAR(80) NULL');
+        exec_safe($pdo, 'ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0');
         // Legacy installs used fk_users_college; that identifier can collide globally (errno 121) on some servers.
         exec_safe($pdo, 'ALTER TABLE users DROP FOREIGN KEY fk_users_college');
         exec_safe($pdo, "ALTER TABLE users ADD CONSTRAINT fk_sched_users_college_id FOREIGN KEY (college_id) REFERENCES colleges(id) ON DELETE SET NULL");

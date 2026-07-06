@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/mail_helpers.php';
+require_once __DIR__ . '/includes/account_registration_helpers.php';
 require_once __DIR__ . '/includes/admin_activity_log.php';
 
 require_role(['admin']);
@@ -80,10 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($plainForMail !== '') {
-            $mailOk = send_account_credentials_mail($email, $displayName, $uname, $plainForMail, 'gened');
-            $_SESSION['flash'] = $mailOk
-                ? 'GEN ED account updated. Password instructions sent to ' . $email . '.'
-                : 'GEN ED account updated, but email could not be sent. Check MAIL_* in config/config.php. Temporary password: ' . $plainForMail;
+            $mailOk = send_account_credentials_mail($email, $displayName, $uname, $plainForMail, 'gened', $email);
+            $_SESSION['flash'] = credentials_email_flash_message($mailOk, $email, 'GEN ED account updated');
         } else {
             $_SESSION['flash'] = 'GEN ED account updated.';
         }

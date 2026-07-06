@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS rooms (
     IF(COALESCE(is_gened,0) = 1,
        CONCAT('G|', room_code),
        CONCAT('C|', IFNULL(college_id, 0), '|', room_code))
-  ) STORED,
+  ) VIRTUAL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_rooms_scope (room_code_scope),
   KEY idx_room_code (room_code),

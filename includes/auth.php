@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/account_registration_helpers.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_name(SESSION_NAME);
@@ -50,6 +51,7 @@ function require_login(): void
     }
 
     auth_touch_user_presence((int) ($_SESSION['user_id'] ?? 0));
+    auth_enforce_password_change_if_required();
 }
 
 function current_user(): ?array

@@ -229,6 +229,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 null,
                                 $loginMeta
                             );
+                            $mustChangePassword = user_must_change_password((int) $user['id']);
+                            $_SESSION['must_change_password'] = $mustChangePassword;
+                            if ($mustChangePassword) {
+                                header('Location: settings.php?force_password=1');
+                                exit;
+                            }
                             header('Location: dashboard.php');
                             exit;
                         }

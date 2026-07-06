@@ -9,7 +9,7 @@ define('DB_HOST', '127.0.0.1');
 define('DB_PORT', 3306);
 define('DB_NAME', 'faculty_scheduling');
 define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_PASS', 'password');
 define('DB_CHARSET', 'utf8mb4');
 
 /** Default admin (used by install.php if no admin exists) */
@@ -36,12 +36,13 @@ define('SESSION_NAME', 'FSS_SESSION');
 define('BASE_PATH', dirname(__DIR__));
 
 /*
- * Email (Manage Deans — temporary passwords)
+ * Email (registration credentials + password resets)
  *
  * APP_BASE_URL: Site root in emails (no trailing slash). Used if MAIL_LOGIN_URL is not set.
  * MAIL_LOGIN_URL: Full URL to login.php (used in credential emails; button + plain-text link).
- * MAIL_ENABLED: Set false to skip sending (accounts still save; temp password may show in flash if send fails).
+ * MAIL_ENABLED: Set false to skip sending (accounts still save; admins see email-failure notice).
  * MAIL_FROM_ADDRESS / MAIL_FROM_NAME: Sender shown to recipients.
+ * MAIL_ORGANIZATION_NAME / MAIL_SUPPORT_CONTACT / MAIL_LOGO_URL: Registration email branding.
  *
  * Delivery options:
  * 1) Leave MAIL_SMTP_HOST empty — uses PHP mail() (Unix sendmail, or Windows php.ini SMTP).
@@ -54,6 +55,12 @@ define('MAIL_LOGIN_URL', 'http://localhost/CLASS/login.php');
 define('MAIL_ENABLED', false);
 define('MAIL_FROM_ADDRESS', 'noreply@example.com');
 define('MAIL_FROM_NAME', 'WPU SABLAe Portal');
+/** Organization name shown in registration credential emails. */
+define('MAIL_ORGANIZATION_NAME', 'WPU SABLAe Portal');
+/** Technical support line in credential emails (phone, email, or department). */
+define('MAIL_SUPPORT_CONTACT', 'IT Help Desk — helpdesk@example.com');
+/** Optional absolute URL to logo image for HTML emails (defaults to APP_BASE_URL/assets/logo.png). */
+define('MAIL_LOGO_URL', '');
 /** Empty = default PHP mail(). Google Workspace / Gmail: smtp.gmail.com:587 + app password (no spaces). */
 define('MAIL_SMTP_HOST', '');
 define('MAIL_SMTP_PORT', 587);

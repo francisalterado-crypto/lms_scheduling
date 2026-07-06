@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/mail_helpers.php';
+require_once __DIR__ . '/includes/account_registration_helpers.php';
 require_once __DIR__ . '/includes/admin_activity_log.php';
 
 require_role(['admin']);
@@ -18,22 +19,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $username = trim((string) $_POST['username']);
             $fullName = trim((string) $_POST['full_name']);
             $email = $hasUserEmail ? trim((string) ($_POST['email'] ?? '')) : '';
-            $sendByEmail = !empty($_POST['send_credentials_email']);
             $password = (string) ($_POST['password'] ?? '');
-            $plainForMail = '';
+            $hasValidEmail = $hasUserEmail && $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL);
 
             if ($username === '' || $fullName === '') {
                 throw new RuntimeException('Username and full name are required.');
             }
-            if ($hasUserEmail && $sendByEmail) {
-                if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    throw new RuntimeException('A valid email address is required to send the temporary password.');
-                }
-                $plainForMail = generate_temp_password();
-                $password = $plainForMail;
-            } elseif ($password === '') {
-                throw new RuntimeException('Password is required, or enable sending credentials by email.');
+            if ($hasUserEmail && $email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new RuntimeException('Invalid email address.');
             }
+
+            $cred = prepare_new_account_password($password, $hasValidEmail);
+            $password = $cred['plain'];
+            $plainForMail = $hasValidEmail ? $cred['plain'] : '';
 
             $exists = db()->prepare('SELECT COUNT(*) FROM users WHERE username=?');
             $exists->execute([$username]);
@@ -50,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 db()->prepare('INSERT INTO users (username,password,full_name,email,role,college_id,is_active) VALUES (?,?,?,?,?,?,?)')
                     ->execute([
                         $username,
-                        password_hash($password, PASSWORD_DEFAULT),
+                        $cred['hash'],
                         $fullName,
                         $email,
                         'dean',
@@ -61,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 db()->prepare('INSERT INTO users (username,password,full_name,role,college_id,is_active) VALUES (?,?,?,?,?,?)')
                     ->execute([
                         $username,
-                        password_hash($password, PASSWORD_DEFAULT),
+                        $cred['hash'],
                         $fullName,
                         'dean',
                         ($_POST['college_id'] ?? '') !== '' ? (int) $_POST['college_id'] : null,
@@ -83,17 +81,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             log_admin_activity('add', 'Deans', 'Dean user #' . $newId, null, $afterRow !== [] ? $afterRow : null);
 
-            $mailOk = false;
-            if ($hasUserEmail && $sendByEmail && $email !== '' && $plainForMail !== '') {
-                $mailOk = send_dean_credentials_mail($email, $fullName, $username, $plainForMail);
+            $mailOk = $hasValidEmail
+                ? notify_new_account_credentials($newId, $email, $fullName, $username, $plainForMail, 'dean')
+                : null;
+            if (!$hasValidEmail) {
+                mark_new_account_requires_password_change($newId);
             }
-            if ($hasUserEmail && $sendByEmail && $email !== '' && $plainForMail !== '') {
-                $_SESSION['flash'] = $mailOk
-                    ? 'Dean account created. Temporary password sent to ' . $email . '.'
-                    : 'Dean account created, but the email could not be sent. Check MAIL_* in config/config.php and your PHP mail setup. Temporary password: ' . $plainForMail;
-            } else {
-                $_SESSION['flash'] = 'Dean account created.';
-            }
+            $_SESSION['flash'] = registration_email_flash_message($mailOk, $email, 'Dean account');
         } elseif ($action === 'edit') {
             $id = (int) $_POST['id'];
             $fullName = trim((string) $_POST['full_name']);
@@ -157,10 +151,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($plainForMail !== '') {
-                $mailOk = send_dean_credentials_mail($email, $displayName, $uname, $plainForMail);
-                $_SESSION['flash'] = $mailOk
-                    ? 'Dean updated. Password instructions sent to ' . $email . '.'
-                    : 'Dean updated, but email could not be sent. Check mail configuration. Temporary password: ' . $plainForMail;
+                $mailOk = send_account_credentials_mail($email, $displayName, $uname, $plainForMail, 'dean', $email);
+                $_SESSION['flash'] = credentials_email_flash_message($mailOk, $email, 'Dean updated');
             } else {
                 $_SESSION['flash'] = 'Dean account updated.';
             }

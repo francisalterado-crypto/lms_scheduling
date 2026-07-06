@@ -38,12 +38,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $studentEmail = trim((string) ($approval['email'] ?? ''));
                 if ($studentEmail !== '' && filter_var($studentEmail, FILTER_VALIDATE_EMAIL)) {
                     $_SESSION['flash'] = !empty($approval['mail_sent'])
-                        ? 'Registration approved. Temporary password emailed to ' . $studentEmail . '.'
-                        : 'Registration approved, but the email could not be sent. Temporary password: '
-                            . (string) ($approval['temp_password'] ?? '');
+                        ? 'Registration approved. Login credentials sent to ' . $studentEmail . '.'
+                        : 'The account has been created successfully, but the email notification could not be sent.';
                 } else {
-                    $_SESSION['flash'] = 'Registration approved. No email on file — share credentials manually. Temporary password: '
-                        . (string) ($approval['temp_password'] ?? '');
+                    $_SESSION['flash'] = 'Registration approved. No email on file — share credentials manually with the student.';
                 }
             }
         } elseif ($action === 'reject' && $requestId > 0) {

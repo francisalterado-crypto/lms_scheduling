@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/mail_helpers.php';
+require_once __DIR__ . '/includes/account_registration_helpers.php';
 
 require_role(['program_chair']);
 $collegeId = dean_or_program_chair_college_id_or_fail();
@@ -86,24 +87,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fullName = trim((string) ($_POST['full_name'] ?? ''));
             $email = $hasUserEmail ? trim((string) ($_POST['email'] ?? '')) : '';
             $studentNumber = trim((string) ($_POST['student_number'] ?? ''));
-            $sendByEmail = $hasUserEmail && !empty($_POST['send_credentials_email']);
+            $hasValidEmail = $hasUserEmail && $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL);
             $plainForMail = '';
 
             if ($username === '' || $fullName === '') {
                 throw new RuntimeException('Username and full name are required.');
             }
-            if ($sendByEmail) {
-                if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    throw new RuntimeException('A valid email address is required to send the temporary password.');
-                }
-                $plainForMail = generate_temp_password();
-                $password = $plainForMail;
-            } elseif ($password === '' || strlen($password) < 8) {
-                throw new RuntimeException('Password is required and must be at least 8 characters, or enable sending credentials by email.');
-            }
             if ($hasUserEmail && $email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 throw new RuntimeException('Invalid email address.');
             }
+
+            $cred = prepare_new_account_password($password, $hasValidEmail);
+            $password = $cred['plain'];
+            $plainForMail = $hasValidEmail ? $cred['plain'] : '';
 
             $exists = db()->prepare('SELECT COUNT(*) FROM users WHERE username=?');
             $exists->execute([$username]);
@@ -119,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      VALUES (?,?,?,?,?,?,?,1)'
                 )->execute([
                     $username,
-                    password_hash($password, PASSWORD_DEFAULT),
+                    $cred['hash'],
                     $fullName,
                     $email,
                     'student',
@@ -132,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      VALUES (?,?,?,?,?,?,1)'
                 )->execute([
                     $username,
-                    password_hash($password, PASSWORD_DEFAULT),
+                    $cred['hash'],
                     $fullName,
                     'student',
                     $programScope,
@@ -153,17 +149,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             db()->commit();
             log_dean_activity('student_create', 'Created student login for program ' . $programScope . ': ' . $username);
 
-            $mailOk = false;
-            if ($hasUserEmail && $sendByEmail && $email !== '' && $plainForMail !== '') {
-                $mailOk = send_account_credentials_mail($email, $fullName, $username, $plainForMail, 'student');
+            $mailOk = $hasValidEmail
+                ? notify_new_account_credentials($uid, $email, $fullName, $username, $plainForMail, 'student')
+                : null;
+            if (!$hasValidEmail) {
+                mark_new_account_requires_password_change($uid);
             }
-            if ($hasUserEmail && $sendByEmail && $email !== '' && $plainForMail !== '') {
-                $_SESSION['flash'] = $mailOk
-                    ? 'Student account created. Temporary password sent to ' . $email . '.'
-                    : 'Student account created, but the email could not be sent. Temporary password: ' . $plainForMail;
-            } else {
-                $_SESSION['flash'] = 'Student account created. Share their username and password, then they can join classes with each instructor’s class code.';
-            }
+            $_SESSION['flash'] = registration_email_flash_message($mailOk, $email, 'Student account');
         } elseif ($action === 'edit' && isset($_POST['id'])) {
             $userId = (int) $_POST['id'];
             $fullName = trim((string) ($_POST['full_name'] ?? ''));
@@ -248,10 +240,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             log_dean_activity('student_update', 'Updated student user #' . $userId);
             if ($plainForMail !== '') {
-                $mailOk = send_account_credentials_mail($email, $fullName, $uname, $plainForMail, 'student');
-                $_SESSION['flash'] = $mailOk
-                    ? 'Student updated. Password instructions sent to ' . $email . '.'
-                    : 'Student updated, but email could not be sent. Temporary password: ' . $plainForMail;
+                $mailOk = send_account_credentials_mail($email, $fullName, $uname, $plainForMail, 'student', $email);
+                $_SESSION['flash'] = credentials_email_flash_message($mailOk, $email, 'Student updated');
             } else {
                 $_SESSION['flash'] = 'Student updated.';
             }
@@ -397,6 +387,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                     db()->commit();
                     $created++;
+
+                    $hasRowEmail = $hasUserEmail && $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL);
+                    if ($hasRowEmail) {
+                        notify_new_account_credentials($uid, $email, $fullName, $username, $password, 'student');
+                    } else {
+                        mark_new_account_requires_password_change($uid);
+                    }
                 } catch (Throwable $rowEx) {
                     if (db()->inTransaction()) {
                         db()->rollBack();

@@ -10,6 +10,7 @@ const GE_PROGRAM_CHAIR_LABEL = 'General Education';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/mail_helpers.php';
+require_once __DIR__ . '/includes/account_registration_helpers.php';
 
 require_role(['dean']);
 $collegeId = dean_college_id_or_fail();
@@ -41,22 +42,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fullName = trim((string) ($_POST['full_name'] ?? ''));
             $assignedProgram = GE_PROGRAM_CHAIR_LABEL;
             $email = $hasUserEmail ? trim((string) ($_POST['email'] ?? '')) : '';
-            $sendByEmail = !empty($_POST['send_credentials_email']);
             $password = (string) ($_POST['password'] ?? '');
+            $hasValidEmail = $hasUserEmail && $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL);
             $plainForMail = '';
 
             if ($username === '' || $fullName === '') {
                 throw new RuntimeException('Username and full name are required.');
             }
-            if ($hasUserEmail && $sendByEmail) {
-                if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    throw new RuntimeException('A valid email address is required to send the temporary password.');
-                }
-                $plainForMail = generate_temp_password();
-                $password = $plainForMail;
-            } elseif ($password === '') {
-                throw new RuntimeException('Password is required, or enable sending credentials by email.');
+            if ($hasUserEmail && $email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new RuntimeException('Invalid email address.');
             }
+
+            $cred = prepare_new_account_password($password, $hasValidEmail);
+            $password = $cred['plain'];
+            $plainForMail = $hasValidEmail ? $cred['plain'] : '';
 
             $exists = db()->prepare('SELECT COUNT(*) FROM users WHERE username=?');
             $exists->execute([$username]);
@@ -69,22 +68,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ? 'INSERT INTO users (username,password,full_name,email,role,assigned_program,college_id,is_active) VALUES (?,?,?,?,?,?,?,?)'
                 : 'INSERT INTO users (username,password,full_name,role,assigned_program,college_id,is_active) VALUES (?,?,?,?,?,?,?)';
             $params = $hasUserEmail
-                ? [$username, password_hash($password, PASSWORD_DEFAULT), $fullName, $email, 'program_chair', $assignedProgram, $collegeId, !empty($_POST['is_active']) ? 1 : 0]
-                : [$username, password_hash($password, PASSWORD_DEFAULT), $fullName, 'program_chair', $assignedProgram, $collegeId, !empty($_POST['is_active']) ? 1 : 0];
+                ? [$username, $cred['hash'], $fullName, $email, 'program_chair', $assignedProgram, $collegeId, !empty($_POST['is_active']) ? 1 : 0]
+                : [$username, $cred['hash'], $fullName, 'program_chair', $assignedProgram, $collegeId, !empty($_POST['is_active']) ? 1 : 0];
             db()->prepare($sql)->execute($params);
+            $newGePcId = (int) db()->lastInsertId();
             log_dean_activity('gened_program_chair_create', 'Created GE program chair for ' . GE_PROGRAM_CHAIR_LABEL);
 
-            $mailOk = false;
-            if ($hasUserEmail && $sendByEmail && $email !== '' && $plainForMail !== '') {
-                $mailOk = send_account_credentials_mail($email, $fullName, $username, $plainForMail, 'program_chair');
+            $mailOk = $hasValidEmail
+                ? notify_new_account_credentials($newGePcId, $email, $fullName, $username, $plainForMail, 'program_chair')
+                : null;
+            if (!$hasValidEmail) {
+                mark_new_account_requires_password_change($newGePcId);
             }
-            if ($hasUserEmail && $sendByEmail && $email !== '' && $plainForMail !== '') {
-                $_SESSION['flash'] = $mailOk
-                    ? 'General Education Program Chair created. Temporary password sent to ' . $email . '.'
-                    : 'General Education Program Chair created, but email could not be sent. Temporary password: ' . $plainForMail;
-            } else {
-                $_SESSION['flash'] = 'General Education Program Chair account created.';
-            }
+            $_SESSION['flash'] = registration_email_flash_message($mailOk, $email, 'General Education Program Chair account');
         } elseif ($action === 'edit' && isset($_POST['id'])) {
             $id = (int) $_POST['id'];
             $fullName = trim((string) ($_POST['full_name'] ?? ''));
@@ -136,10 +132,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($plainForMail !== '') {
-                $mailOk = send_account_credentials_mail($email, $fullName, (string) $row['username'], $plainForMail, 'program_chair');
-                $_SESSION['flash'] = $mailOk
-                    ? 'General Education Program Chair updated. Password instructions sent to ' . $email . '.'
-                    : 'General Education Program Chair updated, but email could not be sent. Temporary password: ' . $plainForMail;
+                $mailOk = send_account_credentials_mail($email, $fullName, (string) $row['username'], $plainForMail, 'program_chair', $email);
+                $_SESSION['flash'] = credentials_email_flash_message($mailOk, $email, 'General Education Program Chair updated');
             } else {
                 $_SESSION['flash'] = 'General Education Program Chair updated.';
             }

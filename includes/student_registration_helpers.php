@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/mail_helpers.php';
+require_once __DIR__ . '/account_registration_helpers.php';
 
 function student_registration_table_ready(): bool
 {
@@ -337,7 +338,7 @@ function student_user_exists(string $username): bool
 }
 
 /**
- * @return array{email: string, mail_sent: bool, temp_password: string, already_approved?: bool}
+ * @return array{email: string, mail_sent: bool, user_id?: int, already_approved?: bool}
  */
 function approve_student_registration_request(int $requestId, int $chairUserId, int $collegeId, string $programScope): array
 {
@@ -360,7 +361,6 @@ function approve_student_registration_request(int $requestId, int $chairUserId, 
             return [
                 'email' => $email,
                 'mail_sent' => false,
-                'temp_password' => '',
                 'already_approved' => true,
             ];
         }
@@ -374,7 +374,7 @@ function approve_student_registration_request(int $requestId, int $chairUserId, 
 
     $plainPassword = generate_temp_password();
 
-    create_student_account(
+    $uid = create_student_account(
         $username,
         $plainPassword,
         $fullName,
@@ -396,13 +396,23 @@ function approve_student_registration_request(int $requestId, int $chairUserId, 
 
     $mailSent = false;
     if (db_column_exists('users', 'email') && $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $mailSent = send_account_credentials_mail($email, $fullName, $username, $plainPassword, 'student_registration');
+        $notifyResult = notify_new_account_credentials(
+            $uid,
+            $email,
+            $fullName,
+            $username,
+            $plainPassword,
+            'student_registration'
+        );
+        $mailSent = $notifyResult === true;
+    } else {
+        mark_new_account_requires_password_change($uid);
     }
 
     return [
         'email' => $email,
         'mail_sent' => $mailSent,
-        'temp_password' => $plainPassword,
+        'user_id' => $uid,
     ];
 }
 

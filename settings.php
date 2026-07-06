@@ -13,6 +13,7 @@ if (is_admin() || is_super_admin()) {
 
 $flash = $_SESSION['flash'] ?? '';
 unset($_SESSION['flash']);
+$forcePasswordChange = !empty($_SESSION['must_change_password']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $userId = (int) ($_SESSION['user_id'] ?? 0);
@@ -24,6 +25,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($settingsAction === 'upload_profile_photo') {
+            if ($forcePasswordChange) {
+                throw new RuntimeException('Please change your temporary password before updating your profile photo.');
+            }
             profile_photo_store($userId, $_FILES['profile_photo'] ?? []);
             log_user_activity(
                 'edit',
@@ -38,6 +42,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($settingsAction === 'remove_profile_photo') {
+            if ($forcePasswordChange) {
+                throw new RuntimeException('Please change your temporary password before updating your profile photo.');
+            }
             profile_photo_remove($userId);
             log_user_activity(
                 'edit',
@@ -78,6 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         db()->prepare('UPDATE users SET password = ? WHERE id = ?')
             ->execute([password_hash($newPassword, PASSWORD_DEFAULT), $userId]);
 
+        clear_must_change_password($userId);
+        unset($_SESSION['must_change_password']);
+
         log_user_activity(
             'edit',
             'Account',
@@ -86,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ['password' => '[changed]']
         );
         $_SESSION['flash'] = 'Password updated successfully.';
-        header('Location: settings.php');
+        header('Location: ' . ($forcePasswordChange ? 'dashboard.php' : 'settings.php'));
         exit;
     } catch (Throwable $e) {
         $_SESSION['flash'] = 'Error: ' . $e->getMessage();
@@ -115,7 +125,13 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 <h1 class="h3 mb-4"><i class="fa-solid fa-gear me-2 app-role-icon"></i>Account Settings</h1>
 <?php if ($flash): ?><div class="alert alert-info"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($forcePasswordChange): ?>
+<div class="alert alert-warning shadow-sm" style="max-width: 640px;">
+    <strong>Password change required.</strong> You signed in with a temporary password. Choose a new password below before using the rest of the system.
+</div>
+<?php endif; ?>
 
+<?php if (!$forcePasswordChange): ?>
 <div class="card shadow-sm mb-4" style="max-width: 640px;">
     <div class="card-header bg-white"><strong>Profile Photo</strong></div>
     <div class="card-body">
@@ -159,6 +175,7 @@ require_once __DIR__ . '/includes/header.php';
         <?php endif; ?>
     </div>
 </div>
+<?php endif; ?>
 
 <div class="card shadow-sm" style="max-width: 640px;">
     <div class="card-header bg-white"><strong>Change Password</strong></div>

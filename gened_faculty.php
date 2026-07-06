@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/admin_activity_log.php';
+require_once __DIR__ . '/includes/account_registration_helpers.php';
 
 require_role(['gened']);
 $hasEmploymentStatusColumn = db_column_exists('faculty', 'employment_status');
@@ -29,9 +30,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $username = trim((string) ($_POST['username'] ?? ''));
             $password = (string) ($_POST['password'] ?? '');
-            if ($username === '' || $password === '') {
-                throw new RuntimeException('Username and password are required for GE faculty account.');
+            $facultyEmail = trim((string) ($_POST['email'] ?? ''));
+            $fullName = trim((string) ($_POST['full_name'] ?? ''));
+            $hasValidEmail = $facultyEmail !== '' && filter_var($facultyEmail, FILTER_VALIDATE_EMAIL);
+
+            if ($username === '') {
+                throw new RuntimeException('Username is required.');
             }
+            if ($facultyEmail !== '' && !filter_var($facultyEmail, FILTER_VALIDATE_EMAIL)) {
+                throw new RuntimeException('Invalid email address.');
+            }
+
+            $cred = prepare_new_account_password($password, $hasValidEmail);
+            $password = $cred['plain'];
             $exists = db()->prepare('SELECT COUNT(*) FROM users WHERE username=?');
             $exists->execute([$username]);
             if ((int) $exists->fetchColumn() > 0) {
@@ -51,8 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             db()->prepare('INSERT INTO users (username,password,full_name,role,college_id,is_active) VALUES (?,?,?,?,?,?)')
                 ->execute([
                     $username,
-                    password_hash($password, PASSWORD_DEFAULT),
-                    trim((string) ($_POST['full_name'] ?? '')),
+                    $cred['hash'],
+                    $fullName,
                     'faculty',
                     null,
                     (($_POST['status'] ?? '') === 'inactive') ? 0 : 1,
@@ -65,9 +76,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 )->execute([
                     $uid,
                     $facultyCode,
-                    trim((string) ($_POST['full_name'] ?? '')),
+                    $fullName,
                     'General Education',
-                    trim((string) ($_POST['email'] ?? '')),
+                    $facultyEmail,
                     $maxHoursPerDay,
                     null,
                     (($_POST['status'] ?? '') === 'inactive') ? 'inactive' : 'active',
@@ -80,9 +91,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 )->execute([
                     $uid,
                     $facultyCode,
-                    trim((string) ($_POST['full_name'] ?? '')),
+                    $fullName,
                     'General Education',
-                    trim((string) ($_POST['email'] ?? '')),
+                    $facultyEmail,
                     $maxHoursPerDay,
                     null,
                     (($_POST['status'] ?? '') === 'inactive') ? 'inactive' : 'active',
@@ -97,7 +108,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stFa->execute([$newFacultyId]);
             $afterFac = $stFa->fetch(PDO::FETCH_ASSOC);
             log_user_activity('add', 'GE Faculty', 'GE Faculty #' . $newFacultyId, null, $afterFac ? (array) $afterFac : null);
-            $_SESSION['flash'] = 'GE faculty member added.';
+            $mailOk = $hasValidEmail
+                ? notify_new_account_credentials($uid, $facultyEmail, $fullName, $username, $password, 'faculty')
+                : null;
+            if (!$hasValidEmail) {
+                mark_new_account_requires_password_change($uid);
+            }
+            $_SESSION['flash'] = registration_email_flash_message($mailOk, $facultyEmail, 'GE faculty account');
         } elseif ($action === 'edit' && isset($_POST['id'])) {
             $allowedEmploymentStatuses = ['Permanent', 'Contract of Service', 'Temporary'];
             $employmentStatus = trim((string) ($_POST['employment_status'] ?? 'Permanent'));

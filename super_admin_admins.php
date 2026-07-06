@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/admin_activity_log.php';
+require_once __DIR__ . '/includes/account_registration_helpers.php';
 
 require_role(['super_admin']);
 
@@ -40,17 +41,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $email = $hasUserEmail ? trim((string) ($_POST['email'] ?? '')) : '';
             $adminLogTitle = $hasAdminLogTitle ? trim((string) ($_POST['admin_log_title'] ?? '')) : '';
             $password = (string) ($_POST['password'] ?? '');
+            $hasValidEmail = $hasUserEmail && $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL);
             $isActive = !empty($_POST['is_active']) ? 1 : 0;
 
             if ($username === '' || $fullName === '') {
                 throw new RuntimeException('Username and full name are required.');
             }
-            if ($password === '' || strlen($password) < 8) {
-                throw new RuntimeException('Password is required and must be at least 8 characters.');
-            }
             if ($hasUserEmail && $email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 throw new RuntimeException('Invalid email address.');
             }
+
+            $cred = prepare_new_account_password($password, $hasValidEmail);
+            $plainForMail = $hasValidEmail ? $cred['plain'] : '';
 
             $exists = db()->prepare('SELECT COUNT(*) FROM users WHERE username = ?');
             $exists->execute([$username]);
@@ -66,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fields = ['username', 'password', 'full_name'];
             $params = [
                 $username,
-                password_hash($password, PASSWORD_DEFAULT),
+                $cred['hash'],
                 $fullName,
             ];
             if ($hasUserEmail) {
@@ -102,7 +104,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             log_admin_activity('add', 'Administrator accounts', 'Admin user #' . $newId, null, $afterRow !== [] ? $afterRow : null);
 
-            $_SESSION['flash'] = 'Administrator account created.';
+            $mailOk = $hasValidEmail
+                ? notify_new_account_credentials($newId, $email, $fullName, $username, $plainForMail, 'admin')
+                : null;
+            if (!$hasValidEmail) {
+                mark_new_account_requires_password_change($newId);
+            }
+            $_SESSION['flash'] = registration_email_flash_message($mailOk, $email, 'Administrator account');
             header('Location: super_admin_admins.php');
             exit;
         }
