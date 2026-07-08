@@ -183,6 +183,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if (!$errors) {
+        $assignedFaculty = find_course_load_assigned_faculty($courseId, $semester, $schoolYear, $facultyId);
+        if ($assignedFaculty !== null) {
+            $errors[] = course_load_assignment_conflict_message($assignedFaculty, $courseId);
+        }
+    }
+
     $lectureRules = validate_schedule_rules($scheduleType, $days, $startTime, $endTime);
     foreach ($lectureRules['errors'] as $e) {
         $errors[] = $e;

@@ -8,6 +8,11 @@ require_once __DIR__ . '/includes/admin_activity_log.php';
 require_role(['dean', 'program_chair']);
 $collegeId = dean_or_program_chair_college_id_or_fail();
 $programScope = is_program_chair() ? program_scope_or_fail() : null;
+$scheduleFormOptions = [
+    'unlock_program' => true,
+    'all_college_programs' => true,
+];
+$effectiveProgramScope = $scheduleFormOptions['unlock_program'] ? null : $programScope;
 
 if (in_array($_SESSION['role'] ?? '', ['dean', 'program_chair'], true)) {
     $userId = (int) ($_SESSION['user_id'] ?? 0);
@@ -17,6 +22,7 @@ $hasLabFlag = db_column_exists('courses', 'is_laboratory');
 $hasProgramsTable = db_table_exists('programs');
 $hasYearLevel = db_column_exists('courses', 'year_level');
 $hasSection = db_column_exists('courses', 'section');
+$hasGeScheduleTargets = db_table_exists('ge_schedule_targets');
 
 $errors = [];
 $old = $_POST ?? [];
@@ -40,6 +46,7 @@ if (!isset($old['lecture_slot_room_id']) || !is_array($old['lecture_slot_room_id
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $courseCollegeId = $collegeId;
     $facultyId = (int) ($_POST['faculty_id'] ?? 0);
     $courseId = (int) ($_POST['course_id'] ?? 0);
     $roomId = (int) ($_POST['room_id'] ?? 0);
@@ -62,7 +69,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $requestOverride = !empty($_POST['request_admin_override']);
     $overrideReason = trim((string) ($_POST['override_reason'] ?? ''));
-    $selectedProgram = $programScope ?? trim((string) ($_POST['program'] ?? ''));
+    $selectedProgramRaw = trim((string) ($_POST['program'] ?? ''));
+    $selectedProgramParsed = schedule_program_option_parse($selectedProgramRaw);
+    $selectedProgram = $selectedProgramParsed['program_name'];
+    $selectedProgramCollegeId = $selectedProgramParsed['college_id'];
 
     if ($facultyId < 1 || $courseId < 1) {
         $errors[] = 'Please select faculty and course.';
@@ -73,24 +83,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $courseIsLab = false;
     $geProgramScope = is_ge_program_scope($programScope);
+    $targetCollegeId = 0;
+    $targetProgram = '';
+    $targetYearLevel = '';
+    $targetSection = '';
+    if ($geProgramScope) {
+        $targetCollegeId = (int) ($_POST['target_college_id'] ?? 0);
+        $targetProgram = trim((string) ($_POST['target_program'] ?? ''));
+        $targetYearLevel = trim((string) ($_POST['target_year_level'] ?? ''));
+        $targetSection = trim((string) ($_POST['target_section'] ?? ''));
+        if ($targetCollegeId < 1 || $targetProgram === '' || $targetYearLevel === '' || $targetSection === '') {
+            $errors[] = 'Target college, program, year level, and section are required for GE scheduling.';
+        }
+        if (!$hasGeScheduleTargets) {
+            $errors[] = 'Run upgrade_roles.php first to enable GE schedule targets.';
+        }
+    }
     if (!$errors) {
-        if ($geProgramScope && db_column_exists('faculty', 'is_gened')) {
-            $chk = db()->prepare("SELECT COUNT(*) FROM faculty WHERE id=? AND COALESCE(is_gened,0)=1 AND status='active'");
-            $chk->execute([$facultyId]);
-            if ((int) $chk->fetchColumn() < 1) {
-                $errors[] = 'Selected faculty is not a GE faculty member.';
-            }
-        } else {
-            $sql = 'SELECT COUNT(*) FROM faculty WHERE id=? AND college_id=?';
+        if ($geProgramScope) {
+            $sql = "SELECT COUNT(*) FROM faculty WHERE id=? AND college_id=? AND status='active'";
             $params = [$facultyId, $collegeId];
-            if ($programScope !== null) {
+            if ($effectiveProgramScope !== null) {
                 $sql .= " AND (department=? OR department='')";
-                $params[] = $programScope;
+                $params[] = $effectiveProgramScope;
             }
             $chk = db()->prepare($sql);
             $chk->execute($params);
             if ((int) $chk->fetchColumn() < 1) {
-                $errors[] = $programScope !== null
+                $errors[] = 'Selected faculty is not in your college GE program.';
+            }
+        } else {
+            $sql = 'SELECT COUNT(*) FROM faculty WHERE id=? AND college_id=?';
+            $params = [$facultyId, $collegeId];
+            if ($effectiveProgramScope !== null) {
+                $sql .= " AND (department=? OR department='')";
+                $params[] = $effectiveProgramScope;
+            }
+            $chk = db()->prepare($sql);
+            $chk->execute($params);
+            if ((int) $chk->fetchColumn() < 1) {
+                $errors[] = $effectiveProgramScope !== null
                     ? 'Selected faculty is outside your assigned program.'
                     : 'Selected faculty is not in your college.';
             }
@@ -108,53 +140,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($geRow) {
                 $courseOk = true;
                 $courseIsLab = $hasLabFlag && (int) ($geRow['is_laboratory'] ?? 0) === 1;
+            } elseif ($geProgramScope) {
+                $errors[] = 'Selected course is not a GE course offered to your college.';
             }
         }
 
-        if (!$courseOk && $hasLabFlag) {
-            $sql = 'SELECT is_laboratory FROM courses WHERE id=? AND college_id=?';
-            $params = [$courseId, $collegeId];
-            if ($programScope !== null) {
+        $courseCollegeId = $collegeId;
+        if (!$courseOk && !$geProgramScope && $hasLabFlag) {
+            $sql = 'SELECT is_laboratory, college_id FROM courses WHERE id=?';
+            $params = [$courseId];
+            if (!$scheduleFormOptions['all_college_programs']) {
+                $sql .= ' AND college_id=?';
+                $params[] = $collegeId;
+            }
+            if ($effectiveProgramScope !== null) {
                 $sql .= ' AND department=?';
-                $params[] = $programScope;
+                $params[] = $effectiveProgramScope;
             }
             $chk = db()->prepare($sql);
             $chk->execute($params);
-            $v = $chk->fetchColumn();
-            if ($v === false) {
-                $errors[] = $programScope !== null
+            $courseRow = $chk->fetch(PDO::FETCH_ASSOC);
+            if ($courseRow === false) {
+                $errors[] = $effectiveProgramScope !== null
                     ? 'Selected course is outside your assigned program.'
-                    : 'Selected course is not in your college.';
+                    : ($scheduleFormOptions['all_college_programs']
+                        ? 'Selected course is invalid.'
+                        : 'Selected course is not in your college.');
             } else {
                 $courseOk = true;
-                $courseIsLab = (int) $v === 1;
+                $courseCollegeId = (int) ($courseRow['college_id'] ?? $collegeId);
+                $courseIsLab = (int) ($courseRow['is_laboratory'] ?? 0) === 1;
             }
         } elseif (!$courseOk) {
-            $sql = 'SELECT COUNT(*) FROM courses WHERE id=? AND college_id=?';
-            $params = [$courseId, $collegeId];
-            if ($programScope !== null) {
+            $sql = 'SELECT college_id FROM courses WHERE id=?';
+            $params = [$courseId];
+            if (!$scheduleFormOptions['all_college_programs']) {
+                $sql .= ' AND college_id=?';
+                $params[] = $collegeId;
+            }
+            if ($effectiveProgramScope !== null) {
                 $sql .= ' AND department=?';
-                $params[] = $programScope;
+                $params[] = $effectiveProgramScope;
             }
             $chk = db()->prepare($sql);
             $chk->execute($params);
-            if ((int) $chk->fetchColumn() < 1) {
-                $errors[] = $programScope !== null
+            $courseCollegeId = (int) $chk->fetchColumn();
+            if ($courseCollegeId < 1) {
+                $errors[] = $effectiveProgramScope !== null
                     ? 'Selected course is outside your assigned program.'
-                    : 'Selected course is not in your college.';
+                    : ($scheduleFormOptions['all_college_programs']
+                        ? 'Selected course is invalid.'
+                        : 'Selected course is not in your college.');
             } else {
                 $courseOk = true;
             }
+        } else {
+            $chk = db()->prepare('SELECT college_id FROM courses WHERE id=?');
+            $chk->execute([$courseId]);
+            $resolvedCollegeId = (int) $chk->fetchColumn();
+            if ($resolvedCollegeId > 0) {
+                $courseCollegeId = $resolvedCollegeId;
+            }
         }
 
-        if ($hasProgramsTable && $selectedProgram !== '') {
-            $chk = db()->prepare("SELECT COUNT(*) FROM programs WHERE college_id=? AND program_name=? AND status='active'");
-            $chk->execute([$collegeId, $selectedProgram]);
-            if ((int) $chk->fetchColumn() < 1) {
-                $errors[] = 'Selected program is invalid for your college.';
+        if (!$geProgramScope && $hasProgramsTable && $selectedProgram !== '') {
+            if ($selectedProgramCollegeId > 0) {
+                $chk = db()->prepare("SELECT COUNT(*) FROM programs WHERE college_id=? AND program_name=? AND status='active'");
+                $chk->execute([$selectedProgramCollegeId, $selectedProgram]);
             } else {
-                $chk = db()->prepare('SELECT TRIM(department) FROM courses WHERE id=? AND college_id=?');
-                $chk->execute([$courseId, $collegeId]);
+                $chk = db()->prepare("SELECT COUNT(*) FROM programs WHERE program_name=? AND status='active'");
+                $chk->execute([$selectedProgram]);
+            }
+            if ((int) $chk->fetchColumn() < 1) {
+                $errors[] = 'Selected program is invalid.';
+            } else {
+                $chk = db()->prepare('SELECT TRIM(department) FROM courses WHERE id=?');
+                $chk->execute([$courseId]);
                 $courseDept = trim((string) $chk->fetchColumn());
                 if ($courseDept !== $selectedProgram) {
                     $errors[] = 'Selected course does not match the selected program.';
@@ -162,14 +223,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        if ($hasYearLevel && $hasSection) {
+        if (!$geProgramScope && $hasYearLevel && $hasSection) {
             $yearLevelPost = trim((string) ($_POST['year_level'] ?? ''));
             $sectionPost = trim((string) ($_POST['section'] ?? ''));
             if ($yearLevelPost === '' || $sectionPost === '') {
                 $errors[] = 'Year level and section are required.';
             } else {
-                $chk = db()->prepare('SELECT year_level, section FROM courses WHERE id=? AND college_id=?');
-                $chk->execute([$courseId, $collegeId]);
+                $chk = db()->prepare('SELECT year_level, section FROM courses WHERE id=?');
+                $chk->execute([$courseId]);
                 $crow = $chk->fetch();
                 if ($crow) {
                     $cy = trim((string) ($crow['year_level'] ?? ''));
@@ -179,6 +240,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
+        }
+
+        if ($geProgramScope && $targetCollegeId > 0 && !$errors) {
+            $chk = db()->prepare("SELECT COUNT(*) FROM colleges WHERE id=? AND status='active'");
+            $chk->execute([$targetCollegeId]);
+            if ((int) $chk->fetchColumn() < 1) {
+                $errors[] = 'Selected target college is invalid.';
+            }
+            $chk = db()->prepare("SELECT COUNT(*) FROM programs WHERE college_id=? AND program_name=? AND status='active'");
+            $chk->execute([$targetCollegeId, $targetProgram]);
+            if ((int) $chk->fetchColumn() < 1) {
+                $errors[] = 'Selected target program is invalid for the chosen college.';
+            }
+        }
+    }
+
+    if (!$errors) {
+        $geTargetForLoad = null;
+        if ($geProgramScope && $targetCollegeId > 0 && $targetProgram !== '' && $targetYearLevel !== '' && $targetSection !== '') {
+            $geTargetForLoad = [
+                'college_id' => $targetCollegeId,
+                'program_name' => $targetProgram,
+                'year_level' => $targetYearLevel,
+                'section' => $targetSection,
+            ];
+        }
+        $assignedFaculty = find_course_load_assigned_faculty($courseId, $semester, $schoolYear, $facultyId, $geTargetForLoad);
+        if ($assignedFaculty !== null) {
+            $errors[] = course_load_assignment_conflict_message($assignedFaculty, $courseId, $geTargetForLoad);
         }
     }
 
@@ -313,6 +403,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $segmentCross[$idx] = $cross;
             }
             $allConflicts[$idx] = $conflicts;
+
+            if ($geProgramScope && $targetCollegeId > 0 && $targetProgram !== '') {
+                $stBlock = db()->prepare(
+                    'SELECT s.id, s.day_of_week, s.start_time, s.end_time, c.course_code
+                     FROM schedules s
+                     INNER JOIN courses c ON c.id = s.course_id
+                     WHERE s.college_id = ?
+                       AND s.semester = ?
+                       AND s.school_year = ?
+                       AND c.department = ?
+                       AND c.year_level = ?
+                       AND c.section = ?'
+                );
+                $stBlock->execute([$targetCollegeId, $semester, $schoolYear, $targetProgram, $targetYearLevel, $targetSection]);
+                $stMin = time_to_minutes((string) $seg['start_time']);
+                $enMin = time_to_minutes((string) $seg['end_time']);
+                foreach ($stBlock->fetchAll() as $br) {
+                    $existingDays = parse_day_set((string) $br['day_of_week']);
+                    if (!array_intersect($seg['days'], $existingDays)) {
+                        continue;
+                    }
+                    $rowStart = time_to_minutes((string) $br['start_time']);
+                    $rowEnd = time_to_minutes((string) $br['end_time']);
+                    if (intervals_overlap($stMin, $enMin, $rowStart, $rowEnd)) {
+                        $errors[] = $seg['label'] . ': Target block conflict — ' . $targetProgram . ' Y' . $targetYearLevel . '-' . $targetSection
+                            . ' already has ' . $br['course_code'] . ' at this time.';
+                        break;
+                    }
+                }
+                if ($hasGeScheduleTargets && !$errors) {
+                    $stTarget = db()->prepare(
+                        'SELECT s.id, s.day_of_week, s.start_time, s.end_time, c.course_code
+                         FROM ge_schedule_targets gst
+                         INNER JOIN schedules s ON s.id = gst.schedule_id
+                         INNER JOIN courses c ON c.id = s.course_id
+                         WHERE gst.college_id = ?
+                           AND gst.program_name = ?
+                           AND gst.year_level = ?
+                           AND gst.section = ?
+                           AND s.semester = ?
+                           AND s.school_year = ?'
+                    );
+                    $stTarget->execute([$targetCollegeId, $targetProgram, $targetYearLevel, $targetSection, $semester, $schoolYear]);
+                    foreach ($stTarget->fetchAll() as $tr) {
+                        $existingDays = parse_day_set((string) $tr['day_of_week']);
+                        if (!array_intersect($seg['days'], $existingDays)) {
+                            continue;
+                        }
+                        $rowStart = time_to_minutes((string) $tr['start_time']);
+                        $rowEnd = time_to_minutes((string) $tr['end_time']);
+                        if (intervals_overlap($stMin, $enMin, $rowStart, $rowEnd)) {
+                            $errors[] = $seg['label'] . ': GE block conflict — another GE schedule (' . $tr['course_code'] . ') already targets '
+                                . $targetProgram . ' Y' . $targetYearLevel . '-' . $targetSection . ' at this time.';
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         if ($segmentCross && !$requestOverride) {
@@ -376,6 +524,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $newId = (int) db()->lastInsertId();
             $createdIds[] = $newId;
+            if ($geProgramScope && $hasGeScheduleTargets && $targetCollegeId > 0 && $targetProgram !== '') {
+                db()->prepare(
+                    'INSERT INTO ge_schedule_targets (schedule_id, college_id, program_name, year_level, section)
+                     VALUES (?,?,?,?,?)'
+                )->execute([$newId, $targetCollegeId, $targetProgram, $targetYearLevel, $targetSection]);
+            }
             if (!empty($allConflicts[$idx])) {
                 log_conflicts($newId, $allConflicts[$idx], false);
             }
@@ -456,7 +610,7 @@ require_once __DIR__ . '/includes/header.php';
                     'lab_end_time' => '16:00:00',
                 ];
             }
-            render_schedule_form($defaults);
+            render_schedule_form($defaults, $scheduleFormOptions);
             ?>
             <div class="mt-4 p-3 border rounded bg-light">
                 <div class="d-flex align-items-center justify-content-between mb-2">

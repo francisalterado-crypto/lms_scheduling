@@ -3,17 +3,156 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/admin_activity_log.php';
 
 require_role(['admin', 'dean', 'program_chair', 'gened', 'faculty']);
 $role = (string) ($_SESSION['role'] ?? '');
 $collegeId = current_college_id();
 $programScope = is_program_chair() ? program_scope_or_fail() : null;
+if (is_dean()) {
+    $collegeId = dean_college_id_or_fail();
+} elseif (is_program_chair()) {
+    $collegeId = dean_or_program_chair_college_id_or_fail();
+}
 $facultySelfId = isset($_SESSION['faculty_id']) ? (int) $_SESSION['faculty_id'] : 0;
 
 $sem = trim((string) ($_GET['semester'] ?? ''));
 $sy = trim((string) ($_GET['school_year'] ?? ''));
 $facultySearch = trim((string) ($_GET['faculty_search'] ?? ''));
 $adminCollegeId = (int) ($_GET['college_id'] ?? 0);
+
+$reportsListParams = array_filter([
+    'semester' => $sem !== '' ? $sem : null,
+    'school_year' => $sy !== '' ? $sy : null,
+    'faculty_search' => ($facultySearch !== '' && $role !== 'faculty') ? $facultySearch : null,
+    'college_id' => ($role === 'admin' && $adminCollegeId > 0) ? (string) $adminCollegeId : null,
+], static fn ($v) => $v !== null && $v !== '');
+$reportsListUrl = 'reports.php' . ($reportsListParams !== [] ? '?' . http_build_query($reportsListParams) : '');
+
+$flash = $_SESSION['flash'] ?? '';
+unset($_SESSION['flash']);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_ids'])) {
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', preg_split('/\s*,\s*/', (string) $_POST['delete_ids']))
+    )));
+    $deletedCount = 0;
+    $lastMessage = '';
+
+    foreach ($ids as $sid) {
+        if ($sid < 1) {
+            continue;
+        }
+        if (is_admin()) {
+            $snap = db()->prepare(
+                'SELECT s.id, s.faculty_id, s.course_id, s.room_id, s.college_id, s.semester, s.school_year,
+                        s.day_of_week, s.start_time, s.end_time, s.schedule_type,
+                        f.full_name AS faculty_name, c.course_code, c.course_name, r.room_code,
+                        COALESCE(col.college_code, "") AS college_code
+                 FROM schedules s
+                 INNER JOIN faculty f ON f.id = s.faculty_id
+                 INNER JOIN courses c ON c.id = s.course_id
+                 INNER JOIN rooms r ON r.id = s.room_id
+                 LEFT JOIN colleges col ON col.id = s.college_id
+                 WHERE s.id = ? LIMIT 1'
+            );
+            $snap->execute([$sid]);
+            $schedBefore = $snap->fetch(PDO::FETCH_ASSOC);
+            $stmt = db()->prepare('DELETE FROM schedules WHERE id=?');
+            $stmt->execute([$sid]);
+            if ($schedBefore) {
+                log_admin_activity(
+                    'delete',
+                    'Schedules',
+                    'Schedule #' . $sid,
+                    (array) $schedBefore,
+                    null
+                );
+                $deletedCount++;
+            }
+            $lastMessage = 'Course schedule deleted by admin emergency override.';
+        } elseif ((is_dean() || is_program_chair()) && $collegeId) {
+            $check = db()->prepare(
+                'SELECT s.id, COALESCE(u.role, "") AS creator_role, c.department AS course_dept
+                 FROM schedules s
+                 INNER JOIN courses c ON c.id = s.course_id
+                 LEFT JOIN users u ON u.id = s.created_by
+                 WHERE s.id=? AND s.college_id=? LIMIT 1'
+            );
+            $check->execute([$sid, $collegeId]);
+            $row = $check->fetch();
+            if (!$row) {
+                $lastMessage = 'Schedule not found.';
+            } elseif ($programScope !== null && trim((string) ($row['course_dept'] ?? '')) !== $programScope) {
+                $lastMessage = 'This schedule is outside your assigned program.';
+            } elseif ((string) $row['creator_role'] === 'gened') {
+                $lastMessage = 'This GE-created schedule is read-only for Deans.';
+            } else {
+                $snapPc = db()->prepare(
+                    'SELECT s.id, s.faculty_id, s.course_id, s.room_id, s.college_id, s.semester, s.school_year,
+                            s.day_of_week, s.start_time, s.end_time, s.schedule_type,
+                            f.full_name AS faculty_name, c.course_code, c.course_name, r.room_code
+                     FROM schedules s
+                     INNER JOIN faculty f ON f.id = s.faculty_id
+                     INNER JOIN courses c ON c.id = s.course_id
+                     INNER JOIN rooms r ON r.id = s.room_id
+                     WHERE s.id = ? AND s.college_id = ? LIMIT 1'
+                );
+                $snapPc->execute([$sid, $collegeId]);
+                $schedBeforePc = $snapPc->fetch(PDO::FETCH_ASSOC);
+                $stmt = db()->prepare('DELETE FROM schedules WHERE id=? AND college_id=?');
+                $stmt->execute([$sid, $collegeId]);
+                if ($schedBeforePc) {
+                    log_user_activity('delete', 'Schedules', 'Schedule #' . $sid, (array) $schedBeforePc, null);
+                    $deletedCount++;
+                }
+                log_dean_activity('schedule_delete', 'Deleted schedule #' . $sid);
+                $lastMessage = 'Course schedule deleted.';
+            }
+        } elseif (is_gened()) {
+            $snapGe = db()->prepare(
+                'SELECT s.id, s.faculty_id, s.course_id, s.room_id, s.college_id, s.semester, s.school_year,
+                        s.day_of_week, s.start_time, s.end_time, s.schedule_type,
+                        f.full_name AS faculty_name, c.course_code, c.course_name, r.room_code
+                 FROM schedules s
+                 INNER JOIN users u ON u.id = s.created_by
+                 INNER JOIN faculty f ON f.id = s.faculty_id
+                 INNER JOIN courses c ON c.id = s.course_id
+                 INNER JOIN rooms r ON r.id = s.room_id
+                 WHERE s.id = ? AND u.role = "gened" LIMIT 1'
+            );
+            $snapGe->execute([$sid]);
+            $schedBeforeGe = $snapGe->fetch(PDO::FETCH_ASSOC);
+            $stmt = db()->prepare(
+                'DELETE s FROM schedules s
+                 INNER JOIN users u ON u.id = s.created_by
+                 WHERE s.id=? AND u.role="gened"'
+            );
+            $stmt->execute([$sid]);
+            if ($stmt->rowCount() > 0 && $schedBeforeGe) {
+                log_user_activity('delete', 'Schedules', 'Schedule #' . $sid, (array) $schedBeforeGe, null);
+                $deletedCount++;
+                $lastMessage = 'GE course schedule deleted.';
+            } else {
+                $lastMessage = 'Only GE-created schedules can be deleted by GEN ED account.';
+            }
+        }
+    }
+
+    if ($deletedCount > 0) {
+        $_SESSION['flash'] = $deletedCount === 1
+            ? ($lastMessage !== '' ? $lastMessage : 'Schedule deleted.')
+            : 'Course schedule deleted (' . $deletedCount . ' rows).';
+    } elseif ($lastMessage !== '') {
+        $_SESSION['flash'] = $lastMessage;
+    } else {
+        $_SESSION['flash'] = 'No schedule rows were deleted.';
+    }
+    header('Location: ' . $reportsListUrl);
+    exit;
+}
+
+$canDeleteSchedules = is_admin() || is_dean() || is_program_chair() || is_gened();
 
 $collegeFilterOptions = [];
 if ($role === 'admin') {
@@ -25,6 +164,8 @@ if ($role === 'admin') {
 $hasLectureUnits = db_column_exists('courses', 'lecture_units');
 $hasLaboratoryUnits = db_column_exists('courses', 'laboratory_units');
 $hasIsGenedCourse = db_column_exists('courses', 'is_gened');
+$hasGeTargetsTable = db_table_exists('ge_schedule_targets');
+$targetJoin = $hasGeTargetsTable ? ' LEFT JOIN ge_schedule_targets gst ON gst.schedule_id = s.id ' : '';
 
 $courseUnitsSelect = ', c.units AS course_units_total';
 if ($hasLectureUnits) {
@@ -34,21 +175,22 @@ if ($hasLaboratoryUnits) {
     $courseUnitsSelect .= ', c.laboratory_units';
 }
 
-$sql = "SELECT s.*, f.full_name AS faculty_name, f.department AS fac_dept, c.course_code, c.course_name, c.department AS course_dept, r.room_code, r.type AS room_type
+$sql = "SELECT s.*, f.full_name AS faculty_name, f.department AS fac_dept, c.course_code, c.course_name, c.department AS course_dept, r.room_code, r.type AS room_type,
+        COALESCE(u.role, '') AS creator_role
         {$courseUnitsSelect}
         FROM schedules s
         INNER JOIN faculty f ON f.id = s.faculty_id
         INNER JOIN courses c ON c.id = s.course_id
         INNER JOIN rooms r ON r.id = s.room_id
+        LEFT JOIN users u ON u.id = s.created_by
+        {$targetJoin}
         WHERE 1=1";
 $params = [];
 if ($role === 'dean' && $collegeId) {
-    $sql .= ' AND s.college_id = ?';
-    $params[] = $collegeId;
+    $hasIsGenedCourseCol = db_column_exists('courses', 'is_gened');
+    $sql .= dean_schedule_scope_sql($collegeId, $hasIsGenedCourseCol, $params, $hasGeTargetsTable);
 } elseif ($programScope !== null && $collegeId) {
-    $sql .= ' AND s.college_id = ? AND c.department = ?';
-    $params[] = $collegeId;
-    $params[] = $programScope;
+    $sql .= program_chair_schedule_scope_sql($collegeId, $programScope, $hasGeTargetsTable, $params);
 } elseif ($role === 'faculty' && $facultySelfId > 0) {
     $sql .= ' AND s.faculty_id = ?';
     $params[] = $facultySelfId;
@@ -64,6 +206,13 @@ if ($role === 'gened') {
     } else {
         $sql .= ' AND c.department = ?';
         $params[] = 'General Education';
+    }
+}
+if (is_program_chair()) {
+    if ($hasIsGenedCourse) {
+        $sql .= ' AND COALESCE(c.is_gened, 0) = 0';
+    } else {
+        $sql .= ' AND COALESCE(u.role, "") != "gened"';
     }
 }
 if ($facultySearch !== '' && $role !== 'faculty') {
@@ -118,9 +267,6 @@ $sessionHoursBetween = static function (?string $start, ?string $end): float {
     return round($secs / 3600, 2);
 };
 
-// One class block with this many hours or more counts as LAB; shorter blocks count as LEC (not by room type).
-$labSessionMinHours = 3.0;
-
 $courseTotalUnits = static function (array $row) use ($hasLectureUnits, $hasLaboratoryUnits): float {
     if ($hasLectureUnits && $hasLaboratoryUnits) {
         return (float) ($row['lecture_units'] ?? 0) + (float) ($row['laboratory_units'] ?? 0);
@@ -140,7 +286,6 @@ $scheduleOfferingKey = static function (array $row): string {
 $mergeOfferingRows = static function (array $group) use (
     $courseTotalUnits,
     $sessionHoursBetween,
-    $labSessionMinHours,
     $formatTime12h
 ): array {
     $r0 = $group[0];
@@ -157,7 +302,11 @@ $mergeOfferingRows = static function (array $group) use (
             $dayCount = 1;
         }
         $hours = $sessionH * $dayCount;
-        if ($sessionH >= $labSessionMinHours) {
+        if (schedule_session_is_laboratory(
+            (string) ($r['start_time'] ?? ''),
+            (string) ($r['end_time'] ?? ''),
+            (string) ($r['room_type'] ?? '')
+        )) {
             $labHours += $hours;
         } else {
             $lecHours += $hours;
@@ -194,7 +343,19 @@ require_once __DIR__ . '/includes/header.php';
     <button type="button" class="btn btn-outline-secondary no-print" onclick="window.print()"<?= app_tooltip_attr('Prints the report using your browser. Use this for a clean paper or PDF copy.') ?>><i class="fa-solid fa-print me-1"></i>Print</button>
 </div>
 <?php if ($programScope !== null): ?>
-    <p class="text-muted">Program scope: <strong><?= htmlspecialchars($programScope) ?></strong></p>
+    <p class="text-muted">
+        Program scope: <strong><?= htmlspecialchars($programScope) ?></strong>.
+        <?php if (is_program_chair()): ?>
+            Includes courses in this program and loads for your program&rsquo;s faculty (including subjects the Dean assigned in other programs). GE schedules are excluded.
+        <?php endif; ?>
+    </p>
+<?php endif; ?>
+
+<?php if ($flash): ?>
+    <div class="alert alert-success alert-dismissible fade show no-print">
+        <?= htmlspecialchars($flash) ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"<?= app_tooltip_attr('Dismisses this success notice after you have read it.') ?>></button>
+    </div>
 <?php endif; ?>
 
 <form class="row g-2 mb-4 no-print align-items-end" method="get">
@@ -278,6 +439,9 @@ require_once __DIR__ . '/includes/header.php';
                             <th>Days</th>
                             <th>Time</th>
                             <th>Room</th>
+                            <?php if ($canDeleteSchedules): ?>
+                                <th class="no-print text-end">Delete</th>
+                            <?php endif; ?>
                         </tr>
                     </thead>
                     <tbody>
@@ -306,6 +470,31 @@ require_once __DIR__ . '/includes/header.php';
                                 <td><?= htmlspecialchars($merged['day_display']) ?></td>
                                 <td><?= htmlspecialchars($merged['time_display']) ?></td>
                                 <td><?= htmlspecialchars($merged['room_display']) ?></td>
+                                <?php if ($canDeleteSchedules): ?>
+                                    <?php
+                                    $deletableIds = [];
+                                    foreach ($group as $r) {
+                                        $isGeCreated = ((string) ($r['creator_role'] ?? '') === 'gened');
+                                        $courseInProgram = $programScope === null
+                                            || trim((string) ($r['course_dept'] ?? '')) === $programScope;
+                                        $canDeleteRow = is_admin()
+                                            || (is_dean() && !$isGeCreated)
+                                            || (is_program_chair() && !$isGeCreated && $courseInProgram)
+                                            || (is_gened() && $isGeCreated);
+                                        if ($canDeleteRow) {
+                                            $deletableIds[] = (int) $r['id'];
+                                        }
+                                    }
+                                    ?>
+                                    <td class="no-print text-end text-nowrap">
+                                        <?php if ($deletableIds !== []): ?>
+                                            <form method="post" action="<?= htmlspecialchars($reportsListUrl) ?>" class="d-inline" onsubmit="return confirm('Delete all schedule rows for this course (lecture and laboratory)?');">
+                                                <input type="hidden" name="delete_ids" value="<?= htmlspecialchars(implode(',', $deletableIds)) ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger"<?= app_tooltip_attr('Deletes all schedule rows for this course offering (lecture and laboratory) after confirmation.') ?>><i class="fa-solid fa-trash"></i></button>
+                                            </form>
+                                        <?php endif; ?>
+                                    </td>
+                                <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>
                         <tr class="table-light fw-semibold">
@@ -314,7 +503,7 @@ require_once __DIR__ . '/includes/header.php';
                             <td class="text-end"><?= htmlspecialchars(number_format($facultyLecHours, 1)) ?></td>
                             <td class="text-end"><?= htmlspecialchars(number_format($facultyLabHours, 1)) ?></td>
                             <td class="text-end"><?= htmlspecialchars(number_format($facultyLecHours + $facultyLabHours, 1)) ?></td>
-                            <td colspan="3"></td>
+                            <td colspan="<?= $canDeleteSchedules ? 4 : 3 ?>"></td>
                         </tr>
                     </tbody>
                 </table>

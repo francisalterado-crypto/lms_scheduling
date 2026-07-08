@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Super Admin: weekly teaching contact hours by program (faculty.department),
  * flagged under load (<18 hrs/week) or overload (>27). Uses the same weekly
- * hour rules as faculty_teaching_load (session length × meeting days; lab if block ≥ 3h).
+ * hour rules as faculty_teaching_load (session length × meeting days; lab if lab room or ~3-hour block).
  */
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
@@ -46,10 +46,11 @@ $sql = "SELECT s.id, s.faculty_id, s.course_id, s.college_id AS sched_college_id
         s.semester, s.school_year,
         s.start_time, s.end_time, s.day_of_week,
         f.full_name AS faculty_name, f.department AS faculty_department,
-        c.course_code{$courseUnitsSelect}
+        c.course_code, r.type AS room_type{$courseUnitsSelect}
         FROM schedules s
         INNER JOIN faculty f ON f.id = s.faculty_id
         INNER JOIN courses c ON c.id = s.course_id
+        INNER JOIN rooms r ON r.id = s.room_id
         WHERE 1=1";
 $params = [];
 if ($adminCollegeId > 0) {
@@ -70,7 +71,6 @@ $stmt = db()->prepare($sql);
 $stmt->execute($params);
 $schedRows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-$labSessionMinHours = 3.0;
 $sessionHoursBetween = static function (string $start, string $end): float {
     $rawS = substr($start, 0, 8);
     $rawE = substr($end, 0, 8);
@@ -86,7 +86,7 @@ $sessionHoursBetween = static function (string $start, string $end): float {
     return round($secs / 3600, 2);
 };
 
-$weeklyContactFromGroup = static function (array $group) use ($sessionHoursBetween, $labSessionMinHours): array {
+$weeklyContactFromGroup = static function (array $group) use ($sessionHoursBetween): array {
     $lec = 0.0;
     $lab = 0.0;
     foreach ($group as $r) {
@@ -96,7 +96,11 @@ $weeklyContactFromGroup = static function (array $group) use ($sessionHoursBetwe
             $dayCount = 1;
         }
         $weeklyH = $h * $dayCount;
-        if ($h >= $labSessionMinHours) {
+        if (schedule_session_is_laboratory(
+            (string) ($r['start_time'] ?? ''),
+            (string) ($r['end_time'] ?? ''),
+            (string) ($r['room_type'] ?? '')
+        )) {
             $lab += $weeklyH;
         } else {
             $lec += $weeklyH;
@@ -151,11 +155,17 @@ foreach ($schedRows as $r) {
 foreach ($scheduleListGroups as &$g) {
     usort(
         $g,
-        static function (array $a, array $b) use ($sessionHoursBetween, $labSessionMinHours): int {
-            $ha = $sessionHoursBetween((string) ($a['start_time'] ?? ''), (string) ($a['end_time'] ?? ''));
-            $hb = $sessionHoursBetween((string) ($b['start_time'] ?? ''), (string) ($b['end_time'] ?? ''));
-            $aLab = $ha >= $labSessionMinHours;
-            $bLab = $hb >= $labSessionMinHours;
+        static function (array $a, array $b): int {
+            $aLab = schedule_session_is_laboratory(
+                (string) ($a['start_time'] ?? ''),
+                (string) ($a['end_time'] ?? ''),
+                (string) ($a['room_type'] ?? '')
+            );
+            $bLab = schedule_session_is_laboratory(
+                (string) ($b['start_time'] ?? ''),
+                (string) ($b['end_time'] ?? ''),
+                (string) ($b['room_type'] ?? '')
+            );
             if ($aLab !== $bLab) {
                 return $aLab ? 1 : -1;
             }

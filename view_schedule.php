@@ -57,18 +57,9 @@ if ($role === 'faculty' && $facultySelfId > 0) {
         $params[] = $facultyCollegeId;
     }
 } elseif ($programScope !== null && $collegeId) {
-    if ($hasGeTargetsTable) {
-        $sql .= ' AND s.college_id = ? AND (c.department = ? OR gst.program_name = ?)';
-        $params[] = $collegeId;
-        $params[] = $programScope;
-        $params[] = $programScope;
-    } else {
-        $sql .= ' AND s.college_id = ? AND c.department = ?';
-        $params[] = $collegeId;
-        $params[] = $programScope;
-    }
+    $sql .= program_chair_schedule_scope_sql($collegeId, $programScope, $hasGeTargetsTable, $params);
 } elseif (is_dean() && $collegeId) {
-    $sql .= dean_schedule_scope_sql($collegeId, $hasCourseIsGenedCol, $params);
+    $sql .= dean_schedule_scope_sql($collegeId, $hasCourseIsGenedCol, $params, $hasGeTargetsTable);
 }
 if ($collegeFilter > 0 && !is_dean() && $role !== 'faculty') {
     $sql .= ' AND s.college_id = ?';

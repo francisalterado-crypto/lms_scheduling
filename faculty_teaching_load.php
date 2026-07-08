@@ -40,6 +40,9 @@ if (is_dean()) {
 
 $adminCollegeId = (int) ($_GET['college_id'] ?? 0);
 $dept = trim((string) ($_GET['dept'] ?? ''));
+if (is_program_chair() && $programScope !== null) {
+    $dept = $programScope;
+}
 $sem = trim((string) ($_GET['semester'] ?? ''));
 $sy = trim((string) ($_GET['school_year'] ?? ''));
 $facultySearch = trim((string) ($_GET['faculty_search'] ?? ''));
@@ -107,14 +110,10 @@ if ($role === 'admin') {
         $params[] = $adminCollegeId;
     }
 } elseif (is_dean() && $collegeId) {
-    $sql .= ' AND s.college_id = ?';
-    $params[] = $collegeId;
+    $hasIsGenedCourseCol = db_column_exists('courses', 'is_gened');
+    $sql .= dean_schedule_scope_sql($collegeId, $hasIsGenedCourseCol, $params, $hasGeTargetsTable);
 } elseif ($programScope !== null && $collegeId) {
-    // Program chair: major offerings only — course department must match assigned program (no GE cross-list via gst).
-    $sql .= ' AND s.college_id = ?';
-    $params[] = $collegeId;
-    $sql .= ' AND c.department = ?';
-    $params[] = $programScope;
+    $sql .= program_chair_schedule_scope_sql($collegeId, $programScope, $hasGeTargetsTable, $params);
 } elseif ($role === 'faculty' && $facultySelfId > 0) {
     $sql .= ' AND s.faculty_id = ?';
     $params[] = $facultySelfId;
@@ -142,7 +141,7 @@ if (is_program_chair()) {
     }
 }
 
-if ($dept !== '') {
+if ($dept !== '' && !is_program_chair()) {
     if ($hasGeTargetsTable) {
         $sql .= ' AND (f.department = ? OR c.department = ? OR gst.program_name = ?)';
         $params[] = $dept;
@@ -174,9 +173,6 @@ $stmt = db()->prepare($sql);
 $stmt->execute($params);
 $rows = $stmt->fetchAll();
 
-// One class block (start–end) with this many hours or more counts as LAB; shorter blocks count as LEC (not by room type).
-$labSessionMinHours = 3.0;
-
 $sessionHoursBetween = static function (string $start, string $end): float {
     $rawS = substr($start, 0, 8);
     $rawE = substr($end, 0, 8);
@@ -201,11 +197,17 @@ foreach ($rows as $r) {
 foreach ($scheduleListGroups as &$g) {
     usort(
         $g,
-        static function (array $a, array $b) use ($sessionHoursBetween, $labSessionMinHours): int {
-            $ha = $sessionHoursBetween((string) ($a['start_time'] ?? ''), (string) ($a['end_time'] ?? ''));
-            $hb = $sessionHoursBetween((string) ($b['start_time'] ?? ''), (string) ($b['end_time'] ?? ''));
-            $aLab = $ha >= $labSessionMinHours;
-            $bLab = $hb >= $labSessionMinHours;
+        static function (array $a, array $b): int {
+            $aLab = schedule_session_is_laboratory(
+                (string) ($a['start_time'] ?? ''),
+                (string) ($a['end_time'] ?? ''),
+                (string) ($a['room_type'] ?? '')
+            );
+            $bLab = schedule_session_is_laboratory(
+                (string) ($b['start_time'] ?? ''),
+                (string) ($b['end_time'] ?? ''),
+                (string) ($b['room_type'] ?? '')
+            );
             if ($aLab !== $bLab) {
                 return $aLab ? 1 : -1;
             }
@@ -272,8 +274,7 @@ $mergeScheduleGroupForDetail = static function (array $group) use (
     $formatLoadUnits,
     $resolveProgramYearSection,
     $hasLectureUnits,
-    $hasLaboratoryUnits,
-    $labSessionMinHours
+    $hasLaboratoryUnits
 ): array {
     $timeParts = [];
     $dayParts = [];
@@ -283,7 +284,11 @@ $mergeScheduleGroupForDetail = static function (array $group) use (
     $roomSeen = [];
     foreach ($group as $r) {
         $h = $sessionHoursBetween((string) ($r['start_time'] ?? ''), (string) ($r['end_time'] ?? ''));
-        $isLabSlot = $h >= $labSessionMinHours;
+        $isLabSlot = schedule_session_is_laboratory(
+            (string) ($r['start_time'] ?? ''),
+            (string) ($r['end_time'] ?? ''),
+            (string) ($r['room_type'] ?? '')
+        );
         $slotTag = $isLabSlot ? 'LAB' : 'LEC';
         $timeParts[] = $formatTime12h((string) ($r['start_time'] ?? '')) . ' – ' . $formatTime12h((string) ($r['end_time'] ?? '')) . ' (' . $slotTag . ')';
         $dayParts[] = format_day_set_abbrev((string) ($r['day_of_week'] ?? ''));
@@ -495,9 +500,6 @@ if ($role === 'admin') {
 
 if (is_program_chair() && $programScope !== null) {
     $depts = [$programScope];
-    if ($dept === '' || $dept !== $programScope) {
-        $dept = $programScope;
-    }
 } elseif (is_dean() && $collegeId) {
     $d = db()->prepare('SELECT DISTINCT department FROM faculty WHERE college_id=? AND department != "" ORDER BY department');
     $d->execute([$collegeId]);
@@ -638,7 +640,7 @@ require_once __DIR__ . '/includes/header.php';
             Program scope: <strong><?= htmlspecialchars($programScope) ?></strong> (<?= htmlspecialchars(college_name_by_id($collegeId)) ?>).
             <?php if (is_program_chair()): ?>
                 <?php if ($hasIsGenedCourse): ?>
-                    <span class="d-block mt-1">General Education (GE) catalog courses are excluded; only <strong>major</strong> courses in this program are included.</span>
+                    <span class="d-block mt-1">General Education (GE) catalog courses are excluded. Includes <strong>major</strong> courses in this program and any loads for <strong>your program&rsquo;s faculty</strong> (including subjects the Dean assigned in other programs).</span>
                 <?php else: ?>
                     <span class="d-block mt-1">Schedules created by GEN ED accounts are excluded. Run <a href="upgrade_roles.php">upgrade_roles.php</a> so GE can be flagged in the catalog for clearer filtering.</span>
                 <?php endif; ?>
@@ -677,7 +679,7 @@ require_once __DIR__ . '/includes/header.php';
         <?php if (is_program_chair() && $programScope !== null): ?>
             <div class="<?= htmlspecialchars($filterColClass) ?>">
                 <label class="form-label small mb-0">Program</label>
-                <input type="text" class="form-control form-control-sm bg-body-secondary" readonly value="<?= htmlspecialchars($programScope) ?>" aria-readonly="true"<?= app_tooltip_attr('Your account is limited to this program. Teaching load lists only offerings for this program.') ?>>
+                <input type="text" class="form-control form-control-sm bg-body-secondary" readonly value="<?= htmlspecialchars($programScope) ?>" aria-readonly="true"<?= app_tooltip_attr('Your account is limited to this program. Teaching load includes courses in this program and all assignments for faculty in this program (including cross-program loads assigned by the Dean).') ?>>
                 <input type="hidden" name="dept" value="<?= htmlspecialchars($programScope) ?>">
             </div>
         <?php elseif (!$isFacultySelfView): ?>

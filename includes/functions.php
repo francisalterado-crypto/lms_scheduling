@@ -1137,22 +1137,71 @@ function dean_can_join_ge_live_session(): bool
 }
 
 /**
- * SQL AND-clause so deans see their college schedules plus all GE rows (oversight / conflicts).
+ * SQL AND-clause so deans see their college schedules plus cross-college loads and GE rows.
  *
  * @param list<int|string> $params
  */
-function dean_schedule_scope_sql(int $collegeId, bool $hasCourseIsGenedCol, array &$params): string
-{
+function dean_schedule_scope_sql(
+    int $collegeId,
+    bool $hasCourseIsGenedCol,
+    array &$params,
+    bool $hasGeTargetsTable = false
+): string {
     if ($collegeId < 1) {
         return '';
     }
 
+    $parts = ['s.college_id = ?', 'f.college_id = ?', 'c.college_id = ?'];
     $params[] = $collegeId;
-    if (!$hasCourseIsGenedCol) {
-        return ' AND s.college_id = ?';
+    $params[] = $collegeId;
+    $params[] = $collegeId;
+    if ($hasGeTargetsTable) {
+        $parts[] = 'gst.college_id = ?';
+        $params[] = $collegeId;
+    }
+    if ($hasCourseIsGenedCol) {
+        $parts[] = 'COALESCE(c.is_gened, 0) = 1';
     }
 
-    return ' AND (s.college_id = ? OR COALESCE(c.is_gened, 0) = 1)';
+    return ' AND (' . implode(' OR ', $parts) . ')';
+}
+
+/**
+ * SQL AND-clause so program chairs see schedules for their program courses and their program faculty.
+ *
+ * @param list<int|string> $params
+ */
+function program_chair_schedule_scope_sql(
+    int $collegeId,
+    string $programScope,
+    bool $hasGeTargetsTable,
+    array &$params
+): string {
+    if ($collegeId < 1 || trim($programScope) === '') {
+        return '';
+    }
+
+    $sql = ' AND (s.college_id = ? OR f.college_id = ? OR c.college_id = ?';
+    $params[] = $collegeId;
+    $params[] = $collegeId;
+    $params[] = $collegeId;
+    if ($hasGeTargetsTable) {
+        $sql .= ' OR gst.college_id = ?';
+        $params[] = $collegeId;
+    }
+    $sql .= ')';
+    if ($hasGeTargetsTable) {
+        $sql .= ' AND (f.department = ? OR c.department = ? OR gst.program_name = ?)';
+        $params[] = $programScope;
+        $params[] = $programScope;
+        $params[] = $programScope;
+    } else {
+        $sql .= ' AND (f.department = ? OR c.department = ?)';
+        $params[] = $programScope;
+        $params[] = $programScope;
+    }
+
+    return $sql;
 }
 
 /**
@@ -1228,6 +1277,26 @@ function time_to_minutes(string $time): int
     $m = (int) ($parts[1] ?? 0);
     $s = (int) ($parts[2] ?? 0);
     return $h * 60 + $m + (int) round($s / 60);
+}
+
+/**
+ * Whether a scheduled block counts as laboratory (vs lecture) for load/contact hours.
+ * Laboratory rooms are always lab; otherwise only typical ~3-hour lab blocks (3–4 h), not long lecture spans.
+ */
+function schedule_session_is_laboratory(?string $startTime, ?string $endTime, ?string $roomType = null): bool
+{
+    if (strtolower(trim((string) $roomType)) === 'laboratory') {
+        return true;
+    }
+    $st = time_to_minutes(substr((string) $startTime, 0, 8));
+    $en = time_to_minutes(substr((string) $endTime, 0, 8));
+    $durationMinutes = $en - $st;
+    if ($durationMinutes <= 0) {
+        return false;
+    }
+    $hours = $durationMinutes / 60.0;
+
+    return $hours >= 3.0 && $hours <= 4.0;
 }
 
 function minutes_to_time(int $minutes): string
@@ -1776,6 +1845,129 @@ function create_conflict_request(array $payload): int
         (string) $payload['reason'],
     ]);
     return (int) db()->lastInsertId();
+}
+
+/**
+ * Find another faculty member who already holds this course load for the term.
+ *
+ * @param array{college_id?:int,program_name?:string,year_level?:string,section?:string}|null $geTarget
+ * @return array{faculty_id:int,full_name:string,faculty_code:string}|null
+ */
+function find_course_load_assigned_faculty(
+    int $courseId,
+    string $semester,
+    string $schoolYear,
+    int $exceptFacultyId,
+    ?array $geTarget = null
+): ?array {
+    if ($courseId < 1 || $semester === '' || $schoolYear === '') {
+        return null;
+    }
+
+    $useGeTarget = $geTarget !== null
+        && db_table_exists('ge_schedule_targets')
+        && (int) ($geTarget['college_id'] ?? 0) > 0
+        && trim((string) ($geTarget['program_name'] ?? '')) !== ''
+        && trim((string) ($geTarget['year_level'] ?? '')) !== ''
+        && trim((string) ($geTarget['section'] ?? '')) !== '';
+
+    if ($useGeTarget) {
+        $st = db()->prepare(
+            'SELECT DISTINCT f.id AS faculty_id, f.full_name, f.faculty_id AS faculty_code
+             FROM schedules s
+             INNER JOIN faculty f ON f.id = s.faculty_id
+             INNER JOIN ge_schedule_targets gst ON gst.schedule_id = s.id
+             WHERE s.course_id = ?
+               AND s.semester = ?
+               AND s.school_year = ?
+               AND s.faculty_id <> ?
+               AND gst.college_id = ?
+               AND gst.program_name = ?
+               AND gst.year_level = ?
+               AND gst.section = ?
+             LIMIT 1'
+        );
+        $st->execute([
+            $courseId,
+            $semester,
+            $schoolYear,
+            $exceptFacultyId,
+            (int) $geTarget['college_id'],
+            trim((string) $geTarget['program_name']),
+            trim((string) $geTarget['year_level']),
+            trim((string) $geTarget['section']),
+        ]);
+    } else {
+        $st = db()->prepare(
+            'SELECT DISTINCT f.id AS faculty_id, f.full_name, f.faculty_id AS faculty_code
+             FROM schedules s
+             INNER JOIN faculty f ON f.id = s.faculty_id
+             WHERE s.course_id = ?
+               AND s.semester = ?
+               AND s.school_year = ?
+               AND s.faculty_id <> ?
+             LIMIT 1'
+        );
+        $st->execute([$courseId, $semester, $schoolYear, $exceptFacultyId]);
+    }
+
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return null;
+    }
+
+    return [
+        'faculty_id' => (int) ($row['faculty_id'] ?? 0),
+        'full_name' => trim((string) ($row['full_name'] ?? '')),
+        'faculty_code' => trim((string) ($row['faculty_code'] ?? '')),
+    ];
+}
+
+/**
+ * @param array{faculty_id:int,full_name:string,faculty_code:string} $assignedFaculty
+ * @param array{college_id?:int,program_name?:string,year_level?:string,section?:string}|null $geTarget
+ */
+function course_load_assignment_conflict_message(
+    array $assignedFaculty,
+    int $courseId = 0,
+    ?array $geTarget = null
+): string {
+    $name = trim((string) ($assignedFaculty['full_name'] ?? ''));
+    $code = trim((string) ($assignedFaculty['faculty_code'] ?? ''));
+    $who = $name !== '' ? $name : 'another faculty member';
+    if ($code !== '') {
+        $who .= ' (' . $code . ')';
+    }
+
+    $sectionLabel = '';
+    if ($geTarget !== null) {
+        $program = trim((string) ($geTarget['program_name'] ?? ''));
+        $yearLevel = trim((string) ($geTarget['year_level'] ?? ''));
+        $section = trim((string) ($geTarget['section'] ?? ''));
+        if ($program !== '' && $yearLevel !== '' && $section !== '') {
+            $sectionLabel = $program . ' Y' . $yearLevel . '-' . $section;
+        }
+    } elseif ($courseId > 0 && db_column_exists('courses', 'section') && db_column_exists('courses', 'year_level')) {
+        $st = db()->prepare('SELECT course_code, year_level, section FROM courses WHERE id=? LIMIT 1');
+        $st->execute([$courseId]);
+        $crow = $st->fetch(PDO::FETCH_ASSOC);
+        if ($crow) {
+            $courseCode = trim((string) ($crow['course_code'] ?? ''));
+            $yearLevel = trim((string) ($crow['year_level'] ?? ''));
+            $section = trim((string) ($crow['section'] ?? ''));
+            if ($yearLevel !== '' && $section !== '') {
+                $sectionLabel = ($courseCode !== '' ? $courseCode . ', ' : '') . 'Y' . $yearLevel . '-' . $section;
+            } elseif ($courseCode !== '') {
+                $sectionLabel = $courseCode;
+            }
+        }
+    }
+
+    if ($sectionLabel !== '') {
+        return 'This course load for ' . $sectionLabel . ' is already assigned to ' . $who . '.';
+    }
+
+    return 'This course load is already assigned to ' . $who . '.';
 }
 
 /** Full name of the administrator who signs as VPAA on teaching load memoranda. */

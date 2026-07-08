@@ -148,8 +148,9 @@ if ($hasLaboratoryUnits) {
 }
 
 $sql = "SELECT s.id, s.faculty_id, s.course_id, s.schedule_type, s.day_of_week, s.start_time, s.end_time, s.semester, s.school_year,
+        s.college_id AS sched_college_id, c.college_id AS course_college_id,
         f.full_name AS faculty_name, f.department AS fac_dept, c.course_code, c.course_name, r.room_code, r.type AS room_type,
-        col.college_name, COALESCE(uc.role, '') AS creator_role
+        col.college_name, course_col.college_name AS course_college_name, COALESCE(uc.role, '') AS creator_role
         {$courseUnitsSelect}
         {$courseLabSelect}
         {$courseBlockSelect}
@@ -160,23 +161,15 @@ $sql = "SELECT s.id, s.faculty_id, s.course_id, s.schedule_type, s.day_of_week, 
         INNER JOIN rooms r ON r.id = s.room_id
         LEFT JOIN users uc ON uc.id = s.created_by
         LEFT JOIN colleges col ON col.id = s.college_id
+        LEFT JOIN colleges course_col ON course_col.id = c.college_id
         {$targetJoin}
         WHERE 1=1";
 $params = [];
 if (is_dean() && $collegeId) {
     $hasIsGenedCourseCol = db_column_exists('courses', 'is_gened');
-    $sql .= dean_schedule_scope_sql($collegeId, $hasIsGenedCourseCol, $params);
+    $sql .= dean_schedule_scope_sql($collegeId, $hasIsGenedCourseCol, $params, $hasGeTargetsTable);
 } elseif ($programScope !== null && $collegeId) {
-    $sql .= ' AND s.college_id = ?';
-    $params[] = $collegeId;
-    if ($hasGeTargetsTable) {
-        $sql .= ' AND (c.department = ? OR gst.program_name = ?)';
-        $params[] = $programScope;
-        $params[] = $programScope;
-    } else {
-        $sql .= ' AND c.department = ?';
-        $params[] = $programScope;
-    }
+    $sql .= program_chair_schedule_scope_sql($collegeId, $programScope, $hasGeTargetsTable, $params);
 } elseif (is_faculty() && $facultySelfId > 0) {
     $sql .= ' AND s.faculty_id = ?';
     $params[] = $facultySelfId;
@@ -257,15 +250,13 @@ $formatTime12h = static function (?string $time): string {
     return $dt ? $dt->format('g:i A') : $raw;
 };
 
-/** Laboratory-style block: lab room, or a single scheduled block of 3+ hours. */
+/** Laboratory-style block: lab room, or a typical ~3-hour meeting (not long lecture spans). */
 $segmentIsLaboratory = static function (array $r): bool {
-    if (strtolower(trim((string) ($r['room_type'] ?? ''))) === 'laboratory') {
-        return true;
-    }
-    $st = time_to_minutes(substr((string) ($r['start_time'] ?? ''), 0, 8));
-    $en = time_to_minutes(substr((string) ($r['end_time'] ?? ''), 0, 8));
-    $d = $en - $st;
-    return $d > 0 && $d >= 180;
+    return schedule_session_is_laboratory(
+        (string) ($r['start_time'] ?? ''),
+        (string) ($r['end_time'] ?? ''),
+        (string) ($r['room_type'] ?? '')
+    );
 };
 
 /** Block label from course program/year/section (Dean module) when row is not a GE target. */
@@ -663,7 +654,19 @@ require_once __DIR__ . '/includes/header.php';
                                 </div>
                             <?php endforeach; ?>
                         </td>
-                        <td data-label="COLLEGE"><?= htmlspecialchars((string) ($r0['college_name'] ?? '')) ?></td>
+                        <td data-label="COLLEGE">
+                            <?php
+                            $schedCollegeName = trim((string) ($r0['college_name'] ?? ''));
+                            $courseCollegeName = trim((string) ($r0['course_college_name'] ?? ''));
+                            $schedCollegeId = (int) ($r0['sched_college_id'] ?? 0);
+                            $courseCollegeId = (int) ($r0['course_college_id'] ?? 0);
+                            $isCrossCollegeCourse = $courseCollegeId > 0 && $schedCollegeId > 0 && $courseCollegeId !== $schedCollegeId;
+                            ?>
+                            <?= htmlspecialchars($schedCollegeName) ?>
+                            <?php if ($isCrossCollegeCourse && $courseCollegeName !== ''): ?>
+                                <br><span class="badge bg-secondary mt-1">Course · <?= htmlspecialchars($courseCollegeName) ?></span>
+                            <?php endif; ?>
+                        </td>
                         <?php if ($hasGeTargetsTable): ?>
                             <td data-label="TARGET BLOCK">
                                 <?php

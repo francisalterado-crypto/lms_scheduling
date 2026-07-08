@@ -26,14 +26,8 @@ $formatTime12h = static function (?string $time): string {
     $dt = DateTime::createFromFormat('H:i', $raw);
     return $dt ? $dt->format('g:i A') : $raw;
 };
-$labSessionMinHours = 3.0;
-$isLabSession = static function (?string $start, ?string $end) use ($labSessionMinHours): bool {
-    $s = strtotime((string) $start);
-    $e = strtotime((string) $end);
-    if ($s === false || $e === false) {
-        return false;
-    }
-    return (($e - $s) / 3600) >= $labSessionMinHours;
+$isLabSession = static function (?string $start, ?string $end, ?string $roomType = null): bool {
+    return schedule_session_is_laboratory($start, $end, $roomType);
 };
 
 if ($studentId < 1) {
