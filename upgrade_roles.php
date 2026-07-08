@@ -155,6 +155,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exec_safe($pdo, "ALTER TABLE schedules ADD COLUMN program VARCHAR(100) NOT NULL DEFAULT ''");
         exec_safe($pdo, "ALTER TABLE schedules ADD COLUMN year_level VARCHAR(20) NOT NULL DEFAULT ''");
         exec_safe($pdo, "ALTER TABLE schedules ADD COLUMN section VARCHAR(20) NOT NULL DEFAULT ''");
+        exec_safe($pdo, "ALTER TABLE schedules ADD COLUMN session_kind ENUM('lecture','laboratory') NULL DEFAULT NULL");
+        exec_safe(
+            $pdo,
+            "UPDATE schedules s
+             INNER JOIN courses c ON c.id = s.course_id
+             SET s.session_kind = CASE
+                 WHEN TIMESTAMPDIFF(MINUTE, s.start_time, s.end_time) BETWEEN 180 AND 240 THEN 'laboratory'
+                 ELSE 'lecture'
+             END
+             WHERE c.is_laboratory = 1 AND s.session_kind IS NULL"
+        );
 
         exec_safe($pdo, "ALTER TABLE conflict_requests ADD COLUMN program VARCHAR(100) NOT NULL DEFAULT ''");
         exec_safe($pdo, "ALTER TABLE conflict_requests ADD COLUMN year_level VARCHAR(20) NOT NULL DEFAULT ''");

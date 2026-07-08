@@ -192,10 +192,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $created = 0;
                 $failed = 0;
                 $createdScheduleIds = [];
-                $ins = db()->prepare(
-                    'INSERT INTO schedules (faculty_id, course_id, room_id, college_id, schedule_type, day_of_week, start_time, end_time, semester, school_year, academic_year, created_by)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-                );
+                $hasSessionKind = db_column_exists('schedules', 'session_kind');
+                $scheduleInsertSql = 'INSERT INTO schedules (faculty_id, course_id, room_id, college_id, schedule_type, day_of_week, start_time, end_time, semester, school_year, academic_year, created_by'
+                    . ($hasSessionKind ? ', session_kind' : '')
+                    . ') VALUES (?,?,?,?,?,?,?,?,?,?,?,?'
+                    . ($hasSessionKind ? ',?' : '')
+                    . ')';
+                $ins = db()->prepare($scheduleInsertSql);
 
                 foreach ($courses as $course) {
                     $isLab = $hasLabFlag && (int) ($course['is_laboratory'] ?? 0) === 1;
@@ -253,7 +256,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ((int) $part['duration']) > (MAX_CLASS_BLOCK_HOURS * 60)
                             );
                             if ($slot) {
-                                $ins->execute([
+                                $insertParams = [
                                     $facultyId,
                                     $courseId,
                                     (int) $room['id'],
@@ -266,7 +269,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     $schoolYear,
                                     $academicYear,
                                     $deanUserId,
-                                ]);
+                                ];
+                                if ($hasSessionKind) {
+                                    $insertParams[] = schedule_segment_session_kind((string) $part['label']);
+                                }
+                                $ins->execute($insertParams);
                                 $created++;
                                 $createdScheduleIds[] = (int) db()->lastInsertId();
                                 $results[] = "{$courseCode} ({$part['label']}): {$slot['day']} " . substr($slot['start'], 0, 5) . '-' . substr($slot['end'], 0, 5) . " @ {$room['room_code']}";

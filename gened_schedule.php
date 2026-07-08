@@ -268,13 +268,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (!$errors) {
-        $insert = db()->prepare(
-            'INSERT INTO schedules (faculty_id, course_id, room_id, college_id, schedule_type, day_of_week, start_time, end_time, semester, school_year, academic_year, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-        );
+        $hasSessionKind = db_column_exists('schedules', 'session_kind');
+        $scheduleInsertSql = 'INSERT INTO schedules (faculty_id, course_id, room_id, college_id, schedule_type, day_of_week, start_time, end_time, semester, school_year, academic_year, created_by'
+            . ($hasSessionKind ? ', session_kind' : '')
+            . ') VALUES (?,?,?,?,?,?,?,?,?,?,?,?'
+            . ($hasSessionKind ? ',?' : '')
+            . ')';
+        $insert = db()->prepare($scheduleInsertSql);
         $createdIds = [];
         foreach ($segments as $seg) {
-            $insert->execute([
+            $insertParams = [
                 $facultyId,
                 $courseId,
                 (int) $seg['room_id'],
@@ -287,7 +290,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $schoolYear,
                 $academicYear,
                 (int) $_SESSION['user_id'],
-            ]);
+            ];
+            if ($hasSessionKind) {
+                $insertParams[] = schedule_segment_session_kind((string) ($seg['label'] ?? 'Lecture'));
+            }
+            $insert->execute($insertParams);
             $newId = (int) db()->lastInsertId();
             $createdIds[] = $newId;
             if ($hasGeScheduleTargets && $targetProgram !== '' && $targetYearLevel !== '' && $targetSection !== '') {

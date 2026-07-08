@@ -559,7 +559,7 @@ function render_schedule_form(array $defaults = [], array $options = []): void
             </select>
         </div>
         <div class="<?= $colPick ?>">
-            <label class="form-label">Room</label>
+            <label class="form-label" id="scheduleMainRoomLabel">Room</label>
             <select name="room_id" class="form-select">
                 <option value="">— Select —</option>
                 <?php foreach ($rooms as $r): ?>
@@ -683,6 +683,10 @@ function render_schedule_form(array $defaults = [], array $options = []): void
                 const opt = courseSel.options[courseSel.selectedIndex];
                 const isLab = opt && opt.getAttribute('data-is-lab') === '1';
                 labSection.style.display = isLab ? 'block' : 'none';
+                const roomLabel = document.getElementById('scheduleMainRoomLabel');
+                if (roomLabel) {
+                    roomLabel.textContent = isLab ? 'Lecture room' : 'Room';
+                }
             }
 
             function currentProgramSelection() {

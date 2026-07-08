@@ -146,6 +146,8 @@ if ($hasLectureUnits) {
 if ($hasLaboratoryUnits) {
     $courseUnitsSelect .= ', c.laboratory_units';
 }
+$hasSessionKind = db_column_exists('schedules', 'session_kind');
+$sessionKindSelect = $hasSessionKind ? ', s.session_kind' : '';
 
 $sql = "SELECT s.id, s.faculty_id, s.course_id, s.schedule_type, s.day_of_week, s.start_time, s.end_time, s.semester, s.school_year,
         s.college_id AS sched_college_id, c.college_id AS course_college_id,
@@ -154,6 +156,7 @@ $sql = "SELECT s.id, s.faculty_id, s.course_id, s.schedule_type, s.day_of_week, 
         {$courseUnitsSelect}
         {$courseLabSelect}
         {$courseBlockSelect}
+        {$sessionKindSelect}
         {$targetSelect}
         FROM schedules s
         INNER JOIN faculty f ON f.id = s.faculty_id
@@ -255,7 +258,8 @@ $segmentIsLaboratory = static function (array $r): bool {
     return schedule_session_is_laboratory(
         (string) ($r['start_time'] ?? ''),
         (string) ($r['end_time'] ?? ''),
-        (string) ($r['room_type'] ?? '')
+        (string) ($r['room_type'] ?? ''),
+        isset($r['session_kind']) ? (string) $r['session_kind'] : null
     );
 };
 

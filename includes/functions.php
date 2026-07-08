@@ -1280,14 +1280,29 @@ function time_to_minutes(string $time): int
 }
 
 /**
- * Whether a scheduled block counts as laboratory (vs lecture) for load/contact hours.
- * Laboratory rooms are always lab; otherwise only typical ~3-hour lab blocks (3–4 h), not long lecture spans.
+ * Stored lecture/laboratory kind from schedule create/edit (segment label).
  */
-function schedule_session_is_laboratory(?string $startTime, ?string $endTime, ?string $roomType = null): bool
+function schedule_segment_session_kind(string $label): string
 {
-    if (strtolower(trim((string) $roomType)) === 'laboratory') {
+    return strcasecmp(trim($label), 'Laboratory') === 0 ? 'laboratory' : 'lecture';
+}
+
+/**
+ * Whether a scheduled block counts as laboratory (vs lecture) for load/contact hours.
+ * Uses stored session_kind when present; otherwise 1 lab unit = 3 hours → typical 3–4 h blocks.
+ * Shorter meetings in laboratory rooms are treated as lecture (common when no lecture room is free).
+ */
+function schedule_session_is_laboratory(?string $startTime, ?string $endTime, ?string $roomType = null, ?string $sessionKind = null): bool
+{
+    unset($roomType);
+    $kind = strtolower(trim((string) $sessionKind));
+    if ($kind === 'laboratory') {
         return true;
     }
+    if ($kind === 'lecture') {
+        return false;
+    }
+
     $st = time_to_minutes(substr((string) $startTime, 0, 8));
     $en = time_to_minutes(substr((string) $endTime, 0, 8));
     $durationMinutes = $en - $st;
