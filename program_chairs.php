@@ -92,14 +92,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash'] = registration_email_flash_message($mailOk, $email, 'Program Chair account');
         } elseif ($action === 'edit' && isset($_POST['id'])) {
             $id = (int) $_POST['id'];
+            $username = trim((string) ($_POST['username'] ?? ''));
             $fullName = trim((string) ($_POST['full_name'] ?? ''));
             $assignedProgram = trim((string) ($_POST['assigned_program'] ?? ''));
             $email = $hasUserEmail ? trim((string) ($_POST['email'] ?? '')) : '';
             $resetPassword = trim((string) ($_POST['reset_password'] ?? ''));
             $generateAndEmail = !empty($_POST['generate_temp_password_email']);
 
-            if ($fullName === '' || $assignedProgram === '') {
-                throw new RuntimeException('Full name and program are required.');
+            if ($username === '' || $fullName === '' || $assignedProgram === '') {
+                throw new RuntimeException('Username, full name, and program are required.');
             }
             if (!in_array($assignedProgram, $programOptions, true)) {
                 throw new RuntimeException('Please select a valid program from Programs.');
@@ -118,12 +119,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('Program Chair account not found.');
             }
 
+            if (strcasecmp($username, (string) $beforePc['username']) !== 0) {
+                $exists = db()->prepare('SELECT COUNT(*) FROM users WHERE username=? AND id<>?');
+                $exists->execute([$username, $id]);
+                if ((int) $exists->fetchColumn() > 0) {
+                    $s = suggest_available_usernames($username, 3);
+                    throw new RuntimeException('Username already exists.' . ($s ? ' Try: ' . implode(', ', $s) : ''));
+                }
+            }
+
             $sql = $hasUserEmail
-                ? 'UPDATE users SET full_name=?, email=?, assigned_program=?, is_active=? WHERE id=? AND role="program_chair" AND college_id=?'
-                : 'UPDATE users SET full_name=?, assigned_program=?, is_active=? WHERE id=? AND role="program_chair" AND college_id=?';
+                ? 'UPDATE users SET username=?, full_name=?, email=?, assigned_program=?, is_active=? WHERE id=? AND role="program_chair" AND college_id=?'
+                : 'UPDATE users SET username=?, full_name=?, assigned_program=?, is_active=? WHERE id=? AND role="program_chair" AND college_id=?';
             $params = $hasUserEmail
-                ? [$fullName, $email, $assignedProgram, !empty($_POST['is_active']) ? 1 : 0, $id, $collegeId]
-                : [$fullName, $assignedProgram, !empty($_POST['is_active']) ? 1 : 0, $id, $collegeId];
+                ? [$username, $fullName, $email, $assignedProgram, !empty($_POST['is_active']) ? 1 : 0, $id, $collegeId]
+                : [$username, $fullName, $assignedProgram, !empty($_POST['is_active']) ? 1 : 0, $id, $collegeId];
             db()->prepare($sql)->execute($params);
 
             $plainForMail = '';
@@ -147,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($plainForMail !== '') {
-                $mailOk = send_account_credentials_mail($email, $fullName, (string) $row['username'], $plainForMail, 'program_chair', $email);
+                $mailOk = send_account_credentials_mail($email, $fullName, $username, $plainForMail, 'program_chair', $email);
                 $_SESSION['flash'] = credentials_email_flash_message($mailOk, $email, 'Program Chair updated');
             } else {
                 $_SESSION['flash'] = 'Program Chair updated.';
@@ -362,7 +372,7 @@ require_once __DIR__ . '/includes/header.php';
                 <input type="hidden" name="action" value="<?= $editRow ? 'edit' : 'add' ?>">
                 <?php if ($editRow): ?><input type="hidden" name="id" value="<?= (int) $editRow['id'] ?>"><?php endif; ?>
 
-                <div class="pc-input-group"><label>Username</label><input name="username" <?= $editRow ? 'readonly' : 'required' ?> value="<?= htmlspecialchars((string) ($editRow['username'] ?? '')) ?>"></div>
+                <div class="pc-input-group"><label>Username</label><input name="username" maxlength="50" required value="<?= htmlspecialchars((string) ($editRow['username'] ?? '')) ?>"></div>
                 <div class="pc-input-group"><label>Full Name</label><input name="full_name" required value="<?= htmlspecialchars((string) ($editRow['full_name'] ?? '')) ?>"></div>
                 <div class="pc-input-group">
                     <label>Assigned Program</label>
