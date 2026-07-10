@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-require_role(['faculty']);
+require_role(['faculty', 'admin', 'program_chair', 'gened']);
 
 $userId = (int) ($_SESSION['user_id'] ?? 0);
 $storageNs = 'u' . ($userId > 0 ? (string) $userId : '0');

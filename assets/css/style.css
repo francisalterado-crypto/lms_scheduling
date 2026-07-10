@@ -263,6 +263,92 @@ body.app-shell {
 .schedule-block.c4 { background: #f3e5f5; border-left-color: #7b1fa2; }
 .schedule-block.c5 { background: #e0f7fa; border-left-color: #00838f; }
 
+/* Faculty course color picker (view_schedule.php) */
+.course-color-panel {
+  background: var(--app-surface, #fff);
+}
+.course-color-preview {
+  display: inline-block;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  border-radius: 0.3rem;
+  border: 2px solid var(--swatch-border, #94a3b8);
+  background: var(--swatch-bg, #e2e8f0);
+}
+.course-color-preview--sm {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+.course-color-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+html[data-bs-theme="dark"] .course-color-panel {
+  background: var(--bs-body-bg);
+}
+html[data-bs-theme="dark"] .course-color-legend-item {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Timed weekly grid: left time axis + vacant slots */
+.schedule-weekly--timed .schedule-time-col {
+  width: 4.75rem;
+  min-width: 4.75rem;
+  max-width: 5.5rem;
+  white-space: nowrap;
+  vertical-align: top;
+  background: #f8fafc;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+.schedule-weekly--timed thead .schedule-time-col {
+  z-index: 3;
+}
+.schedule-weekly--timed .schedule-time-label {
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+.schedule-weekly--timed .schedule-time-end {
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+.schedule-weekly--timed tbody tr {
+  min-height: 4.5rem;
+}
+.schedule-weekly--timed .schedule-cell {
+  min-height: 4.5rem;
+  height: 1%;
+}
+.schedule-weekly--timed .schedule-cell--vacant {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 6px,
+    rgba(15, 23, 42, 0.03) 6px,
+    rgba(15, 23, 42, 0.03) 12px
+  );
+}
+.schedule-weekly--timed .schedule-vacant-label {
+  display: block;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.schedule-weekly--timed .schedule-block--continued {
+  opacity: 0.85;
+  border-left-style: dashed;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
 /* Weekly schedule grid (view_schedule.php) — dark mode contrast */
 html[data-bs-theme="dark"] .schedule-weekly {
   color: var(--bs-body-color);
@@ -282,6 +368,25 @@ html[data-bs-theme="dark"] .schedule-weekly thead.table-primary th {
 html[data-bs-theme="dark"] .schedule-weekly tbody td {
   background-color: var(--bs-body-bg);
   color: var(--bs-body-color);
+}
+
+html[data-bs-theme="dark"] .schedule-weekly--timed .schedule-time-col {
+  background: #152a45;
+  color: #e2e8f0;
+}
+
+html[data-bs-theme="dark"] .schedule-weekly--timed .schedule-cell--vacant {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 6px,
+    rgba(255, 255, 255, 0.04) 6px,
+    rgba(255, 255, 255, 0.04) 12px
+  );
+}
+
+html[data-bs-theme="dark"] .schedule-weekly--timed .schedule-vacant-label {
+  color: rgba(241, 245, 249, 0.45);
 }
 
 html[data-bs-theme="dark"] .schedule-cell {

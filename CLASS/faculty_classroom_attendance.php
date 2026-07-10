@@ -4,13 +4,19 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-require_role(['faculty']);
+require_role(['faculty', 'program_chair', 'dean', 'gened']);
 
 $facultyId = isset($_SESSION['faculty_id']) ? (int) $_SESSION['faculty_id'] : 0;
 $userId = (int) ($_SESSION['user_id'] ?? 0);
 if ($facultyId < 1) {
     $facultyId = resolve_faculty_id_for_user($userId) ?? 0;
     $_SESSION['faculty_id'] = $facultyId > 0 ? $facultyId : null;
+}
+if ($facultyId < 1 && in_array($_SESSION['role'] ?? '', ['program_chair', 'dean', 'gened'], true)) {
+    $facultyId = ensure_faculty_profile_for_teaching_role($userId) ?? 0;
+    if ($facultyId > 0) {
+        $_SESSION['faculty_id'] = $facultyId;
+    }
 }
 if ($facultyId < 1) {
     exit('Faculty profile not linked to this account. Ask your dean to create/link your faculty profile.');
@@ -206,16 +212,96 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
                 : 'Automatic attendance check completed for ' . $attendanceDate . '.';
         } elseif ($action === 'set_manual_attendance') {
             $recordId = (int) ($_POST['record_id'] ?? 0);
+            $studentId = (int) ($_POST['student_id'] ?? 0);
             $status = (string) ($_POST['status'] ?? '');
             if (!in_array($status, ['present', 'absent'], true)) {
                 throw new RuntimeException('Invalid attendance status.');
             }
-            db()->prepare(
-                'UPDATE classroom_attendance_records ar
-                 INNER JOIN classroom_attendance_sessions s ON s.id = ar.session_id
-                 SET ar.status = ?, ar.source = "manual", ar.checked_at = NOW(), ar.notes = ?
-                 WHERE ar.id = ? AND s.classroom_id = ? AND s.faculty_id = ?'
-            )->execute([$status, 'Updated manually by faculty.', $recordId, $classroomId, $facultyId]);
+
+            if ($recordId > 0) {
+                db()->prepare(
+                    'UPDATE classroom_attendance_records ar
+                     INNER JOIN classroom_attendance_sessions s ON s.id = ar.session_id
+                     SET ar.status = ?, ar.source = "manual", ar.checked_at = NOW(), ar.notes = ?
+                     WHERE ar.id = ? AND s.classroom_id = ? AND s.faculty_id = ?'
+                )->execute([$status, 'Updated manually by faculty.', $recordId, $classroomId, $facultyId]);
+            } else {
+                if ($studentId < 1) {
+                    throw new RuntimeException('Invalid student for attendance update.');
+                }
+                $enrolled = db()->prepare(
+                    'SELECT 1 FROM classroom_enrollments WHERE classroom_id = ? AND student_id = ? LIMIT 1'
+                );
+                $enrolled->execute([$classroomId, $studentId]);
+                if (!$enrolled->fetchColumn()) {
+                    throw new RuntimeException('Student is not enrolled in this classroom.');
+                }
+
+                $sessionStart = $attendanceDate . ' ' . substr((string) $classroom['start_time'], 0, 8);
+                $sessionEnd = $attendanceDate . ' ' . substr((string) $classroom['end_time'], 0, 8);
+                db()->prepare(
+                    'INSERT INTO classroom_attendance_sessions (classroom_id, faculty_id, attendance_date, session_start_at, session_end_at, source)
+                     VALUES (?,?,?,?,?,?)
+                     ON DUPLICATE KEY UPDATE
+                        session_start_at = VALUES(session_start_at),
+                        session_end_at = VALUES(session_end_at),
+                        updated_at = CURRENT_TIMESTAMP'
+                )->execute([$classroomId, $facultyId, $attendanceDate, $sessionStart, $sessionEnd, 'auto_login_online']);
+
+                $sidStmt = db()->prepare(
+                    'SELECT id FROM classroom_attendance_sessions WHERE classroom_id = ? AND attendance_date = ? LIMIT 1'
+                );
+                $sidStmt->execute([$classroomId, $attendanceDate]);
+                $sessionId = (int) ($sidStmt->fetchColumn() ?: 0);
+                if ($sessionId < 1) {
+                    throw new RuntimeException('Unable to initialize attendance session.');
+                }
+
+                if ($hasAttendanceLogoutColumn) {
+                    db()->prepare(
+                        'INSERT INTO classroom_attendance_records
+                         (session_id, student_id, status, source, evidence_login_at, evidence_seen_at, evidence_logout_at, checked_at, notes)
+                         VALUES (?,?,?,?,?,?,?,?,?)
+                         ON DUPLICATE KEY UPDATE
+                            status = VALUES(status),
+                            source = VALUES(source),
+                            checked_at = VALUES(checked_at),
+                            notes = VALUES(notes),
+                            updated_at = CURRENT_TIMESTAMP'
+                    )->execute([
+                        $sessionId,
+                        $studentId,
+                        $status,
+                        'manual',
+                        null,
+                        null,
+                        null,
+                        date('Y-m-d H:i:s'),
+                        'Updated manually by faculty.',
+                    ]);
+                } else {
+                    db()->prepare(
+                        'INSERT INTO classroom_attendance_records
+                         (session_id, student_id, status, source, evidence_login_at, evidence_seen_at, checked_at, notes)
+                         VALUES (?,?,?,?,?,?,?,?)
+                         ON DUPLICATE KEY UPDATE
+                            status = VALUES(status),
+                            source = VALUES(source),
+                            checked_at = VALUES(checked_at),
+                            notes = VALUES(notes),
+                            updated_at = CURRENT_TIMESTAMP'
+                    )->execute([
+                        $sessionId,
+                        $studentId,
+                        $status,
+                        'manual',
+                        null,
+                        null,
+                        date('Y-m-d H:i:s'),
+                        'Updated manually by faculty.',
+                    ]);
+                }
+            }
             $_SESSION['flash'] = 'Attendance status updated.';
         } elseif ($action === 'delete_attendance_record') {
             $recordId = (int) ($_POST['record_id'] ?? 0);
@@ -244,7 +330,7 @@ unset($_SESSION['flash']);
 
 $session = null;
 $records = [];
-$summary = ['present' => 0, 'absent' => 0, 'total' => 0];
+$summary = ['present' => 0, 'absent' => 0, 'unrecorded' => 0, 'total' => 0];
 $latestSessionDate = null;
 $showDateHint = false;
 if ($missingTables === [] && $classroom && $hasPresenceColumns) {
@@ -283,25 +369,44 @@ if ($missingTables === [] && $classroom && $hasPresenceColumns) {
         }
     }
 
-    if ($session) {
-        $st = db()->prepare(
-            'SELECT ar.*, cs.full_name, cs.student_number, u.last_logout_at AS user_last_logout_at
-             FROM classroom_attendance_records ar
-             INNER JOIN classroom_students cs ON cs.id = ar.student_id
-             LEFT JOIN users u ON u.id = cs.user_id
-             WHERE ar.session_id = ?
-             ORDER BY cs.full_name ASC'
-        );
-        $st->execute([(int) $session['id']]);
-        $records = $st->fetchAll();
+    // Always list every enrolled student; attach attendance row when one exists for the date.
+    $sessionId = $session ? (int) $session['id'] : 0;
+    $userLogoutSelect = $hasLogoutColumn ? 'u.last_logout_at AS user_last_logout_at,' : 'NULL AS user_last_logout_at,';
+    $logoutSelect = $hasAttendanceLogoutColumn ? 'ar.evidence_logout_at,' : 'NULL AS evidence_logout_at,';
+    $st = db()->prepare(
+        "SELECT cs.id AS student_id,
+                cs.full_name,
+                cs.student_number,
+                {$userLogoutSelect}
+                ar.id,
+                ar.status,
+                ar.source,
+                ar.evidence_login_at,
+                ar.evidence_seen_at,
+                {$logoutSelect}
+                ar.checked_at,
+                ar.notes
+         FROM classroom_enrollments ce
+         INNER JOIN classroom_students cs ON cs.id = ce.student_id
+         LEFT JOIN users u ON u.id = cs.user_id
+         LEFT JOIN classroom_attendance_records ar
+                ON ar.student_id = cs.id
+               AND ar.session_id = ?
+         WHERE ce.classroom_id = ?
+         ORDER BY cs.full_name ASC"
+    );
+    $st->execute([$sessionId, $classroomId]);
+    $records = $st->fetchAll();
 
-        foreach ($records as $row) {
-            $summary['total']++;
-            if ((string) $row['status'] === 'present') {
-                $summary['present']++;
-            } else {
-                $summary['absent']++;
-            }
+    foreach ($records as $row) {
+        $summary['total']++;
+        $status = (string) ($row['status'] ?? '');
+        if ($status === 'present') {
+            $summary['present']++;
+        } elseif ($status === 'absent') {
+            $summary['absent']++;
+        } else {
+            $summary['unrecorded']++;
         }
     }
 }
@@ -392,22 +497,28 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 
     <div class="row g-3 mb-3">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="border rounded p-3 h-100 bg-body-tertiary">
-                <div class="small text-muted text-uppercase">Total</div>
+                <div class="small text-muted text-uppercase">Enrolled</div>
                 <div class="fs-4 fw-semibold"><?= (int) $summary['total'] ?></div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="border rounded p-3 h-100 bg-body-tertiary">
                 <div class="small text-muted text-uppercase">Present</div>
                 <div class="fs-4 fw-semibold text-success"><?= (int) $summary['present'] ?></div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="border rounded p-3 h-100 bg-body-tertiary">
                 <div class="small text-muted text-uppercase">Absent</div>
                 <div class="fs-4 fw-semibold text-danger"><?= (int) $summary['absent'] ?></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="border rounded p-3 h-100 bg-body-tertiary">
+                <div class="small text-muted text-uppercase">Not recorded</div>
+                <div class="fs-4 fw-semibold text-secondary"><?= (int) $summary['unrecorded'] ?></div>
             </div>
         </div>
     </div>
@@ -431,24 +542,34 @@ require_once __DIR__ . '/includes/header.php';
                     </thead>
                     <tbody>
                     <?php if ($records === []): ?>
-                        <tr><td colspan="<?= $printMode ? '6' : '7' ?>" class="p-3 text-muted">No attendance records yet. Run automatic check first.</td></tr>
+                        <tr><td colspan="<?= $printMode ? '6' : '7' ?>" class="p-3 text-muted">No students enrolled in this classroom yet.</td></tr>
                     <?php endif; ?>
                     <?php foreach ($records as $row): ?>
-                        <?php $logoutDisplay = (string) (($row['evidence_logout_at'] ?? '') !== '' ? $row['evidence_logout_at'] : ($row['user_last_logout_at'] ?? '')); ?>
+                        <?php
+                        $recordId = (int) ($row['id'] ?? 0);
+                        $studentId = (int) ($row['student_id'] ?? 0);
+                        $status = (string) ($row['status'] ?? '');
+                        $hasRecord = $recordId > 0 && $status !== '';
+                        $logoutDisplay = (string) (($row['evidence_logout_at'] ?? '') !== '' ? $row['evidence_logout_at'] : ($row['user_last_logout_at'] ?? ''));
+                        ?>
                         <tr>
                             <td>
                                 <strong><?= htmlspecialchars((string) $row['full_name']) ?></strong><br>
                                 <span class="small text-muted"><?= htmlspecialchars((string) $row['student_number']) ?></span>
                             </td>
                             <td>
-                                <span class="badge <?= (string) $row['status'] === 'present' ? 'bg-success' : 'bg-danger' ?>">
-                                    <?= htmlspecialchars(strtoupper((string) $row['status'])) ?>
-                                </span>
+                                <?php if ($hasRecord): ?>
+                                    <span class="badge <?= $status === 'present' ? 'bg-success' : 'bg-danger' ?>">
+                                        <?= htmlspecialchars(strtoupper($status)) ?>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary">NOT RECORDED</span>
+                                <?php endif; ?>
                             </td>
                             <td class="small"><?= htmlspecialchars($formatDateTime12h((string) ($row['evidence_login_at'] ?? null))) ?></td>
                             <td class="small"><?= htmlspecialchars($formatDateTime12h($logoutDisplay !== '' ? $logoutDisplay : null)) ?></td>
                             <td class="small"><?= htmlspecialchars($formatDateTime12h((string) ($row['evidence_seen_at'] ?? null))) ?></td>
-                            <td class="small"><?= htmlspecialchars((string) $row['source']) ?></td>
+                            <td class="small"><?= htmlspecialchars($hasRecord ? (string) ($row['source'] ?? '') : '—') ?></td>
                             <?php if (!$printMode): ?>
                                 <td class="text-end">
                                     <div class="d-inline-flex gap-1">
@@ -456,7 +577,8 @@ require_once __DIR__ . '/includes/header.php';
                                             <input type="hidden" name="action" value="set_manual_attendance">
                                             <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
                                             <input type="hidden" name="attendance_date" value="<?= htmlspecialchars($attendanceDate) ?>">
-                                            <input type="hidden" name="record_id" value="<?= (int) $row['id'] ?>">
+                                            <input type="hidden" name="record_id" value="<?= $recordId ?>">
+                                            <input type="hidden" name="student_id" value="<?= $studentId ?>">
                                             <input type="hidden" name="status" value="present">
                                             <button type="submit" class="btn btn-sm btn-outline-success"<?= app_tooltip_attr('Overrides this student as present for the selected date.') ?>>Mark present</button>
                                         </form>
@@ -464,19 +586,22 @@ require_once __DIR__ . '/includes/header.php';
                                             <input type="hidden" name="action" value="set_manual_attendance">
                                             <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
                                             <input type="hidden" name="attendance_date" value="<?= htmlspecialchars($attendanceDate) ?>">
-                                            <input type="hidden" name="record_id" value="<?= (int) $row['id'] ?>">
+                                            <input type="hidden" name="record_id" value="<?= $recordId ?>">
+                                            <input type="hidden" name="student_id" value="<?= $studentId ?>">
                                             <input type="hidden" name="status" value="absent">
                                             <button type="submit" class="btn btn-sm btn-outline-danger"<?= app_tooltip_attr('Overrides this student as absent for the selected date.') ?>>Mark absent</button>
                                         </form>
+                                        <?php if ($hasRecord): ?>
                                         <form method="post" onsubmit="return confirm('Delete this attendance record?');">
                                             <input type="hidden" name="action" value="delete_attendance_record">
                                             <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
                                             <input type="hidden" name="attendance_date" value="<?= htmlspecialchars($attendanceDate) ?>">
-                                            <input type="hidden" name="record_id" value="<?= (int) $row['id'] ?>">
+                                            <input type="hidden" name="record_id" value="<?= $recordId ?>">
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete record" aria-label="Delete attendance record"<?= app_tooltip_attr('Deletes this attendance row after confirmation. Use to fix mistaken auto entries.') ?>>
                                                 <i class="fa-solid fa-trash"></i>
                                             </button>
                                         </form>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             <?php endif; ?>

@@ -58,6 +58,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        if ($settingsAction === 'change_username') {
+            if (is_admin() || is_super_admin()) {
+                throw new RuntimeException('Administrators cannot change their username here.');
+            }
+            if ($forcePasswordChange) {
+                throw new RuntimeException('Please change your temporary password before updating your username.');
+            }
+
+            $newUsername = trim((string) ($_POST['new_username'] ?? ''));
+            $confirmPassword = (string) ($_POST['confirm_password'] ?? '');
+
+            if ($newUsername === '' || $confirmPassword === '') {
+                throw new RuntimeException('New username and current password are required.');
+            }
+            if (!preg_match('/^[a-zA-Z0-9._-]{3,50}$/', $newUsername)) {
+                throw new RuntimeException('Username must be 3–50 characters (letters, numbers, . _ -).');
+            }
+
+            $st = db()->prepare('SELECT username, password FROM users WHERE id = ? AND is_active = 1 LIMIT 1');
+            $st->execute([$userId]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
+                throw new RuntimeException('Invalid user session. Please log in again.');
+            }
+
+            $currentUsername = (string) ($row['username'] ?? '');
+            $hash = (string) ($row['password'] ?? '');
+            if ($hash === '' || !password_verify($confirmPassword, $hash)) {
+                throw new RuntimeException('Current password is incorrect.');
+            }
+            if (strcasecmp($newUsername, $currentUsername) === 0) {
+                throw new RuntimeException('New username must be different from your current username.');
+            }
+
+            $exists = db()->prepare('SELECT COUNT(*) FROM users WHERE username = ? AND id <> ?');
+            $exists->execute([$newUsername, $userId]);
+            if ((int) $exists->fetchColumn() > 0) {
+                $suggestions = suggest_available_usernames($newUsername, 3);
+                $msg = 'Username already exists.';
+                if ($suggestions) {
+                    $msg .= ' Try: ' . implode(', ', $suggestions);
+                }
+                throw new RuntimeException($msg);
+            }
+
+            db()->prepare('UPDATE users SET username = ? WHERE id = ?')
+                ->execute([$newUsername, $userId]);
+
+            $_SESSION['username'] = $newUsername;
+
+            log_user_activity(
+                'edit',
+                'Account',
+                'Username changed (own account)',
+                null,
+                ['username' => ['before' => $currentUsername, 'after' => $newUsername]]
+            );
+            $_SESSION['flash'] = 'Username updated successfully.';
+            header('Location: settings.php');
+            exit;
+        }
+
         $currentPassword = (string) ($_POST['current_password'] ?? '');
         $newPassword = (string) ($_POST['new_password'] ?? '');
         $confirmPassword = (string) ($_POST['confirm_password'] ?? '');
@@ -117,6 +179,8 @@ if (is_admin() || is_super_admin()) {
 }
 
 $userId = (int) ($_SESSION['user_id'] ?? 0);
+$canChangeUsername = !is_admin() && !is_super_admin();
+$currentUsername = (string) ($_SESSION['username'] ?? '');
 $profilePhotoReady = profile_photo_column_ready();
 $profilePhotoUrl = $profilePhotoReady ? profile_photo_url($userId) : null;
 
@@ -132,6 +196,33 @@ require_once __DIR__ . '/includes/header.php';
 <?php endif; ?>
 
 <?php if (!$forcePasswordChange): ?>
+<?php if ($canChangeUsername): ?>
+<div class="card shadow-sm mb-4" style="max-width: 640px;">
+    <div class="card-header bg-white"><strong>Change Username</strong></div>
+    <div class="card-body">
+        <form method="post" class="row g-3">
+            <input type="hidden" name="settings_action" value="change_username">
+            <div class="col-12">
+                <label class="form-label">Current username</label>
+                <input type="text" class="form-control" value="<?= htmlspecialchars($currentUsername) ?>" disabled autocomplete="username">
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="new_username">New username</label>
+                <input type="text" name="new_username" id="new_username" class="form-control" required minlength="3" maxlength="50" pattern="[A-Za-z0-9._\-]{3,50}" autocomplete="username">
+                <div class="form-text">3–50 characters: letters, numbers, period, underscore, or hyphen.</div>
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="username_confirm_password">Current password</label>
+                <input type="password" name="confirm_password" id="username_confirm_password" class="form-control" required autocomplete="current-password">
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary"<?= app_tooltip_attr('Updates your login username after verifying your current password.') ?>>Update Username</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="card shadow-sm mb-4" style="max-width: 640px;">
     <div class="card-header bg-white"><strong>Profile Photo</strong></div>
     <div class="card-body">

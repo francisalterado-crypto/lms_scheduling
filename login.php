@@ -199,10 +199,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $_SESSION['full_name'] = $user['full_name'];
                             $_SESSION['role'] = $user['role'];
                             $_SESSION['assigned_program'] = (string) ($user['assigned_program'] ?? '');
+                            $_SESSION['assigned_programs'] = [];
                             $_SESSION['admin_log_title'] = trim((string) ($user['admin_log_title'] ?? ''));
                             $_SESSION['college_id'] = $user['college_id'] !== null ? (int) $user['college_id'] : null;
                             $_SESSION['faculty_id'] = $resolvedFacultyId;
                             $_SESSION['student_id'] = $resolvedStudentId;
+                            if ($userRole === 'program_chair') {
+                                ensure_program_chair_programs_table();
+                                program_chair_sync_session_programs((int) $user['id']);
+                            }
                             try {
                                 if (db_column_exists('users', 'last_logout_at')) {
                                     db()->prepare('UPDATE users SET last_login_at = NOW(), last_seen_at = NOW(), last_logout_at = NULL WHERE id = ?')

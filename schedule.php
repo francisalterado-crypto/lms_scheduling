@@ -20,8 +20,10 @@ $hasLaboratoryUnits = db_column_exists('courses', 'laboratory_units');
 $flash = $_SESSION['flash'] ?? '';
 unset($_SESSION['flash']);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
-    $sid = (int) $_POST['delete_id'];
+/**
+ * Delete one schedule row when the current user is allowed. Returns true when a row was removed.
+ */
+$scheduleDeleteOne = static function (int $sid) use ($collegeId, $programScope): bool {
     if (is_admin()) {
         $snap = db()->prepare(
             'SELECT s.id, s.faculty_id, s.course_id, s.room_id, s.college_id, s.semester, s.school_year,
@@ -48,45 +50,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
                 null
             );
         }
-        $_SESSION['flash'] = 'Schedule deleted by admin emergency override.';
-    } elseif ((is_dean() || is_program_chair()) && $collegeId) {
+
+        return $stmt->rowCount() > 0;
+    }
+    if ((is_dean() || is_program_chair()) && $collegeId) {
         $check = db()->prepare(
-            'SELECT s.id, COALESCE(u.role, "") AS creator_role, c.department
+            'SELECT s.id, COALESCE(u.role, "") AS creator_role,
+                    c.department AS course_dept, f.department AS faculty_dept
              FROM schedules s
              INNER JOIN courses c ON c.id = s.course_id
+             INNER JOIN faculty f ON f.id = s.faculty_id
              LEFT JOIN users u ON u.id = s.created_by
              WHERE s.id=? AND s.college_id=? LIMIT 1'
         );
         $check->execute([$sid, $collegeId]);
         $row = $check->fetch();
         if (!$row) {
-            $_SESSION['flash'] = 'Schedule not found.';
-        } elseif ($programScope !== null && trim((string) ($row['department'] ?? '')) !== $programScope) {
-            $_SESSION['flash'] = 'This schedule is outside your assigned program.';
-        } elseif ((string) $row['creator_role'] === 'gened') {
-            $_SESSION['flash'] = 'This GE-created schedule is read-only for Deans.';
-        } else {
-            $snapPc = db()->prepare(
-                'SELECT s.id, s.faculty_id, s.course_id, s.room_id, s.college_id, s.semester, s.school_year,
-                        s.day_of_week, s.start_time, s.end_time, s.schedule_type,
-                        f.full_name AS faculty_name, c.course_code, c.course_name, r.room_code
-                 FROM schedules s
-                 INNER JOIN faculty f ON f.id = s.faculty_id
-                 INNER JOIN courses c ON c.id = s.course_id
-                 INNER JOIN rooms r ON r.id = s.room_id
-                 WHERE s.id = ? AND s.college_id = ? LIMIT 1'
-            );
-            $snapPc->execute([$sid, $collegeId]);
-            $schedBeforePc = $snapPc->fetch(PDO::FETCH_ASSOC);
-            $stmt = db()->prepare('DELETE FROM schedules WHERE id=? AND college_id=?');
-            $stmt->execute([$sid, $collegeId]);
-            if ($schedBeforePc) {
-                log_user_activity('delete', 'Schedules', 'Schedule #' . $sid, (array) $schedBeforePc, null);
-            }
-            log_dean_activity('schedule_delete', 'Deleted schedule #' . $sid);
-            $_SESSION['flash'] = 'Schedule deleted.';
+            return false;
         }
-    } elseif (is_gened()) {
+        // Match list visibility: program chairs may act when faculty OR course is in their program.
+        if ($programScope !== null) {
+            $courseDept = trim((string) ($row['course_dept'] ?? ''));
+            $facultyDept = trim((string) ($row['faculty_dept'] ?? ''));
+            if ($courseDept !== $programScope && $facultyDept !== $programScope) {
+                return false;
+            }
+        }
+        if ((string) $row['creator_role'] === 'gened') {
+            return false;
+        }
+        $snapPc = db()->prepare(
+            'SELECT s.id, s.faculty_id, s.course_id, s.room_id, s.college_id, s.semester, s.school_year,
+                    s.day_of_week, s.start_time, s.end_time, s.schedule_type,
+                    f.full_name AS faculty_name, c.course_code, c.course_name, r.room_code
+             FROM schedules s
+             INNER JOIN faculty f ON f.id = s.faculty_id
+             INNER JOIN courses c ON c.id = s.course_id
+             INNER JOIN rooms r ON r.id = s.room_id
+             WHERE s.id = ? AND s.college_id = ? LIMIT 1'
+        );
+        $snapPc->execute([$sid, $collegeId]);
+        $schedBeforePc = $snapPc->fetch(PDO::FETCH_ASSOC);
+        $stmt = db()->prepare('DELETE FROM schedules WHERE id=? AND college_id=?');
+        $stmt->execute([$sid, $collegeId]);
+        if ($stmt->rowCount() > 0 && $schedBeforePc) {
+            log_user_activity('delete', 'Schedules', 'Schedule #' . $sid, (array) $schedBeforePc, null);
+            log_dean_activity('schedule_delete', 'Deleted schedule #' . $sid);
+        }
+
+        return $stmt->rowCount() > 0;
+    }
+    if (is_gened()) {
         $snapGe = db()->prepare(
             'SELECT s.id, s.faculty_id, s.course_id, s.room_id, s.college_id, s.semester, s.school_year,
                     s.day_of_week, s.start_time, s.end_time, s.schedule_type,
@@ -109,12 +123,108 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
         if ($stmt->rowCount() > 0 && $schedBeforeGe) {
             log_user_activity('delete', 'Schedules', 'Schedule #' . $sid, (array) $schedBeforeGe, null);
         }
-        $_SESSION['flash'] = $stmt->rowCount() > 0
-            ? 'GE schedule deleted.'
-            : 'Only GE-created schedules can be deleted by GEN ED account.';
+
+        return $stmt->rowCount() > 0;
     }
-    header('Location: schedule.php');
-    exit;
+
+    return false;
+};
+
+$scheduleListRedirect = static function (array $returnParams = []): string {
+    $query = [];
+    foreach (['dept', 'semester', 'school_year', 'faculty_search', 'course'] as $key) {
+        $value = trim((string) ($returnParams[$key] ?? ''));
+        if ($value !== '') {
+            $query[$key] = $value;
+        }
+    }
+
+    return 'schedule.php' . ($query !== [] ? '?' . http_build_query($query) : '');
+};
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $returnParams = [
+        'dept' => (string) ($_POST['return_dept'] ?? ''),
+        'semester' => (string) ($_POST['return_semester'] ?? ''),
+        'school_year' => (string) ($_POST['return_school_year'] ?? ''),
+        'faculty_search' => (string) ($_POST['return_faculty_search'] ?? ''),
+        'course' => (string) ($_POST['return_course'] ?? ''),
+    ];
+
+    if (isset($_POST['delete_id'])) {
+        $sid = (int) $_POST['delete_id'];
+        if ($scheduleDeleteOne($sid)) {
+            if (is_admin()) {
+                $_SESSION['flash'] = 'Schedule deleted by admin emergency override.';
+            } elseif (is_gened()) {
+                $_SESSION['flash'] = 'GE schedule deleted.';
+            } else {
+                $_SESSION['flash'] = 'Schedule deleted.';
+            }
+        } else {
+            if ((is_dean() || is_program_chair()) && $collegeId) {
+                $check = db()->prepare(
+                    'SELECT s.id, COALESCE(u.role, "") AS creator_role,
+                            c.department AS course_dept, f.department AS faculty_dept
+                     FROM schedules s
+                     INNER JOIN courses c ON c.id = s.course_id
+                     INNER JOIN faculty f ON f.id = s.faculty_id
+                     LEFT JOIN users u ON u.id = s.created_by
+                     WHERE s.id=? AND s.college_id=? LIMIT 1'
+                );
+                $check->execute([$sid, $collegeId]);
+                $row = $check->fetch();
+                if (!$row) {
+                    $_SESSION['flash'] = 'Schedule not found.';
+                } elseif ($programScope !== null) {
+                    $courseDept = trim((string) ($row['course_dept'] ?? ''));
+                    $facultyDept = trim((string) ($row['faculty_dept'] ?? ''));
+                    if ($courseDept !== $programScope && $facultyDept !== $programScope) {
+                        $_SESSION['flash'] = 'This schedule is outside your assigned program.';
+                    } elseif ((string) $row['creator_role'] === 'gened') {
+                        $_SESSION['flash'] = 'This GE-created schedule is read-only for Deans.';
+                    } else {
+                        $_SESSION['flash'] = 'Schedule could not be deleted.';
+                    }
+                } elseif ((string) $row['creator_role'] === 'gened') {
+                    $_SESSION['flash'] = 'This GE-created schedule is read-only for Deans.';
+                } else {
+                    $_SESSION['flash'] = 'Schedule could not be deleted.';
+                }
+            } elseif (is_gened()) {
+                $_SESSION['flash'] = 'Only GE-created schedules can be deleted by GEN ED account.';
+            } else {
+                $_SESSION['flash'] = 'Schedule could not be deleted.';
+            }
+        }
+        header('Location: ' . $scheduleListRedirect($returnParams));
+        exit;
+    }
+
+    if (isset($_POST['delete_bulk'])) {
+        $ids = isset($_POST['ids']) && is_array($_POST['ids'])
+            ? array_values(array_unique(array_filter(array_map('intval', $_POST['ids']), static fn (int $id): bool => $id > 0)))
+            : [];
+        if ($ids === []) {
+            $_SESSION['flash'] = 'Select at least one schedule to delete.';
+        } else {
+            $deleted = 0;
+            foreach ($ids as $sid) {
+                if ($scheduleDeleteOne($sid)) {
+                    $deleted++;
+                }
+            }
+            if ($deleted === 0) {
+                $_SESSION['flash'] = 'No selected schedules could be deleted.';
+            } elseif ($deleted === 1) {
+                $_SESSION['flash'] = '1 schedule deleted.';
+            } else {
+                $_SESSION['flash'] = $deleted . ' schedules deleted.';
+            }
+        }
+        header('Location: ' . $scheduleListRedirect($returnParams));
+        exit;
+    }
 }
 
 $dept = trim((string) ($_GET['dept'] ?? ''));
@@ -247,19 +357,55 @@ foreach ($scheduleListGroups as $group) {
     }
 }
 
+$canDeleteSchedule = static function (array $r): bool {
+    $isGeCreated = ((string) ($r['creator_role'] ?? '') === 'gened');
+    if (is_admin()) {
+        return true;
+    }
+    if ((is_dean() || is_program_chair()) && !$isGeCreated) {
+        return true;
+    }
+
+    return is_gened() && $isGeCreated;
+};
+
+$scheduleShowBulkDelete = is_admin() || is_dean() || is_program_chair() || is_gened();
+$scheduleHasDeletableRows = false;
+if ($scheduleShowBulkDelete) {
+    foreach ($rows as $r) {
+        if ($canDeleteSchedule($r)) {
+            $scheduleHasDeletableRows = true;
+            break;
+        }
+    }
+}
+
+$scheduleReturnFilterFields = [
+    'return_dept' => $dept,
+    'return_semester' => $sem,
+    'return_school_year' => $sy,
+    'return_faculty_search' => $facultySearch,
+    'return_course' => $courseSearch,
+];
+
 $formatTime12h = static function (?string $time): string {
     $raw = substr((string) $time, 0, 5);
     $dt = DateTime::createFromFormat('H:i', $raw);
     return $dt ? $dt->format('g:i A') : $raw;
 };
 
-/** Laboratory-style block: lab room, or a typical ~3-hour meeting (not long lecture spans). */
-$segmentIsLaboratory = static function (array $r): bool {
+/** Laboratory vs lecture badge: prefer session_kind; pure lecture courses stay Lecture even at 3h. */
+$segmentIsLaboratory = static function (array $r) use ($hasCourseLabFlag): bool {
+    $courseIsLab = null;
+    if ($hasCourseLabFlag && array_key_exists('is_laboratory', $r)) {
+        $courseIsLab = (int) ($r['is_laboratory'] ?? 0) === 1;
+    }
     return schedule_session_is_laboratory(
         (string) ($r['start_time'] ?? ''),
         (string) ($r['end_time'] ?? ''),
         (string) ($r['room_type'] ?? ''),
-        isset($r['session_kind']) ? (string) $r['session_kind'] : null
+        isset($r['session_kind']) ? (string) $r['session_kind'] : null,
+        $courseIsLab
     );
 };
 
@@ -438,6 +584,21 @@ require_once __DIR__ . '/includes/header.php';
         padding-left: 14px;
     }
 
+    .schedule-table .schedule-col-select {
+        width: 36px;
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    .schedule-bulk-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
     .schedule-table th:last-child, .schedule-table td:last-child {
         padding-right: 14px;
     }
@@ -605,10 +766,27 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </form>
 
+<?php if ($scheduleShowBulkDelete && $scheduleHasDeletableRows): ?>
+    <form id="schedule-bulk-delete-form" method="post" class="schedule-bulk-bar no-print" onsubmit="return confirm('Delete the selected schedule rows? This cannot be undone.');">
+        <input type="hidden" name="delete_bulk" value="1">
+        <?php foreach ($scheduleReturnFilterFields as $fieldName => $fieldValue): ?>
+            <input type="hidden" name="<?= htmlspecialchars($fieldName) ?>" value="<?= htmlspecialchars((string) $fieldValue) ?>">
+        <?php endforeach; ?>
+        <button type="submit" id="schedule-bulk-delete-btn" class="btn btn-sm btn-outline-danger" disabled<?= app_tooltip_attr('Deletes every checked schedule row in the list. Select rows first, then use this to remove several at once.') ?>>
+            <i class="fa-solid fa-trash" aria-hidden="true"></i> Delete selected
+        </button>
+    </form>
+<?php endif; ?>
+
 <div class="schedule-list-wrapper">
             <table class="schedule-table">
                 <thead>
                 <tr>
+                    <?php if ($scheduleShowBulkDelete && $scheduleHasDeletableRows): ?>
+                        <th class="no-print schedule-col-select">
+                            <input type="checkbox" class="form-check-input" id="schedule-select-all" aria-label="Select all deletable schedules on this page">
+                        </th>
+                    <?php endif; ?>
                     <th>Time / Days</th>
                     <th>Course</th>
                     <th>Faculty</th>
@@ -622,7 +800,7 @@ require_once __DIR__ . '/includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (!$rows): ?>
-                    <tr><td data-label="STATUS" colspan="<?= $hasGeTargetsTable ? '9' : '8' ?>" class="text-muted p-4">No schedules match your filters.</td></tr>
+                    <tr><td data-label="STATUS" colspan="<?= ($hasGeTargetsTable ? 9 : 8) + ($scheduleShowBulkDelete && $scheduleHasDeletableRows ? 1 : 0) ?>" class="text-muted p-4">No schedules match your filters.</td></tr>
                 <?php endif; ?>
                 <?php foreach ($scheduleListDisplay as $block): ?>
                     <?php
@@ -630,6 +808,25 @@ require_once __DIR__ . '/includes/header.php';
                     $r0 = $lines[0];
                     ?>
                     <tr>
+                        <?php
+                        $deletableIds = [];
+                        foreach ($lines as $r) {
+                            if ($canDeleteSchedule($r)) {
+                                $deletableIds[] = (int) $r['id'];
+                            }
+                        }
+                        $deletableIds = array_values(array_unique($deletableIds));
+                        ?>
+                        <?php if ($scheduleShowBulkDelete && $scheduleHasDeletableRows): ?>
+                            <td data-label="SELECT" class="no-print schedule-col-select">
+                                <?php if ($deletableIds !== []): ?>
+                                    <input type="checkbox" class="form-check-input schedule-group-select" aria-label="Select schedule group" data-ids="<?= htmlspecialchars(implode(',', $deletableIds)) ?>">
+                                    <?php foreach ($deletableIds as $delId): ?>
+                                        <input type="checkbox" class="d-none schedule-row-select" name="ids[]" form="schedule-bulk-delete-form" value="<?= $delId ?>" tabindex="-1" aria-hidden="true">
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </td>
+                        <?php endif; ?>
                         <td data-label="TIME / DAYS">
                             <?php foreach ($lines as $idx => $r): ?>
                                 <?php
@@ -698,23 +895,18 @@ require_once __DIR__ . '/includes/header.php';
                         <td data-label="SEMESTER"><?= htmlspecialchars($r0['semester']) ?></td>
                         <td data-label="SCHOOL YEAR"><?= htmlspecialchars($r0['school_year']) ?></td>
                         <td data-label="ACTIONS" class="no-print text-nowrap">
-                            <?php foreach ($lines as $r): ?>
-                                <?php $isGeCreated = ((string) ($r['creator_role'] ?? '') === 'gened'); ?>
-                                <div class="d-inline-flex gap-1 align-items-center mb-1">
-                                    <?php if ((is_dean() || is_program_chair()) && !$isGeCreated): ?>
-                                        <a href="edit_schedule.php?id=<?= (int) $r['id'] ?>" class="btn btn-sm btn-outline-primary" title="Edit <?= htmlspecialchars($r['room_type'] ?? '') ?>"<?= app_tooltip_attr('Opens the editor for this schedule segment. Use this to change time, room, faculty, or meeting link.') ?>><i class="fa-solid fa-pen"></i></a>
-                                    <?php endif; ?>
-                                    <?php if (is_gened() && $isGeCreated): ?>
-                                        <a href="gened_edit_schedule.php?id=<?= (int) $r['id'] ?>" class="btn btn-sm btn-outline-primary"<?= app_tooltip_attr('Opens the GE schedule editor for this row. Use this to adjust GE placement or targets.') ?>><i class="fa-solid fa-pen"></i></a>
-                                    <?php endif; ?>
-                                    <?php if (is_admin() || ((is_dean() || is_program_chair()) && !$isGeCreated) || (is_gened() && $isGeCreated)): ?>
-                                        <form method="post" class="d-inline" onsubmit="return confirm('Delete this schedule row?');">
-                                            <input type="hidden" name="delete_id" value="<?= (int) $r['id'] ?>">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete this row"<?= app_tooltip_attr('Deletes this schedule row after confirmation. Use this when a section is cancelled or duplicated by mistake.') ?>><i class="fa-solid fa-trash"></i></button>
-                                        </form>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endforeach; ?>
+                            <?php if ($deletableIds !== []): ?>
+                                <form method="post" class="d-inline" onsubmit="return confirm('Delete this schedule<?= count($deletableIds) > 1 ? ' (all linked lecture/lab rows)' : '' ?>? This cannot be undone.');">
+                                    <input type="hidden" name="delete_bulk" value="1">
+                                    <?php foreach ($deletableIds as $delId): ?>
+                                        <input type="hidden" name="ids[]" value="<?= $delId ?>">
+                                    <?php endforeach; ?>
+                                    <?php foreach ($scheduleReturnFilterFields as $fieldName => $fieldValue): ?>
+                                        <input type="hidden" name="<?= htmlspecialchars($fieldName) ?>" value="<?= htmlspecialchars((string) $fieldValue) ?>">
+                                    <?php endforeach; ?>
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"<?= app_tooltip_attr(count($deletableIds) > 1 ? 'Deletes all linked lecture and laboratory rows for this course offering after confirmation.' : 'Deletes this schedule row after confirmation. Use this when a section is cancelled or duplicated by mistake.') ?>><i class="fa-solid fa-trash"></i></button>
+                                </form>
+                            <?php endif; ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -726,5 +918,76 @@ require_once __DIR__ . '/includes/header.php';
 </div>
 </div>
 </div>
+
+<?php if ($scheduleShowBulkDelete && $scheduleHasDeletableRows): ?>
+<script>
+(function () {
+    var selectAll = document.getElementById('schedule-select-all');
+    var deleteBtn = document.getElementById('schedule-bulk-delete-btn');
+    if (!selectAll || !deleteBtn) {
+        return;
+    }
+
+    var rowChecks = function () {
+        return Array.prototype.slice.call(document.querySelectorAll('.schedule-row-select'));
+    };
+
+    var groupChecks = function () {
+        return Array.prototype.slice.call(document.querySelectorAll('.schedule-group-select'));
+    };
+
+    var setGroupIdsChecked = function (groupEl, checked) {
+        var ids = (groupEl.getAttribute('data-ids') || '').split(',').filter(Boolean);
+        rowChecks().forEach(function (el) {
+            if (ids.indexOf(String(el.value)) !== -1) {
+                el.checked = checked;
+            }
+        });
+        groupEl.checked = checked;
+        groupEl.indeterminate = false;
+    };
+
+    var syncGroupFromRows = function (groupEl) {
+        var ids = (groupEl.getAttribute('data-ids') || '').split(',').filter(Boolean);
+        var matched = rowChecks().filter(function (el) {
+            return ids.indexOf(String(el.value)) !== -1;
+        });
+        var selected = matched.filter(function (el) { return el.checked; });
+        groupEl.checked = matched.length > 0 && selected.length === matched.length;
+        groupEl.indeterminate = selected.length > 0 && selected.length < matched.length;
+    };
+
+    var syncBulkDelete = function () {
+        var checks = rowChecks();
+        var selected = checks.filter(function (el) { return el.checked; });
+        deleteBtn.disabled = selected.length === 0;
+        selectAll.indeterminate = selected.length > 0 && selected.length < checks.length;
+        selectAll.checked = checks.length > 0 && selected.length === checks.length;
+        groupChecks().forEach(syncGroupFromRows);
+    };
+
+    selectAll.addEventListener('change', function () {
+        var checked = selectAll.checked;
+        rowChecks().forEach(function (el) {
+            el.checked = checked;
+        });
+        groupChecks().forEach(function (el) {
+            el.checked = checked;
+            el.indeterminate = false;
+        });
+        syncBulkDelete();
+    });
+
+    groupChecks().forEach(function (el) {
+        el.addEventListener('change', function () {
+            setGroupIdsChecked(el, el.checked);
+            syncBulkDelete();
+        });
+    });
+
+    syncBulkDelete();
+})();
+</script>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -11,6 +11,43 @@ $programScope = is_program_chair() ? program_scope_or_fail() : null;
 $facultySelfId = isset($_SESSION['faculty_id']) ? (int) $_SESSION['faculty_id'] : 0;
 $facultyCollegeId = ($role === 'faculty' && $facultySelfId > 0) ? faculty_college_id($facultySelfId) : null;
 
+$hasCourseColors = ensure_faculty_course_colors_table();
+
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && $role === 'faculty'
+    && $facultySelfId > 0
+    && (string) ($_POST['action'] ?? '') === 'save_course_color'
+) {
+    $redirectQs = [];
+    foreach (['dept', 'semester', 'school_year'] as $qk) {
+        $qv = trim((string) ($_POST[$qk] ?? $_GET[$qk] ?? ''));
+        if ($qv !== '') {
+            $redirectQs[$qk] = $qv;
+        }
+    }
+    $redirectUrl = 'view_schedule.php' . ($redirectQs !== [] ? ('?' . http_build_query($redirectQs)) : '');
+    try {
+        save_faculty_course_color(
+            $facultySelfId,
+            (int) ($_POST['course_id'] ?? 0),
+            (int) ($_POST['color_index'] ?? 0),
+            $facultyCollegeId
+        );
+        $_SESSION['flash'] = 'Course color saved. Matching blocks on your weekly view use this color.';
+    } catch (Throwable $e) {
+        $_SESSION['flash'] = 'Error: ' . $e->getMessage();
+    }
+    header('Location: ' . $redirectUrl);
+    exit;
+}
+
+$flash = '';
+if (!empty($_SESSION['flash'])) {
+    $flash = (string) $_SESSION['flash'];
+    unset($_SESSION['flash']);
+}
+
 $dept = trim((string) ($_GET['dept'] ?? ''));
 $sem = trim((string) ($_GET['semester'] ?? ''));
 $sy = trim((string) ($_GET['school_year'] ?? ''));
@@ -99,14 +136,60 @@ $stmt = db()->prepare($sql);
 $stmt->execute($params);
 $schedules = $stmt->fetchAll();
 
+/** @var array<int, array<int, int>> $facultyColorMaps faculty_id => (course_id => color_index) */
+$facultyColorMaps = [];
+if ($hasCourseColors && $schedules) {
+    $facultyIdsForColors = [];
+    foreach ($schedules as $sRow) {
+        $fid = (int) ($sRow['faculty_id'] ?? 0);
+        if ($fid > 0) {
+            $facultyIdsForColors[$fid] = true;
+        }
+    }
+    $ids = array_keys($facultyIdsForColors);
+    if ($ids !== []) {
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stColors = db()->prepare(
+            "SELECT faculty_id, course_id, color_index
+             FROM faculty_course_colors
+             WHERE faculty_id IN ({$placeholders})"
+        );
+        $stColors->execute($ids);
+        foreach ($stColors->fetchAll(PDO::FETCH_ASSOC) as $colorRow) {
+            $fid = (int) $colorRow['faculty_id'];
+            $cid = (int) $colorRow['course_id'];
+            $facultyColorMaps[$fid][$cid] = max(0, min(5, (int) $colorRow['color_index']));
+        }
+    }
+}
+
+$facultyCourseLegend = [];
+if ($role === 'faculty' && $facultySelfId > 0) {
+    foreach ($schedules as $sRow) {
+        $cid = (int) ($sRow['course_id'] ?? 0);
+        if ($cid < 1 || isset($facultyCourseLegend[$cid])) {
+            continue;
+        }
+        $facultyCourseLegend[$cid] = [
+            'course_code' => (string) ($sRow['course_code'] ?? ''),
+            'course_name' => (string) ($sRow['course_name'] ?? ''),
+            'color_index' => (int) ($facultyColorMaps[$facultySelfId][$cid] ?? ($cid % 6)),
+        ];
+    }
+    uasort($facultyCourseLegend, static function (array $a, array $b): int {
+        return strcmp($a['course_code'], $b['course_code']);
+    });
+}
+$colorPalette = schedule_color_palette();
+
 $formatTime12h = static function (?string $time): string {
     $raw = substr((string) $time, 0, 5);
     $dt = DateTime::createFromFormat('H:i', $raw);
     return $dt ? $dt->format('g:i A') : $raw;
 };
 
-/** Faculty clicked “Go live” within the last 2 hours (shown to dean on weekly view). */
-$scheduleShowsLive = static function (?string $liveAt): bool {
+/** Faculty clicked “Go live” and class is still within its scheduled day/time window. */
+$scheduleShowsLive = static function (array $scheduleRow, ?string $liveAt): bool {
     if ($liveAt === null || $liveAt === '') {
         return false;
     }
@@ -114,7 +197,10 @@ $scheduleShowsLive = static function (?string $liveAt): bool {
     if ($t === false) {
         return false;
     }
-    return (time() - $t) <= 2 * 3600;
+    if ((time() - $t) > 2 * 3600) {
+        return false;
+    }
+    return !empty(classroom_attendance_login_allowed($scheduleRow)['allowed']);
 };
 
 $byDay = [];
@@ -133,6 +219,39 @@ foreach ($byDay as $d => $list) {
         return strcmp((string) $a['start_time'], (string) $b['start_time']);
     });
 }
+
+/** Hourly grid bounds so vacant slots are visible against the time axis. */
+$gridStartMin = defined('TIME_MIN') ? time_to_minutes((string) TIME_MIN) : 7 * 60;
+$gridEndMin = defined('TIME_MAX') ? time_to_minutes((string) TIME_MAX) : 21 * 60;
+foreach ($schedules as $s) {
+    $st = time_to_minutes(substr((string) $s['start_time'], 0, 8));
+    $en = time_to_minutes(substr((string) $s['end_time'], 0, 8));
+    if ($st < $gridStartMin) {
+        $gridStartMin = $st;
+    }
+    if ($en > $gridEndMin) {
+        $gridEndMin = $en;
+    }
+}
+$gridStartHour = (int) floor($gridStartMin / 60);
+$gridEndHour = (int) max($gridStartHour + 1, (int) ceil($gridEndMin / 60));
+$timeSlots = [];
+for ($h = $gridStartHour; $h < $gridEndHour; $h++) {
+    $timeSlots[] = $h;
+}
+
+$scheduleOverlapsHour = static function (array $scheduleRow, int $hour): bool {
+    $slotStart = $hour * 60;
+    $slotEnd = ($hour + 1) * 60;
+    $st = time_to_minutes(substr((string) $scheduleRow['start_time'], 0, 8));
+    $en = time_to_minutes(substr((string) $scheduleRow['end_time'], 0, 8));
+    return $st < $slotEnd && $en > $slotStart;
+};
+
+$scheduleStartsInHour = static function (array $scheduleRow, int $hour): bool {
+    $st = time_to_minutes(substr((string) $scheduleRow['start_time'], 0, 8));
+    return $st >= ($hour * 60) && $st < (($hour + 1) * 60);
+};
 
 $depts = ($role === 'dean' || $role === 'program_chair') && $collegeId
     ? (function () use ($collegeId) {
@@ -174,6 +293,120 @@ require_once __DIR__ . '/includes/header.php';
     <h1 class="h3 mb-0"><i class="fa-solid fa-calendar-week me-2 text-primary"></i>Weekly schedule</h1>
     <button type="button" class="btn btn-outline-secondary no-print" onclick="window.print()"<?= app_tooltip_attr('Opens the print dialog for this weekly view. Use this for a paper copy or PDF without sidebar clutter.') ?>><i class="fa-solid fa-print me-1"></i>Print</button>
 </div>
+
+<?php if ($flash !== ''): ?>
+    <div class="alert <?= str_starts_with($flash, 'Error:') ? 'alert-danger' : 'alert-success' ?> no-print" role="status"><?= htmlspecialchars($flash) ?></div>
+<?php endif; ?>
+
+<?php if ($role === 'faculty' && $hasCourseColors && $facultyCourseLegend !== []): ?>
+    <?php
+    $firstCourseId = (int) array_key_first($facultyCourseLegend);
+    $firstCourseColor = (int) ($facultyCourseLegend[$firstCourseId]['color_index'] ?? 0);
+    ?>
+    <div class="card border-0 shadow-sm mb-3 no-print course-color-panel">
+        <div class="card-body py-3">
+            <div class="mb-2">
+                <h2 class="h6 mb-1"><i class="fa-solid fa-palette me-1 text-primary"></i>Course colors</h2>
+                <p class="small text-muted mb-0">Choose a course and a color, then apply it to the weekly grid.</p>
+            </div>
+            <form method="post" class="row g-2 align-items-end course-color-form" id="course-color-form">
+                <input type="hidden" name="action" value="save_course_color">
+                <?php if ($dept !== ''): ?><input type="hidden" name="dept" value="<?= htmlspecialchars($dept) ?>"><?php endif; ?>
+                <?php if ($sem !== ''): ?><input type="hidden" name="semester" value="<?= htmlspecialchars($sem) ?>"><?php endif; ?>
+                <?php if ($sy !== ''): ?><input type="hidden" name="school_year" value="<?= htmlspecialchars($sy) ?>"><?php endif; ?>
+                <div class="col-12 col-sm-5 col-md-4">
+                    <label class="form-label small mb-0" for="course-color-course">Course</label>
+                    <select id="course-color-course" name="course_id" class="form-select form-select-sm" required>
+                        <?php foreach ($facultyCourseLegend as $courseId => $courseInfo): ?>
+                            <option
+                                value="<?= (int) $courseId ?>"
+                                data-color-index="<?= (int) $courseInfo['color_index'] ?>"
+                                <?= (int) $courseId === $firstCourseId ? 'selected' : '' ?>
+                            >
+                                <?= htmlspecialchars($courseInfo['course_code']) ?><?= $courseInfo['course_name'] !== '' ? ' — ' . htmlspecialchars($courseInfo['course_name']) : '' ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-8 col-sm-4 col-md-3">
+                    <label class="form-label small mb-0" for="course-color-index">Color</label>
+                    <div class="d-flex align-items-center gap-2">
+                        <span
+                            id="course-color-preview"
+                            class="course-color-preview"
+                            style="--swatch-bg: <?= htmlspecialchars($colorPalette[$firstCourseColor]['bg'] ?? '#e2e8f0') ?>; --swatch-border: <?= htmlspecialchars($colorPalette[$firstCourseColor]['border'] ?? '#94a3b8') ?>;"
+                            aria-hidden="true"
+                        ></span>
+                        <select id="course-color-index" name="color_index" class="form-select form-select-sm" required>
+                            <?php foreach ($colorPalette as $swatch): ?>
+                                <option
+                                    value="<?= (int) $swatch['index'] ?>"
+                                    data-bg="<?= htmlspecialchars($swatch['bg']) ?>"
+                                    data-border="<?= htmlspecialchars($swatch['border']) ?>"
+                                    <?= (int) $swatch['index'] === $firstCourseColor ? 'selected' : '' ?>
+                                >
+                                    <?= htmlspecialchars($swatch['label']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-4 col-sm-3 col-md-2">
+                    <button type="submit" class="btn btn-sm btn-primary w-100"<?= app_tooltip_attr('Saves the selected color for the chosen course on your weekly schedule.') ?>>Apply</button>
+                </div>
+            </form>
+            <?php if (count($facultyCourseLegend) > 0): ?>
+                <div class="course-color-legend mt-3 pt-2 border-top">
+                    <div class="small text-muted mb-2">Current colors</div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <?php foreach ($facultyCourseLegend as $courseId => $courseInfo): ?>
+                            <?php
+                            $ci = (int) $courseInfo['color_index'];
+                            $sw = $colorPalette[$ci] ?? $colorPalette[0];
+                            ?>
+                            <span class="course-color-legend-item">
+                                <span
+                                    class="course-color-preview course-color-preview--sm"
+                                    style="--swatch-bg: <?= htmlspecialchars($sw['bg']) ?>; --swatch-border: <?= htmlspecialchars($sw['border']) ?>;"
+                                    aria-hidden="true"
+                                ></span>
+                                <span class="small"><?= htmlspecialchars($courseInfo['course_code']) ?></span>
+                            </span>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+    <script>
+    (function () {
+        var courseSelect = document.getElementById('course-color-course');
+        var colorSelect = document.getElementById('course-color-index');
+        var preview = document.getElementById('course-color-preview');
+        if (!courseSelect || !colorSelect || !preview) return;
+
+        function syncPreview() {
+            var opt = colorSelect.options[colorSelect.selectedIndex];
+            if (!opt) return;
+            preview.style.setProperty('--swatch-bg', opt.getAttribute('data-bg') || '#e2e8f0');
+            preview.style.setProperty('--swatch-border', opt.getAttribute('data-border') || '#94a3b8');
+        }
+
+        courseSelect.addEventListener('change', function () {
+            var opt = courseSelect.options[courseSelect.selectedIndex];
+            if (!opt) return;
+            var idx = opt.getAttribute('data-color-index');
+            if (idx !== null && idx !== '') {
+                colorSelect.value = String(idx);
+            }
+            syncPreview();
+        });
+        colorSelect.addEventListener('change', syncPreview);
+    })();
+    </script>
+<?php elseif ($role === 'faculty' && !$hasCourseColors): ?>
+    <div class="alert alert-warning no-print">Course color coding needs a database update. Ask your administrator to run <a href="upgrade_roles.php">upgrade_roles.php</a> once.</div>
+<?php endif; ?>
 
 <form class="row g-2 mb-4 no-print align-items-end" method="get">
     <div class="col-6 col-md-2">
@@ -242,97 +475,144 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </form>
 
+<p class="text-muted small mb-2 no-print">Times on the left mark each hour. Empty cells are vacant; occupied cells show classes that fall in that hour.</p>
 <div class="table-responsive">
-    <table class="table table-bordered bg-body schedule-weekly">
+    <table class="table table-bordered bg-body schedule-weekly schedule-weekly--timed">
         <thead class="table-primary">
             <tr>
+                <th class="text-center schedule-time-col" scope="col">Time</th>
                 <?php foreach (schedule_days_list() as $day): ?>
                     <th class="text-center" style="min-width:140px"><?= htmlspecialchars($day) ?></th>
                 <?php endforeach; ?>
             </tr>
         </thead>
         <tbody>
-            <tr>
+            <?php foreach ($timeSlots as $hour): ?>
                 <?php
-                foreach (schedule_days_list() as $day):
-                    ?>
-                    <td class="align-top schedule-cell p-2">
-                        <?php foreach ($byDay[$day] as $s): ?>
-                            <?php
-                            $c = 'c' . ((int) $s['course_id'] % 6);
-                            $isGeCourse = $hasCourseIsGenedCol && (int) ($s['course_is_gened'] ?? 0) === 1;
-                            $hostCollegeCode = trim((string) ($s['host_college_code'] ?? ''));
-                            $showHostCollege = is_dean() && $collegeId && $isGeCourse && $hostCollegeCode !== ''
-                                && (int) ($s['college_id'] ?? 0) !== $collegeId;
-                            ?>
-                            <div class="schedule-block <?= $c ?>">
-                                <div class="fw-semibold"><?= htmlspecialchars($formatTime12h((string) $s['start_time'])) ?> – <?= htmlspecialchars($formatTime12h((string) $s['end_time'])) ?></div>
-                                <div><?= htmlspecialchars($s['course_code']) ?><?php if ($isGeCourse): ?> <span class="badge bg-info text-dark" style="font-size:0.65rem">GE</span><?php endif; ?></div>
-                                <?php if ($showHostCollege): ?>
-                                    <div class="small text-muted"><i class="fa-solid fa-building-columns me-1"></i><?= htmlspecialchars($hostCollegeCode) ?></div>
-                                <?php endif; ?>
-                                <div class="small text-muted"><?= htmlspecialchars($s['faculty_name']) ?></div>
-                                <div class="small"><i class="fa-solid fa-door-open me-1"></i><?= htmlspecialchars($s['room_code']) ?></div>
-                                <?php
-                                $liveDisplayMode = weekly_schedule_online_live_mode($role, $s, $collegeFilter, $dept);
-                                $onlineUrl = $hasOnlineUrlCol ? trim((string) ($s['online_class_url'] ?? '')) : '';
-                                $liveAtStr = $hasLiveAtCol ? ($s['online_live_at'] ?? null) : null;
-                                $liveAtStr = $liveAtStr !== null && $liveAtStr !== '' ? (string) $liveAtStr : null;
-                                $isLive = $hasLiveAtCol && $scheduleShowsLive($liveAtStr);
-                                ?>
-                                <?php if ($hasOnlineUrlCol && $onlineUrl !== '' && $liveDisplayMode !== 'hidden'): ?>
-                                    <div class="mt-1 pt-1 border-top border-secondary-subtle small">
-                                        <?php if ($liveDisplayMode === 'unauthorized' && $hasLiveAtCol && $isLive): ?>
-                                            <span class="badge bg-danger live-pulse-badge rounded-pill me-1"><i class="fa-solid fa-circle me-1" style="font-size:0.5rem;vertical-align:middle;"></i>LIVE</span>
+                $slotLabel = $formatTime12h(sprintf('%02d:00', $hour));
+                $slotEndLabel = $formatTime12h(sprintf('%02d:00', $hour + 1));
+                ?>
+                <tr>
+                    <th class="schedule-time-col text-end align-top" scope="row">
+                        <div class="schedule-time-label fw-semibold"><?= htmlspecialchars($slotLabel) ?></div>
+                        <div class="schedule-time-end small text-muted"><?= htmlspecialchars($slotEndLabel) ?></div>
+                    </th>
+                    <?php foreach (schedule_days_list() as $day): ?>
+                        <?php
+                        $slotClasses = [];
+                        foreach ($byDay[$day] as $s) {
+                            if ($scheduleOverlapsHour($s, $hour)) {
+                                $slotClasses[] = $s;
+                            }
+                        }
+                        $isVacant = $slotClasses === [];
+                        ?>
+                        <td class="align-top schedule-cell p-2<?= $isVacant ? ' schedule-cell--vacant' : '' ?>">
+                            <?php if ($isVacant): ?>
+                                <span class="schedule-vacant-label">Vacant</span>
+                            <?php else: ?>
+                                <?php foreach ($slotClasses as $s): ?>
+                                    <?php
+                                    $startsHere = $scheduleStartsInHour($s, $hour);
+                                    $blockFacultyId = (int) ($s['faculty_id'] ?? 0);
+                                    $blockCourseId = (int) ($s['course_id'] ?? 0);
+                                    $c = schedule_block_color_class(
+                                        $blockCourseId,
+                                        $facultyColorMaps[$blockFacultyId] ?? null
+                                    );
+                                    $isGeCourse = $hasCourseIsGenedCol && (int) ($s['course_is_gened'] ?? 0) === 1;
+                                    $hostCollegeCode = trim((string) ($s['host_college_code'] ?? ''));
+                                    $showHostCollege = is_dean() && $collegeId && $isGeCourse && $hostCollegeCode !== ''
+                                        && (int) ($s['college_id'] ?? 0) !== $collegeId;
+                                    ?>
+                                    <?php
+                                    $roomLabel = trim((string) ($s['room_code'] ?? ''));
+                                    $roomName = trim((string) ($s['room_name'] ?? ''));
+                                    if ($roomLabel !== '' && $roomName !== '' && strcasecmp($roomLabel, $roomName) !== 0) {
+                                        $roomLabel .= ' — ' . $roomName;
+                                    } elseif ($roomLabel === '' && $roomName !== '') {
+                                        $roomLabel = $roomName;
+                                    }
+                                    ?>
+                                    <?php if (!$startsHere): ?>
+                                        <div class="schedule-block schedule-block--continued <?= $c ?>">
+                                            <div class="small fw-semibold"><?= htmlspecialchars($s['course_code']) ?> <span class="text-muted fw-normal">(continues)</span></div>
+                                            <div class="small text-muted"><?= htmlspecialchars($formatTime12h((string) $s['start_time'])) ?> – <?= htmlspecialchars($formatTime12h((string) $s['end_time'])) ?></div>
+                                            <?php if ($roomLabel !== ''): ?>
+                                                <div class="small"><i class="fa-solid fa-door-open me-1"></i><?= htmlspecialchars($roomLabel) ?></div>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="schedule-block <?= $c ?>">
+                                            <div class="fw-semibold"><?= htmlspecialchars($formatTime12h((string) $s['start_time'])) ?> – <?= htmlspecialchars($formatTime12h((string) $s['end_time'])) ?></div>
+                                            <div><?= htmlspecialchars($s['course_code']) ?><?php if ($isGeCourse): ?> <span class="badge bg-info text-dark" style="font-size:0.65rem">GE</span><?php endif; ?></div>
+                                            <?php if ($showHostCollege): ?>
+                                                <div class="small text-muted"><i class="fa-solid fa-building-columns me-1"></i><?= htmlspecialchars($hostCollegeCode) ?></div>
+                                            <?php endif; ?>
+                                            <div class="small text-muted"><?= htmlspecialchars($s['faculty_name']) ?></div>
+                                            <?php if ($roomLabel !== ''): ?>
+                                                <div class="small"><i class="fa-solid fa-door-open me-1"></i><?= htmlspecialchars($roomLabel) ?></div>
+                                            <?php endif; ?>
                                             <?php
-                                            $unauthTip = $role === 'dean'
-                                                ? 'Live GE classes can only be joined by the Dean of the College of Arts and Sciences. You can still monitor schedules and conflicts in this view.'
-                                                : 'General education classes cannot be joined from a program chair account. Use the dean or GEN ED weekly view for oversight.';
+                                            $liveDisplayMode = weekly_schedule_online_live_mode($role, $s, $collegeFilter, $dept);
+                                            $onlineUrl = $hasOnlineUrlCol ? trim((string) ($s['online_class_url'] ?? '')) : '';
+                                            $liveAtStr = $hasLiveAtCol ? ($s['online_live_at'] ?? null) : null;
+                                            $liveAtStr = $liveAtStr !== null && $liveAtStr !== '' ? (string) $liveAtStr : null;
+                                            $isLive = $hasLiveAtCol && $scheduleShowsLive($s, $liveAtStr);
                                             ?>
-                                            <span class="badge bg-warning text-dark"<?= app_tooltip_attr($unauthTip) ?>>Unauthorized</span>
-                                        <?php elseif ($liveDisplayMode === 'normal' && $hasLiveAtCol && $isLive): ?>
-                                            <span class="badge bg-danger live-pulse-badge rounded-pill me-1"><i class="fa-solid fa-circle me-1" style="font-size:0.5rem;vertical-align:middle;"></i>LIVE</span>
-                                            <a class="btn btn-sm btn-success text-white py-0 px-2" href="<?= htmlspecialchars($onlineUrl) ?>" target="_blank" rel="noopener noreferrer"<?= app_tooltip_attr('Opens the live online class while the instructor is broadcasting. Use this during scheduled class time.') ?>>Join online</a>
-                                        <?php elseif ($liveDisplayMode === 'normal' && $hasLiveAtCol): ?>
-                                            <span class="badge bg-secondary me-1">Not live</span>
-                                            <span class="text-muted">Faculty has not gone live</span>
-                                        <?php elseif ($liveDisplayMode === 'normal'): ?>
-                                            <a class="btn btn-sm btn-outline-primary py-0 px-2" href="<?= htmlspecialchars($onlineUrl) ?>" target="_blank" rel="noopener noreferrer"<?= app_tooltip_attr('Opens the faculty’s online meeting link in a new tab. Use this to join the virtual room for this block.') ?>><i class="fa-solid fa-video me-1"></i>Online class</a>
-                                        <?php endif; ?>
-                                    </div>
-                                <?php endif; ?>
-                                <?php
-                                $ocPortalId = isset($s['oc_classroom_id']) ? (int) $s['oc_classroom_id'] : 0;
-                                $ocHasSyllabus = $hasSyllabusOnOc && $ocPortalId > 0 && trim((string) ($s['oc_syllabus_stored'] ?? '')) !== '';
-                                $hidePcGeButtons = $role === 'program_chair' && $isGeCourse;
-                                $hideGeNonGeButtons = $role === 'gened' && !$isGeCourse;
-                                $hideButtons = $hidePcGeButtons || $hideGeNonGeButtons;
-                                $syllabusRoles = ['admin', 'dean', 'program_chair', 'gened'];
-                                $monitorRoles = ['admin', 'dean', 'program_chair', 'gened'];
-                                $monitorHref = 'classroom_materials_monitor.php?id=' . $ocPortalId;
-                                if ($role === 'gened') {
-                                    $monitorHref .= '&monitor_college=' . (string) $collegeFilter;
-                                    $monitorHref .= '&monitor_program=' . rawurlencode($dept);
-                                }
-                                ?>
-                                <?php if ($ocHasSyllabus && in_array($role, $syllabusRoles, true) && !$hideButtons): ?>
-                                    <div class="mt-1">
-                                        <a class="btn btn-sm btn-outline-secondary py-0 px-2" href="<?= htmlspecialchars(classroom_syllabus_href($ocPortalId)) ?>" onclick="var w=400,h=300,l=(screen.width-w)/2,t=(screen.height-h)/2;window.open(this.href,'syllabusWin','width='+w+',height='+h+',left='+l+',top='+t+',scrollbars=yes,resizable=yes');return false;"<?= app_tooltip_attr('Opens the faculty-uploaded syllabus for this section in a small window (oversight).') ?>><i class="fa-solid fa-file-contract me-1"></i>Syllabus</a>
-                                    </div>
-                                <?php endif; ?>
-                                <?php if ($ocPortalId > 0 && in_array($role, $monitorRoles, true) && !$hideButtons): ?>
-                                    <div class="mt-1">
-                                        <a class="btn btn-sm btn-outline-dark py-0 px-2" href="<?= htmlspecialchars($monitorHref) ?>" onclick="var w=400,h=300,l=(screen.width-w)/2,t=(screen.height-h)/2;window.open(this.href,'monitorWin','width='+w+',height='+h+',left='+l+',top='+t+',scrollbars=yes,resizable=yes');return false;"<?= app_tooltip_attr('Opens read-only monitoring of posted materials and week topics for this classroom.') ?>><i class="fa-solid fa-list-check me-1"></i>Monitor</a>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                        <?php endforeach; ?>
-                        <?php if ($byDay[$day] === []): ?>
-                            <span class="text-muted small">—</span>
-                        <?php endif; ?>
-                    </td>
-                <?php endforeach; ?>
-            </tr>
+                                            <?php if ($hasOnlineUrlCol && $onlineUrl !== '' && $liveDisplayMode !== 'hidden'): ?>
+                                                <div class="mt-1 pt-1 border-top border-secondary-subtle small">
+                                                    <?php if ($liveDisplayMode === 'unauthorized' && $hasLiveAtCol && $isLive): ?>
+                                                        <span class="badge bg-danger live-pulse-badge rounded-pill me-1"><i class="fa-solid fa-circle me-1" style="font-size:0.5rem;vertical-align:middle;"></i>LIVE</span>
+                                                        <?php
+                                                        $unauthTip = $role === 'dean'
+                                                            ? 'Live GE classes can only be joined by the Dean of the College of Arts and Sciences. You can still monitor schedules and conflicts in this view.'
+                                                            : 'General education classes cannot be joined from a program chair account. Use the dean or GEN ED weekly view for oversight.';
+                                                        ?>
+                                                        <span class="badge bg-warning text-dark"<?= app_tooltip_attr($unauthTip) ?>>Unauthorized</span>
+                                                    <?php elseif ($liveDisplayMode === 'normal' && $hasLiveAtCol && $isLive): ?>
+                                                        <span class="badge bg-danger live-pulse-badge rounded-pill me-1"><i class="fa-solid fa-circle me-1" style="font-size:0.5rem;vertical-align:middle;"></i>LIVE</span>
+                                                        <a class="btn btn-sm btn-success text-white py-0 px-2" href="<?= htmlspecialchars($onlineUrl) ?>" target="_blank" rel="noopener noreferrer"<?= app_tooltip_attr('Opens the live online class while the instructor is broadcasting. Use this during scheduled class time.') ?>>Join online</a>
+                                                    <?php elseif ($liveDisplayMode === 'normal' && $hasLiveAtCol): ?>
+                                                        <span class="badge bg-secondary me-1">Not live</span>
+                                                        <span class="text-muted">Faculty has not gone live</span>
+                                                    <?php elseif ($liveDisplayMode === 'normal'): ?>
+                                                        <a class="btn btn-sm btn-outline-primary py-0 px-2" href="<?= htmlspecialchars($onlineUrl) ?>" target="_blank" rel="noopener noreferrer"<?= app_tooltip_attr('Opens the faculty’s online meeting link in a new tab. Use this to join the virtual room for this block.') ?>><i class="fa-solid fa-video me-1"></i>Online class</a>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php
+                                            $ocPortalId = isset($s['oc_classroom_id']) ? (int) $s['oc_classroom_id'] : 0;
+                                            $ocHasSyllabus = $hasSyllabusOnOc && $ocPortalId > 0 && trim((string) ($s['oc_syllabus_stored'] ?? '')) !== '';
+                                            $hidePcGeButtons = $role === 'program_chair' && $isGeCourse;
+                                            $hideGeNonGeButtons = $role === 'gened' && !$isGeCourse;
+                                            $hideButtons = $hidePcGeButtons || $hideGeNonGeButtons;
+                                            $syllabusRoles = ['admin', 'dean', 'program_chair', 'gened'];
+                                            $monitorRoles = ['admin', 'dean', 'program_chair', 'gened'];
+                                            $monitorHref = 'classroom_materials_monitor.php?id=' . $ocPortalId;
+                                            if ($role === 'gened') {
+                                                $monitorHref .= '&monitor_college=' . (string) $collegeFilter;
+                                                $monitorHref .= '&monitor_program=' . rawurlencode($dept);
+                                            }
+                                            ?>
+                                            <?php if ($ocHasSyllabus && in_array($role, $syllabusRoles, true) && !$hideButtons): ?>
+                                                <div class="mt-1">
+                                                    <a class="btn btn-sm btn-outline-secondary py-0 px-2" href="<?= htmlspecialchars(classroom_syllabus_href($ocPortalId)) ?>" onclick="var w=400,h=300,l=(screen.width-w)/2,t=(screen.height-h)/2;window.open(this.href,'syllabusWin','width='+w+',height='+h+',left='+l+',top='+t+',scrollbars=yes,resizable=yes');return false;"<?= app_tooltip_attr('Opens the faculty-uploaded syllabus for this section in a small window (oversight).') ?>><i class="fa-solid fa-file-contract me-1"></i>Syllabus</a>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php if ($ocPortalId > 0 && in_array($role, $monitorRoles, true) && !$hideButtons): ?>
+                                                <div class="mt-1">
+                                                    <a class="btn btn-sm btn-outline-dark py-0 px-2" href="<?= htmlspecialchars($monitorHref) ?>" onclick="var w=400,h=300,l=(screen.width-w)/2,t=(screen.height-h)/2;window.open(this.href,'monitorWin','width='+w+',height='+h+',left='+l+',top='+t+',scrollbars=yes,resizable=yes');return false;"<?= app_tooltip_attr('Opens read-only monitoring of posted materials and week topics for this classroom.') ?>><i class="fa-solid fa-list-check me-1"></i>Monitor</a>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </td>
+                    <?php endforeach; ?>
+                </tr>
+            <?php endforeach; ?>
         </tbody>
     </table>
 </div>

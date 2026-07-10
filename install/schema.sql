@@ -40,6 +40,15 @@ CREATE TABLE IF NOT EXISTS programs (
   CONSTRAINT fk_program_college FOREIGN KEY (college_id) REFERENCES colleges(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Programs a Program Chair account may manage (users.assigned_program = active/primary).
+CREATE TABLE IF NOT EXISTS program_chair_programs (
+  user_id INT NOT NULL,
+  program_name VARCHAR(120) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, program_name),
+  CONSTRAINT fk_pcp_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Year levels offered per dean program (drives schedule / GE target year dropdowns).
 CREATE TABLE IF NOT EXISTS programs_year_levels (
   program_id INT NOT NULL,
@@ -256,6 +265,17 @@ CREATE TABLE IF NOT EXISTS faculty_specializations (
   UNIQUE KEY uq_faculty_course (faculty_id, course_id),
   CONSTRAINT fk_fs_faculty FOREIGN KEY (faculty_id) REFERENCES faculty(id) ON DELETE CASCADE,
   CONSTRAINT fk_fs_course FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS faculty_course_colors (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  faculty_id INT NOT NULL,
+  course_id INT NOT NULL,
+  color_index TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_fcc_faculty_course (faculty_id, course_id),
+  CONSTRAINT fk_fcc_faculty FOREIGN KEY (faculty_id) REFERENCES faculty(id) ON DELETE CASCADE,
+  CONSTRAINT fk_fcc_course FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ge_course_colleges (

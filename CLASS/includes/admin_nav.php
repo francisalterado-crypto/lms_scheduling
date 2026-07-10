@@ -184,6 +184,10 @@ function render_admin_nav_sections(string $currentPage, int $messagingUnread, bo
                 'file' => 'admin_gened.php', 'href' => 'admin_gened.php', 'icon' => 'fa-graduation-cap', 'label' => 'GEN ED',
                 'tooltip' => 'Configure General Education coordinators and scope. Use this for cross-college GE administration.',
             ],
+            [
+                'file' => 'faculty_edutools.php', 'href' => 'faculty_edutools.php', 'icon' => 'fa-wand-magic-sparkles', 'label' => 'EduTools',
+                'tooltip' => 'Education sources: writing tools (Turnitin, Grammarly, QuillBot, AI detector), AI & research (ChatGPT, Perplexity, NotebookLM, Wolfram), notebooks, Khan Academy, and Notion—plus a built-in notebook.',
+            ],
         ],
         'Management' => [
             [
@@ -298,6 +302,10 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'tooltip' => 'Review and approve student self-registration requests for your program.',
                 ],
                 ['file' => 'courses.php', 'href' => 'courses.php', 'icon' => 'fa-book', 'label' => 'Courses'],
+                [
+                    'file' => 'faculty_edutools.php', 'href' => 'faculty_edutools.php', 'icon' => 'fa-wand-magic-sparkles', 'label' => 'EduTools',
+                    'tooltip' => 'Education sources: writing tools (Turnitin, Grammarly, QuillBot, AI detector), AI & research (ChatGPT, Perplexity, NotebookLM, Wolfram), notebooks, Khan Academy, and Notion—plus a built-in notebook.',
+                ],
             ],
             'Scheduling' => [
                 ['file' => 'add_schedule.php', 'href' => 'add_schedule.php', 'icon' => 'fa-plus', 'label' => 'Add schedule'],
@@ -333,6 +341,10 @@ function role_nav_sections(string $role, int $messagingUnread): array
                 [
                     'file' => 'gened_assignments.php', 'href' => 'gened_assignments.php', 'icon' => 'fa-building-user', 'label' => 'GE offerings',
                     'tooltip' => 'Map GE sections to colleges or cohorts. Use this to coordinate cross-college GE delivery.',
+                ],
+                [
+                    'file' => 'faculty_edutools.php', 'href' => 'faculty_edutools.php', 'icon' => 'fa-wand-magic-sparkles', 'label' => 'EduTools',
+                    'tooltip' => 'Education sources: writing tools (Turnitin, Grammarly, QuillBot, AI detector), AI & research (ChatGPT, Perplexity, NotebookLM, Wolfram), notebooks, Khan Academy, and Notion—plus a built-in notebook.',
                 ],
             ],
             'Management' => [

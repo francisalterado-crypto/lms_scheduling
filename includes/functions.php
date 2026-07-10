@@ -188,6 +188,112 @@ function db_table_exists(string $table): bool
     return (int) $stmt->fetchColumn() > 0;
 }
 
+/** Ensure faculty_course_colors exists (idempotent; safe for local installs). */
+function ensure_faculty_course_colors_table(): bool
+{
+    if (db_table_exists('faculty_course_colors')) {
+        return true;
+    }
+    try {
+        db()->exec(
+            "CREATE TABLE IF NOT EXISTS faculty_course_colors (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                faculty_id INT NOT NULL,
+                course_id INT NOT NULL,
+                color_index TINYINT UNSIGNED NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_fcc_faculty_course (faculty_id, course_id),
+                CONSTRAINT fk_fcc_faculty FOREIGN KEY (faculty_id) REFERENCES faculty(id) ON DELETE CASCADE,
+                CONSTRAINT fk_fcc_course FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    } catch (Throwable $e) {
+        return false;
+    }
+    return db_table_exists('faculty_course_colors');
+}
+
+/**
+ * Preset schedule block colors (index 0–5 → CSS classes c0–c5).
+ *
+ * @return list<array{index:int,label:string,bg:string,border:string}>
+ */
+function schedule_color_palette(): array
+{
+    return [
+        ['index' => 0, 'label' => 'Blue', 'bg' => '#e3f2fd', 'border' => '#1976d2'],
+        ['index' => 1, 'label' => 'Green', 'bg' => '#e8f5e9', 'border' => '#388e3c'],
+        ['index' => 2, 'label' => 'Orange', 'bg' => '#fff3e0', 'border' => '#f57c00'],
+        ['index' => 3, 'label' => 'Pink', 'bg' => '#fce4ec', 'border' => '#c2185b'],
+        ['index' => 4, 'label' => 'Purple', 'bg' => '#f3e5f5', 'border' => '#7b1fa2'],
+        ['index' => 5, 'label' => 'Teal', 'bg' => '#e0f7fa', 'border' => '#00838f'],
+    ];
+}
+
+/**
+ * Map of course_id => color_index for one faculty member.
+ *
+ * @return array<int,int>
+ */
+function faculty_course_color_map(int $facultyId): array
+{
+    if ($facultyId < 1 || !ensure_faculty_course_colors_table()) {
+        return [];
+    }
+    $st = db()->prepare('SELECT course_id, color_index FROM faculty_course_colors WHERE faculty_id = ?');
+    $st->execute([$facultyId]);
+    $map = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $map[(int) $row['course_id']] = max(0, min(5, (int) $row['color_index']));
+    }
+    return $map;
+}
+
+/**
+ * CSS class for a schedule block (c0–c5). Uses faculty preference when available.
+ *
+ * @param array<int,int>|null $colorMap course_id => color_index
+ */
+function schedule_block_color_class(int $courseId, ?array $colorMap = null): string
+{
+    if ($colorMap !== null && isset($colorMap[$courseId])) {
+        return 'c' . max(0, min(5, (int) $colorMap[$courseId]));
+    }
+    return 'c' . ($courseId % 6);
+}
+
+/**
+ * Save a faculty member's preferred color for a course they teach.
+ *
+ * @throws RuntimeException
+ */
+function save_faculty_course_color(int $facultyId, int $courseId, int $colorIndex, ?int $collegeId = null): void
+{
+    if ($facultyId < 1 || $courseId < 1) {
+        throw new RuntimeException('Invalid course selection.');
+    }
+    $colorIndex = max(0, min(5, $colorIndex));
+    if (!ensure_faculty_course_colors_table()) {
+        throw new RuntimeException('Course colors are not available. Ask an administrator to run upgrade_roles.php.');
+    }
+    $sql = 'SELECT COUNT(*) FROM schedules WHERE faculty_id = ? AND course_id = ?';
+    $params = [$facultyId, $courseId];
+    if ($collegeId !== null && $collegeId > 0) {
+        $sql .= ' AND college_id = ?';
+        $params[] = $collegeId;
+    }
+    $chk = db()->prepare($sql);
+    $chk->execute($params);
+    if ((int) $chk->fetchColumn() < 1) {
+        throw new RuntimeException('You can only color-code courses on your schedule.');
+    }
+    db()->prepare(
+        'INSERT INTO faculty_course_colors (faculty_id, course_id, color_index)
+         VALUES (?,?,?)
+         ON DUPLICATE KEY UPDATE color_index = VALUES(color_index)'
+    )->execute([$facultyId, $courseId, $colorIndex]);
+}
+
 /**
  * Ensure a program name exists for a college (e.g. "General Education" for GE program chairs).
  */
@@ -1289,17 +1395,30 @@ function schedule_segment_session_kind(string $label): string
 
 /**
  * Whether a scheduled block counts as laboratory (vs lecture) for load/contact hours.
- * Uses stored session_kind when present; otherwise 1 lab unit = 3 hours → typical 3–4 h blocks.
- * Shorter meetings in laboratory rooms are treated as lecture (common when no lecture room is free).
+ * Uses stored session_kind when present. Pure lecture courses are never labeled Laboratory
+ * from duration alone (a one-day 3-hour lecture stays Lecture).
+ * For laboratory courses with no session_kind, 1 lab unit ≈ 3 hours → typical 3–4 h blocks.
+ *
+ * @param bool|null $courseIsLaboratory When false, duration heuristic is skipped (always lecture).
  */
-function schedule_session_is_laboratory(?string $startTime, ?string $endTime, ?string $roomType = null, ?string $sessionKind = null): bool
-{
+function schedule_session_is_laboratory(
+    ?string $startTime,
+    ?string $endTime,
+    ?string $roomType = null,
+    ?string $sessionKind = null,
+    ?bool $courseIsLaboratory = null
+): bool {
     unset($roomType);
     $kind = strtolower(trim((string) $sessionKind));
     if ($kind === 'laboratory') {
         return true;
     }
     if ($kind === 'lecture') {
+        return false;
+    }
+
+    // Pure lecture course: never treat a long block as lab just because of duration.
+    if ($courseIsLaboratory === false) {
         return false;
     }
 

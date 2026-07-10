@@ -951,6 +951,59 @@ function parse_day_set(?string $value): array
 }
 
 /**
+ * Whether the current time falls on a scheduled class day and within start/end time.
+ *
+ * @return array{allowed:bool,reason:string,is_scheduled_day:bool,is_within_window:bool,session_start:string,session_end:string}
+ */
+function classroom_attendance_login_allowed(array $scheduleRow, ?int $timestamp = null): array
+{
+    $timestamp = $timestamp ?? time();
+    $todayDate = date('Y-m-d', $timestamp);
+    $nowStr = date('Y-m-d H:i:s', $timestamp);
+    $dayName = date('l', $timestamp);
+
+    $normalizeDayToken = static function (string $value): string {
+        $lettersOnly = preg_replace('/[^a-z]/i', '', trim($value)) ?? '';
+        return strtolower(substr($lettersOnly, 0, 3));
+    };
+
+    $scheduleDayTokens = [];
+    foreach (parse_day_set((string) ($scheduleRow['day_of_week'] ?? '')) as $scheduledDay) {
+        $token = $normalizeDayToken((string) $scheduledDay);
+        if ($token !== '') {
+            $scheduleDayTokens[$token] = true;
+        }
+    }
+    $isScheduledDay = isset($scheduleDayTokens[$normalizeDayToken($dayName)]);
+
+    $startTime = substr((string) ($scheduleRow['start_time'] ?? '00:00:00'), 0, 8);
+    $endTime = substr((string) ($scheduleRow['end_time'] ?? '23:59:59'), 0, 8);
+    $sessionStart = $todayDate . ' ' . $startTime;
+    $sessionEnd = $todayDate . ' ' . $endTime;
+    $isWithinWindow = $nowStr >= $sessionStart && $nowStr <= $sessionEnd;
+
+    $reason = '';
+    if ($scheduleDayTokens === []) {
+        $reason = 'Class schedule days are not configured yet.';
+    } elseif (!$isScheduledDay) {
+        $reason = 'Class is not scheduled today.';
+    } elseif ($nowStr < $sessionStart) {
+        $reason = 'Class has not started yet. You can log in when class time begins.';
+    } elseif ($nowStr > $sessionEnd) {
+        $reason = 'Class time has already ended.';
+    }
+
+    return [
+        'allowed' => $scheduleDayTokens !== [] && $isScheduledDay && $isWithinWindow,
+        'reason' => $reason,
+        'is_scheduled_day' => $isScheduledDay,
+        'is_within_window' => $isWithinWindow,
+        'session_start' => $sessionStart,
+        'session_end' => $sessionEnd,
+    ];
+}
+
+/**
  * Convert array of days to MySQL SET string.
  */
 function days_to_set(array $days): string

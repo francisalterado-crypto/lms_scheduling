@@ -272,10 +272,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'school_year' => (string) $scheduleRow['school_year'],
             'academic_year' => (string) ($scheduleRow['academic_year'] ?? ''),
         ];
-        db()->prepare(
-            'UPDATE schedules SET faculty_id=?, course_id=?, room_id=?, schedule_type=?, day_of_week=?, start_time=?, end_time=?, semester=?, school_year=?, academic_year=?
-             WHERE id=? AND college_id=?'
-        )->execute([
+        $hasSessionKindCol = db_column_exists('schedules', 'session_kind');
+        $updateSql = 'UPDATE schedules SET faculty_id=?, course_id=?, room_id=?, schedule_type=?, day_of_week=?, start_time=?, end_time=?, semester=?, school_year=?, academic_year=?'
+            . ($hasSessionKindCol ? ', session_kind=?' : '')
+            . ' WHERE id=? AND college_id=?';
+        $updateParams = [
             $facultyId,
             $courseId,
             $roomId,
@@ -286,9 +287,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $semester,
             $schoolYear,
             $academicYear,
-            $id,
-            $collegeId,
-        ]);
+        ];
+        if ($hasSessionKindCol) {
+            // Edit form is lecture segment only; lab rows are separate schedule entries.
+            $updateParams[] = schedule_segment_session_kind('Lecture');
+        }
+        $updateParams[] = $id;
+        $updateParams[] = $collegeId;
+        db()->prepare($updateSql)->execute($updateParams);
         if ($allConflicts !== []) {
             log_conflicts($id, $allConflicts, false);
         }

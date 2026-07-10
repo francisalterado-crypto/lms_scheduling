@@ -82,6 +82,8 @@ if ($hasLectureUnits) {
 if ($hasLaboratoryUnits) {
     $courseUnitsSelect .= ', c.laboratory_units';
 }
+$hasSessionKind = db_column_exists('schedules', 'session_kind');
+$sessionKindSelect = $hasSessionKind ? ', s.session_kind' : '';
 
 $sql = "SELECT s.id, s.faculty_id, s.course_id, s.college_id AS sched_college_id,
         s.semester, s.school_year,
@@ -93,6 +95,7 @@ $sql = "SELECT s.id, s.faculty_id, s.course_id, s.college_id AS sched_college_id
         {$courseUnitsSelect}
         {$courseLabSelect}
         {$courseCatalogBlockSelect}
+        {$sessionKindSelect}
         {$targetSelect}
         FROM schedules s
         INNER JOIN faculty f ON f.id = s.faculty_id
@@ -201,12 +204,16 @@ foreach ($scheduleListGroups as &$g) {
             $aLab = schedule_session_is_laboratory(
                 (string) ($a['start_time'] ?? ''),
                 (string) ($a['end_time'] ?? ''),
-                (string) ($a['room_type'] ?? '')
+                (string) ($a['room_type'] ?? ''),
+                isset($a['session_kind']) ? (string) $a['session_kind'] : null,
+                array_key_exists('is_laboratory', $a) ? ((int) ($a['is_laboratory'] ?? 0) === 1) : null
             );
             $bLab = schedule_session_is_laboratory(
                 (string) ($b['start_time'] ?? ''),
                 (string) ($b['end_time'] ?? ''),
-                (string) ($b['room_type'] ?? '')
+                (string) ($b['room_type'] ?? ''),
+                isset($b['session_kind']) ? (string) $b['session_kind'] : null,
+                array_key_exists('is_laboratory', $b) ? ((int) ($b['is_laboratory'] ?? 0) === 1) : null
             );
             if ($aLab !== $bLab) {
                 return $aLab ? 1 : -1;
@@ -287,7 +294,9 @@ $mergeScheduleGroupForDetail = static function (array $group) use (
         $isLabSlot = schedule_session_is_laboratory(
             (string) ($r['start_time'] ?? ''),
             (string) ($r['end_time'] ?? ''),
-            (string) ($r['room_type'] ?? '')
+            (string) ($r['room_type'] ?? ''),
+            isset($r['session_kind']) ? (string) $r['session_kind'] : null,
+            array_key_exists('is_laboratory', $r) ? ((int) ($r['is_laboratory'] ?? 0) === 1) : null
         );
         $slotTag = $isLabSlot ? 'LAB' : 'LEC';
         $timeParts[] = $formatTime12h((string) ($r['start_time'] ?? '')) . ' – ' . $formatTime12h((string) ($r['end_time'] ?? '')) . ' (' . $slotTag . ')';

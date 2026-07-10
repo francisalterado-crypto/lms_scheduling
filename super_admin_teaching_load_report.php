@@ -41,12 +41,16 @@ if ($hasLectureUnits) {
 if ($hasLaboratoryUnits) {
     $courseUnitsSelect .= ', c.laboratory_units';
 }
+$hasCourseLabFlag = db_column_exists('courses', 'is_laboratory');
+$courseLabSelect = $hasCourseLabFlag ? ', c.is_laboratory' : '';
+$hasSessionKind = db_column_exists('schedules', 'session_kind');
+$sessionKindSelect = $hasSessionKind ? ', s.session_kind' : '';
 
 $sql = "SELECT s.id, s.faculty_id, s.course_id, s.college_id AS sched_college_id,
         s.semester, s.school_year,
         s.start_time, s.end_time, s.day_of_week,
         f.full_name AS faculty_name, f.department AS faculty_department,
-        c.course_code, r.type AS room_type{$courseUnitsSelect}
+        c.course_code, r.type AS room_type{$courseUnitsSelect}{$courseLabSelect}{$sessionKindSelect}
         FROM schedules s
         INNER JOIN faculty f ON f.id = s.faculty_id
         INNER JOIN courses c ON c.id = s.course_id
@@ -99,7 +103,9 @@ $weeklyContactFromGroup = static function (array $group) use ($sessionHoursBetwe
         if (schedule_session_is_laboratory(
             (string) ($r['start_time'] ?? ''),
             (string) ($r['end_time'] ?? ''),
-            (string) ($r['room_type'] ?? '')
+            (string) ($r['room_type'] ?? ''),
+            isset($r['session_kind']) ? (string) $r['session_kind'] : null,
+            array_key_exists('is_laboratory', $r) ? ((int) ($r['is_laboratory'] ?? 0) === 1) : null
         )) {
             $lab += $weeklyH;
         } else {
@@ -159,12 +165,16 @@ foreach ($scheduleListGroups as &$g) {
             $aLab = schedule_session_is_laboratory(
                 (string) ($a['start_time'] ?? ''),
                 (string) ($a['end_time'] ?? ''),
-                (string) ($a['room_type'] ?? '')
+                (string) ($a['room_type'] ?? ''),
+                isset($a['session_kind']) ? (string) $a['session_kind'] : null,
+                array_key_exists('is_laboratory', $a) ? ((int) ($a['is_laboratory'] ?? 0) === 1) : null
             );
             $bLab = schedule_session_is_laboratory(
                 (string) ($b['start_time'] ?? ''),
                 (string) ($b['end_time'] ?? ''),
-                (string) ($b['room_type'] ?? '')
+                (string) ($b['room_type'] ?? ''),
+                isset($b['session_kind']) ? (string) $b['session_kind'] : null,
+                array_key_exists('is_laboratory', $b) ? ((int) ($b['is_laboratory'] ?? 0) === 1) : null
             );
             if ($aLab !== $bLab) {
                 return $aLab ? 1 : -1;

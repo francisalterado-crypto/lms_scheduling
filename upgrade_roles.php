@@ -166,6 +166,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              END
              WHERE c.is_laboratory = 1 AND s.session_kind IS NULL"
         );
+        // Pure lecture courses: never leave session_kind null (avoids 3h blocks showing as Laboratory).
+        exec_safe(
+            $pdo,
+            "UPDATE schedules s
+             INNER JOIN courses c ON c.id = s.course_id
+             SET s.session_kind = 'lecture'
+             WHERE COALESCE(c.is_laboratory, 0) = 0 AND s.session_kind IS NULL"
+        );
 
         exec_safe($pdo, "ALTER TABLE conflict_requests ADD COLUMN program VARCHAR(100) NOT NULL DEFAULT ''");
         exec_safe($pdo, "ALTER TABLE conflict_requests ADD COLUMN year_level VARCHAR(20) NOT NULL DEFAULT ''");
@@ -183,6 +191,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 CONSTRAINT fk_program_college FOREIGN KEY (college_id) REFERENCES colleges(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+
+        exec_safe(
+            $pdo,
+            "CREATE TABLE IF NOT EXISTS program_chair_programs (
+                user_id INT NOT NULL,
+                program_name VARCHAR(120) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, program_name),
+                CONSTRAINT fk_pcp_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+        try {
+            $pdo->exec(
+                "INSERT IGNORE INTO program_chair_programs (user_id, program_name)
+                 SELECT id, assigned_program
+                 FROM users
+                 WHERE role = 'program_chair'
+                   AND TRIM(assigned_program) <> ''"
+            );
+        } catch (Throwable $e) {
+            // Ignore when column/table not ready yet on very old installs.
+        }
 
         exec_safe(
             $pdo,
@@ -242,6 +272,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 UNIQUE KEY uq_faculty_course (faculty_id, course_id),
                 CONSTRAINT fk_fs_faculty FOREIGN KEY (faculty_id) REFERENCES faculty(id) ON DELETE CASCADE,
                 CONSTRAINT fk_fs_course FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+        exec_safe(
+            $pdo,
+            "CREATE TABLE IF NOT EXISTS faculty_course_colors (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                faculty_id INT NOT NULL,
+                course_id INT NOT NULL,
+                color_index TINYINT UNSIGNED NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_fcc_faculty_course (faculty_id, course_id),
+                CONSTRAINT fk_fcc_faculty FOREIGN KEY (faculty_id) REFERENCES faculty(id) ON DELETE CASCADE,
+                CONSTRAINT fk_fcc_course FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
         exec_safe(

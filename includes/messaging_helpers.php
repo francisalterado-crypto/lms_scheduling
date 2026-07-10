@@ -451,15 +451,28 @@ function messaging_allowed_recipients(int $forUserId): array
         $st->execute([$cid]);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-        $st = db()->prepare(
-            "SELECT u.id, u.full_name, u.role, u.college_id
-             FROM users u
-             INNER JOIN faculty f ON f.user_id = u.id
-             WHERE u.is_active = 1 AND u.role = 'faculty' AND u.college_id = ? AND f.department = ?
-             ORDER BY u.full_name"
-        );
-        $st->execute([$cid, trim((string) $me['assigned_program'])]);
-        return array_merge($rows, $st->fetchAll(PDO::FETCH_ASSOC) ?: []);
+        $programs = function_exists('program_chair_assigned_programs')
+            ? program_chair_assigned_programs((int) ($me['id'] ?? 0))
+            : [];
+        if ($programs === []) {
+            $program = trim((string) ($me['assigned_program'] ?? ''));
+            if ($program !== '') {
+                $programs = [$program];
+            }
+        }
+        if ($programs !== []) {
+            $holds = implode(',', array_fill(0, count($programs), '?'));
+            $st = db()->prepare(
+                "SELECT u.id, u.full_name, u.role, u.college_id
+                 FROM users u
+                 INNER JOIN faculty f ON f.user_id = u.id
+                 WHERE u.is_active = 1 AND u.role = 'faculty' AND u.college_id = ? AND f.department IN ({$holds})
+                 ORDER BY u.full_name"
+            );
+            $st->execute(array_merge([$cid], $programs));
+            $rows = array_merge($rows, $st->fetchAll(PDO::FETCH_ASSOC) ?: []);
+        }
+        return $rows;
     }
     if ($role === 'faculty' && $cid !== null) {
         $facultyId = messaging_faculty_id_by_user_id($forUserId);
@@ -580,6 +593,18 @@ function messaging_faculty_inbox_recipients(int $forUserId): array
             );
             $st->execute([$cid, $department]);
             $rows = array_merge($rows, $st->fetchAll(PDO::FETCH_ASSOC) ?: []);
+
+            if (function_exists('program_chair_programs_table_ready') && program_chair_programs_table_ready()) {
+                $st = db()->prepare(
+                    "SELECT u.id, u.full_name, u.role, u.college_id
+                     FROM users u
+                     INNER JOIN program_chair_programs pcp ON pcp.user_id = u.id
+                     WHERE u.is_active = 1 AND u.role = 'program_chair' AND u.college_id = ? AND pcp.program_name = ?
+                     ORDER BY u.full_name"
+                );
+                $st->execute([$cid, $department]);
+                $rows = array_merge($rows, $st->fetchAll(PDO::FETCH_ASSOC) ?: []);
+            }
         }
     }
 
@@ -636,18 +661,27 @@ function messaging_memo_recipients(int $forUserId): array
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
     if ($role === 'program_chair' && $cid !== null) {
-        $program = trim((string) ($me['assigned_program'] ?? ''));
-        if ($program === '') {
+        $programs = function_exists('program_chair_assigned_programs')
+            ? program_chair_assigned_programs((int) ($me['id'] ?? 0))
+            : [];
+        if ($programs === []) {
+            $program = trim((string) ($me['assigned_program'] ?? ''));
+            if ($program !== '') {
+                $programs = [$program];
+            }
+        }
+        if ($programs === []) {
             return [];
         }
+        $holds = implode(',', array_fill(0, count($programs), '?'));
         $st = db()->prepare(
             "SELECT u.id, u.full_name, u.role, u.college_id, COALESCE(f.department,'') AS department
              FROM users u
              INNER JOIN faculty f ON f.user_id = u.id
-             WHERE u.is_active = 1 AND u.role = 'faculty' AND u.college_id = ? AND f.department = ?
+             WHERE u.is_active = 1 AND u.role = 'faculty' AND u.college_id = ? AND f.department IN ({$holds})
              ORDER BY u.full_name"
         );
-        $st->execute([$cid, $program]);
+        $st->execute(array_merge([$cid], $programs));
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
     if ($role === 'gened') {

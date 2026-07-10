@@ -18,6 +18,17 @@
     color: #000 !important;
     border-color: #ccc !important;
   }
+  .schedule-weekly--timed .schedule-time-col {
+    background: #f1f5f9 !important;
+    color: #000 !important;
+    position: static !important;
+  }
+  .schedule-weekly--timed .schedule-cell--vacant {
+    background: #fafafa !important;
+  }
+  .schedule-weekly--timed .schedule-vacant-label {
+    color: #888 !important;
+  }
   .schedule-block {
     color: #000 !important;
     border-left-color: #555 !important;

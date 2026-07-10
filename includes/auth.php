@@ -51,6 +51,10 @@ function require_login(): void
     }
 
     auth_touch_user_presence((int) ($_SESSION['user_id'] ?? 0));
+    if ((string) ($_SESSION['role'] ?? '') === 'program_chair') {
+        program_chair_sync_session_programs((int) ($_SESSION['user_id'] ?? 0));
+        program_chair_handle_active_program_post();
+    }
     auth_enforce_password_change_if_required();
 }
 
@@ -65,6 +69,7 @@ function current_user(): ?array
         'full_name' => $_SESSION['full_name'] ?? '',
         'role' => $_SESSION['role'] ?? '',
         'assigned_program' => $_SESSION['assigned_program'] ?? '',
+        'assigned_programs' => $_SESSION['assigned_programs'] ?? [],
         'admin_log_title' => $_SESSION['admin_log_title'] ?? '',
         'college_id' => isset($_SESSION['college_id']) ? (int) $_SESSION['college_id'] : null,
         'faculty_id' => isset($_SESSION['faculty_id']) ? (int) $_SESSION['faculty_id'] : null,
@@ -126,6 +131,196 @@ function current_program_scope(): ?string
 {
     $program = trim((string) ($_SESSION['assigned_program'] ?? ''));
     return $program !== '' ? $program : null;
+}
+
+function program_chair_programs_table_ready(bool $refresh = false): bool
+{
+    static $ready = null;
+    if ($refresh) {
+        $ready = null;
+    }
+    if ($ready !== null) {
+        return $ready;
+    }
+    try {
+        $ready = db_table_exists('program_chair_programs');
+    } catch (Throwable $e) {
+        $ready = false;
+    }
+
+    return $ready;
+}
+
+/** Create program_chair_programs if missing (idempotent). */
+function ensure_program_chair_programs_table(): bool
+{
+    if (program_chair_programs_table_ready()) {
+        return true;
+    }
+    try {
+        db()->exec(
+            "CREATE TABLE IF NOT EXISTS program_chair_programs (
+                user_id INT NOT NULL,
+                program_name VARCHAR(120) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, program_name),
+                CONSTRAINT fk_pcp_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+        return program_chair_programs_table_ready(true);
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * Programs assigned to a Program Chair (junction table + legacy assigned_program fallback).
+ *
+ * @return list<string>
+ */
+function program_chair_assigned_programs(int $userId): array
+{
+    if ($userId < 1) {
+        return [];
+    }
+
+    $programs = [];
+    if (program_chair_programs_table_ready()) {
+        $st = db()->prepare(
+            'SELECT program_name FROM program_chair_programs WHERE user_id = ? ORDER BY program_name'
+        );
+        $st->execute([$userId]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) ?: [] as $name) {
+            $name = trim((string) $name);
+            if ($name !== '') {
+                $programs[] = $name;
+            }
+        }
+    }
+
+    if ($programs === [] && db_column_exists('users', 'assigned_program')) {
+        $st = db()->prepare('SELECT assigned_program FROM users WHERE id = ? LIMIT 1');
+        $st->execute([$userId]);
+        $legacy = trim((string) ($st->fetchColumn() ?: ''));
+        if ($legacy !== '') {
+            $programs[] = $legacy;
+        }
+    }
+
+    return array_values(array_unique($programs));
+}
+
+/**
+ * Replace a Program Chair's assigned programs and sync users.assigned_program (primary/active).
+ *
+ * @param list<string> $programs
+ */
+function program_chair_set_assigned_programs(int $userId, array $programs, ?string $primaryProgram = null): void
+{
+    if ($userId < 1) {
+        throw new RuntimeException('Invalid Program Chair user.');
+    }
+
+    $clean = [];
+    foreach ($programs as $name) {
+        $name = trim((string) $name);
+        if ($name !== '' && !in_array($name, $clean, true)) {
+            $clean[] = $name;
+        }
+    }
+    if ($clean === []) {
+        throw new RuntimeException('At least one program is required.');
+    }
+
+    $primary = trim((string) ($primaryProgram ?? ''));
+    if ($primary === '' || !in_array($primary, $clean, true)) {
+        $primary = $clean[0];
+    }
+
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        if (program_chair_programs_table_ready()) {
+            $pdo->prepare('DELETE FROM program_chair_programs WHERE user_id = ?')->execute([$userId]);
+            $ins = $pdo->prepare('INSERT INTO program_chair_programs (user_id, program_name) VALUES (?, ?)');
+            foreach ($clean as $name) {
+                $ins->execute([$userId, $name]);
+            }
+        }
+        if (db_column_exists('users', 'assigned_program')) {
+            $pdo->prepare('UPDATE users SET assigned_program = ? WHERE id = ?')->execute([$primary, $userId]);
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+/**
+ * Load assigned programs into the session and ensure assigned_program is one of them.
+ *
+ * @return list<string>
+ */
+function program_chair_sync_session_programs(?int $userId = null): array
+{
+    $uid = $userId ?? (int) ($_SESSION['user_id'] ?? 0);
+    if ($uid < 1 || (string) ($_SESSION['role'] ?? '') !== 'program_chair') {
+        return [];
+    }
+
+    $programs = program_chair_assigned_programs($uid);
+    $_SESSION['assigned_programs'] = $programs;
+
+    $active = trim((string) ($_SESSION['assigned_program'] ?? ''));
+    if ($programs === []) {
+        $_SESSION['assigned_program'] = '';
+        return [];
+    }
+    if ($active === '' || !in_array($active, $programs, true)) {
+        $_SESSION['assigned_program'] = $programs[0];
+        if (db_column_exists('users', 'assigned_program')) {
+            db()->prepare('UPDATE users SET assigned_program = ? WHERE id = ?')->execute([$programs[0], $uid]);
+        }
+    }
+
+    return $programs;
+}
+
+function program_chair_switch_active_program(string $programName): void
+{
+    require_role(['program_chair']);
+    $uid = (int) ($_SESSION['user_id'] ?? 0);
+    $programName = trim($programName);
+    $programs = program_chair_assigned_programs($uid);
+    if ($programName === '' || !in_array($programName, $programs, true)) {
+        throw new RuntimeException('Select one of your assigned programs.');
+    }
+    if (db_column_exists('users', 'assigned_program')) {
+        db()->prepare('UPDATE users SET assigned_program = ? WHERE id = ?')->execute([$programName, $uid]);
+    }
+    $_SESSION['assigned_program'] = $programName;
+    $_SESSION['assigned_programs'] = $programs;
+}
+
+/**
+ * Whether a program chair user is assigned to a given program name.
+ */
+function program_chair_user_handles_program(int $userId, string $programName): bool
+{
+    $programName = trim($programName);
+    if ($userId < 1 || $programName === '') {
+        return false;
+    }
+    foreach (program_chair_assigned_programs($userId) as $name) {
+        if (strcasecmp($name, $programName) === 0) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /** Home college for a faculty row; used to scope schedules and weekly views. */
@@ -322,6 +517,7 @@ function dean_or_program_chair_college_id_or_fail(): int
 function program_scope_or_fail(): string
 {
     require_role(['program_chair']);
+    program_chair_sync_session_programs((int) ($_SESSION['user_id'] ?? 0));
     $program = current_program_scope();
     if ($program === null) {
         http_response_code(403);
@@ -329,6 +525,33 @@ function program_scope_or_fail(): string
         exit;
     }
     return $program;
+}
+
+/**
+ * Handle POST switch of the active program for multi-program chairs.
+ * Call early on pages that include the header switcher.
+ */
+function program_chair_handle_active_program_post(): void
+{
+    if (
+        $_SERVER['REQUEST_METHOD'] !== 'POST'
+        || (string) ($_POST['action'] ?? '') !== 'switch_active_program'
+        || !is_program_chair()
+    ) {
+        return;
+    }
+    try {
+        program_chair_switch_active_program((string) ($_POST['active_program'] ?? ''));
+        $_SESSION['flash'] = 'Active program switched to ' . (string) ($_SESSION['assigned_program'] ?? '') . '.';
+    } catch (Throwable $e) {
+        $_SESSION['flash'] = 'Error: ' . $e->getMessage();
+    }
+    $redirect = trim((string) ($_POST['redirect'] ?? ''));
+    if ($redirect === '' || !preg_match('/^[a-zA-Z0-9_\-\/\.?=&%]+$/', $redirect) || str_contains($redirect, '..')) {
+        $redirect = basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'dashboard.php'));
+    }
+    header('Location: ' . $redirect);
+    exit;
 }
 
 

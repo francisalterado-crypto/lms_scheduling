@@ -73,9 +73,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_ids'])) {
             $lastMessage = 'Course schedule deleted by admin emergency override.';
         } elseif ((is_dean() || is_program_chair()) && $collegeId) {
             $check = db()->prepare(
-                'SELECT s.id, COALESCE(u.role, "") AS creator_role, c.department AS course_dept
+                'SELECT s.id, COALESCE(u.role, "") AS creator_role,
+                        c.department AS course_dept, f.department AS faculty_dept
                  FROM schedules s
                  INNER JOIN courses c ON c.id = s.course_id
+                 INNER JOIN faculty f ON f.id = s.faculty_id
                  LEFT JOIN users u ON u.id = s.created_by
                  WHERE s.id=? AND s.college_id=? LIMIT 1'
             );
@@ -83,7 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_ids'])) {
             $row = $check->fetch();
             if (!$row) {
                 $lastMessage = 'Schedule not found.';
-            } elseif ($programScope !== null && trim((string) ($row['course_dept'] ?? '')) !== $programScope) {
+            } elseif ($programScope !== null
+                && trim((string) ($row['course_dept'] ?? '')) !== $programScope
+                && trim((string) ($row['faculty_dept'] ?? '')) !== $programScope) {
                 $lastMessage = 'This schedule is outside your assigned program.';
             } elseif ((string) $row['creator_role'] === 'gened') {
                 $lastMessage = 'This GE-created schedule is read-only for Deans.';
@@ -174,10 +178,16 @@ if ($hasLectureUnits) {
 if ($hasLaboratoryUnits) {
     $courseUnitsSelect .= ', c.laboratory_units';
 }
+$hasCourseLabFlag = db_column_exists('courses', 'is_laboratory');
+$courseLabSelect = $hasCourseLabFlag ? ', c.is_laboratory' : '';
+$hasSessionKind = db_column_exists('schedules', 'session_kind');
+$sessionKindSelect = $hasSessionKind ? ', s.session_kind' : '';
 
 $sql = "SELECT s.*, f.full_name AS faculty_name, f.department AS fac_dept, c.course_code, c.course_name, c.department AS course_dept, r.room_code, r.type AS room_type,
         COALESCE(u.role, '') AS creator_role
         {$courseUnitsSelect}
+        {$courseLabSelect}
+        {$sessionKindSelect}
         FROM schedules s
         INNER JOIN faculty f ON f.id = s.faculty_id
         INNER JOIN courses c ON c.id = s.course_id
@@ -305,7 +315,9 @@ $mergeOfferingRows = static function (array $group) use (
         if (schedule_session_is_laboratory(
             (string) ($r['start_time'] ?? ''),
             (string) ($r['end_time'] ?? ''),
-            (string) ($r['room_type'] ?? '')
+            (string) ($r['room_type'] ?? ''),
+            isset($r['session_kind']) ? (string) $r['session_kind'] : null,
+            array_key_exists('is_laboratory', $r) ? ((int) ($r['is_laboratory'] ?? 0) === 1) : null
         )) {
             $labHours += $hours;
         } else {

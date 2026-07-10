@@ -78,12 +78,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (($action === 'go_live' || $action === 'end_live') && $hasLiveAt && $hasOnlineUrl && isset($_POST['schedule_id'])) {
         $scheduleId = (int) $_POST['schedule_id'];
         try {
-            $chk = db()->prepare('SELECT COUNT(*) FROM schedules WHERE id=? AND faculty_id=? AND online_class_url IS NOT NULL AND TRIM(online_class_url) != ""' . $scheduleCollegeClause);
+            $chk = db()->prepare(
+                'SELECT id, day_of_week, start_time, end_time, online_class_url
+                 FROM schedules
+                 WHERE id=? AND faculty_id=?' . $scheduleCollegeClause . '
+                 LIMIT 1'
+            );
             $chk->execute(array_merge([$scheduleId, $facultyId], $scheduleCollegeParam));
-            if ((int) $chk->fetchColumn() < 1) {
+            $scheduleRow = $chk->fetch(PDO::FETCH_ASSOC);
+            if (!$scheduleRow) {
+                throw new RuntimeException('Schedule not found.');
+            }
+            $link = trim((string) ($scheduleRow['online_class_url'] ?? ''));
+            if ($link === '') {
                 throw new RuntimeException('Add an online class link before going live.');
             }
             if ($action === 'go_live') {
+                $window = classroom_attendance_login_allowed($scheduleRow);
+                if (!$window['allowed']) {
+                    throw new RuntimeException(
+                        $window['reason'] !== ''
+                            ? $window['reason']
+                            : 'Go live is only available during the scheduled class time.'
+                    );
+                }
                 db()->prepare('UPDATE schedules SET online_live_at = NOW() WHERE id=? AND faculty_id=?' . $scheduleCollegeClause)
                     ->execute(array_merge([$scheduleId, $facultyId], $scheduleCollegeParam));
                 if ($hasLiveSessions) {
@@ -240,18 +258,33 @@ require_once __DIR__ . '/includes/header.php';
                                 <?php
                                 $liveAtRaw = $r['online_live_at'] ?? null;
                                 $liveTs = $liveAtRaw ? strtotime((string) $liveAtRaw) : false;
-                                $isLiveNow = $liveTs !== false && (time() - $liveTs) <= 2 * 3600;
+                                $liveWindow = classroom_attendance_login_allowed($r);
+                                $isWithinClassTime = !empty($liveWindow['allowed']);
+                                $wasMarkedLive = $liveTs !== false && (time() - $liveTs) <= 2 * 3600;
+                                $isLiveNow = $wasMarkedLive && $isWithinClassTime;
+                                $goLiveDisabledReason = (string) ($liveWindow['reason'] ?? '');
+                                if ($goLiveDisabledReason === '') {
+                                    $goLiveDisabledReason = 'Go live is only available during the scheduled class time.';
+                                }
                                 ?>
                                 <form method="post" class="mt-2">
                                     <input type="hidden" name="schedule_id" value="<?= (int) $r['id'] ?>">
-                                    <?php if ($isLiveNow): ?>
+                                    <?php if ($wasMarkedLive): ?>
                                         <input type="hidden" name="action" value="end_live">
                                         <button type="submit" class="btn btn-sm btn-outline-danger"<?= app_tooltip_attr('Stops the LIVE indicator for this class on the weekly view. Use this when class ends.') ?>><i class="fa-solid fa-stop me-1"></i>End live</button>
-                                        <span class="badge bg-danger live-pulse-badge ms-1">LIVE</span>
+                                        <?php if ($isLiveNow): ?>
+                                            <span class="badge bg-danger live-pulse-badge ms-1">LIVE</span>
+                                        <?php else: ?>
+                                            <span class="small text-muted ms-1">Class time ended — clear live status</span>
+                                        <?php endif; ?>
                                     <?php else: ?>
                                         <input type="hidden" name="action" value="go_live">
-                                        <button type="submit" class="btn btn-sm btn-success"<?= app_tooltip_attr('Marks this section as live so deans and students see the LIVE badge on the weekly schedule.') ?>><i class="fa-solid fa-broadcast-tower me-1"></i>Go live</button>
-                                        <span class="small text-muted ms-1">Deans see LIVE on weekly view</span>
+                                        <button type="submit" class="btn btn-sm btn-success"<?= $isWithinClassTime ? '' : ' disabled' ?><?= app_tooltip_attr($isWithinClassTime ? 'Marks this section as live so deans and students see the LIVE badge on the weekly schedule.' : $goLiveDisabledReason) ?>><i class="fa-solid fa-broadcast-tower me-1"></i>Go live</button>
+                                        <?php if ($isWithinClassTime): ?>
+                                            <span class="small text-muted ms-1">Deans see LIVE on weekly view</span>
+                                        <?php else: ?>
+                                            <span class="small text-muted ms-1 d-block mt-1"><?= htmlspecialchars($goLiveDisabledReason) ?></span>
+                                        <?php endif; ?>
                                     <?php endif; ?>
                                 </form>
                             <?php endif; ?>

@@ -54,6 +54,19 @@ $appSidebarShell = true;
 require_once __DIR__ . '/admin_nav.php';
 $navRole = (string) ($u['role'] ?? '');
 $topbarProfilePhotoUrl = profile_photo_url((int) ($u['id'] ?? 0));
+$pcAssignedPrograms = [];
+$pcActiveProgram = '';
+if ($navRole === 'program_chair') {
+    $pcAssignedPrograms = is_array($_SESSION['assigned_programs'] ?? null)
+        ? array_values(array_filter(array_map('strval', $_SESSION['assigned_programs'])))
+        : program_chair_assigned_programs((int) ($u['id'] ?? 0));
+    $pcActiveProgram = trim((string) ($_SESSION['assigned_program'] ?? ''));
+}
+$pcProgramSwitcherRedirect = basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'dashboard.php'));
+$queryString = trim((string) ($_SERVER['QUERY_STRING'] ?? ''));
+if ($queryString !== '') {
+    $pcProgramSwitcherRedirect .= '?' . $queryString;
+}
 ?>
 <div class="admin-layout d-flex min-vh-100 w-100">
     <aside class="admin-sidebar d-none d-lg-flex flex-column flex-shrink-0 no-print" aria-label="Main navigation">
@@ -88,6 +101,18 @@ $topbarProfilePhotoUrl = profile_photo_url((int) ($u['id'] ?? 0));
                     <div class="admin-topbar-title text-truncate"><?= htmlspecialchars($pageTitle) ?></div>
                     <div class="admin-topbar-subtitle small text-muted text-truncate d-none d-sm-block">Western Philippines University</div>
                 </div>
+                <?php if ($navRole === 'program_chair' && count($pcAssignedPrograms) > 1): ?>
+                    <form method="post" class="d-none d-md-flex align-items-center gap-2 no-print" style="max-width: 18rem;">
+                        <input type="hidden" name="action" value="switch_active_program">
+                        <input type="hidden" name="redirect" value="<?= htmlspecialchars($pcProgramSwitcherRedirect) ?>">
+                        <label class="small text-muted text-nowrap mb-0" for="pcActiveProgramSelect">Active program</label>
+                        <select class="form-select form-select-sm" id="pcActiveProgramSelect" name="active_program" onchange="this.form.submit()"<?= $appCursorTooltips ? app_tooltip_attr('Switch which assigned program you are managing right now. Schedules, faculty, and students follow this selection.') : '' ?>>
+                            <?php foreach ($pcAssignedPrograms as $progName): ?>
+                                <option value="<?= htmlspecialchars($progName) ?>" <?= $pcActiveProgram === $progName ? 'selected' : '' ?>><?= htmlspecialchars($progName) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </form>
+                <?php endif; ?>
                 <button type="button" class="btn app-theme-toggle align-items-center gap-1 d-inline-flex no-print" id="appThemeToggle" aria-label="Switch color theme" title="Switch color theme" aria-pressed="false"<?= $appCursorTooltips ? app_tooltip_attr('Switches between dark and light appearance for the whole app. Your choice is remembered on this device.') : '' ?>>
                     <i class="fa-solid fa-moon app-theme-icon-dark" aria-hidden="true"></i>
                     <i class="fa-solid fa-sun app-theme-icon-light d-none" aria-hidden="true"></i>
@@ -102,6 +127,21 @@ $topbarProfilePhotoUrl = profile_photo_url((int) ($u['id'] ?? 0));
                         </span>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 py-2" aria-labelledby="adminUserMenuBtn" style="min-width: 12rem;">
+                        <?php if ($navRole === 'program_chair' && count($pcAssignedPrograms) > 1): ?>
+                            <li class="px-3 py-1 d-md-none">
+                                <form method="post">
+                                    <input type="hidden" name="action" value="switch_active_program">
+                                    <input type="hidden" name="redirect" value="<?= htmlspecialchars($pcProgramSwitcherRedirect) ?>">
+                                    <label class="form-label small text-muted mb-1" for="pcActiveProgramSelectMobile">Active program</label>
+                                    <select class="form-select form-select-sm" id="pcActiveProgramSelectMobile" name="active_program" onchange="this.form.submit()">
+                                        <?php foreach ($pcAssignedPrograms as $progName): ?>
+                                            <option value="<?= htmlspecialchars($progName) ?>" <?= $pcActiveProgram === $progName ? 'selected' : '' ?>><?= htmlspecialchars($progName) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </form>
+                            </li>
+                            <li class="d-md-none"><hr class="dropdown-divider my-1"></li>
+                        <?php endif; ?>
                         <li><a class="dropdown-item rounded-2" href="settings.php"<?= $appCursorTooltips ? app_tooltip_attr('Opens account settings where you can change your password. Use this to keep your login secure on shared or public devices.') : '' ?>><i class="fa-solid fa-gear me-2 text-muted"></i>Settings</a></li>
                         <li><hr class="dropdown-divider my-1"></li>
                         <li><a class="dropdown-item rounded-2 text-danger" href="logout.php"<?= $appCursorTooltips ? app_tooltip_attr('Signs you out of the scheduling system on this browser. Use this when you finish on a shared computer or switch accounts.') : '' ?>><i class="fa-solid fa-right-from-bracket me-2"></i>Logout</a></li>

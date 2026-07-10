@@ -16,6 +16,7 @@ unset($_SESSION['flash']);
 $hasUserEmail = db_column_exists('users', 'email');
 $hasAssignedProgram = db_column_exists('users', 'assigned_program');
 $hasProgramsTable = db_table_exists('programs');
+$hasChairProgramsTable = ensure_program_chair_programs_table();
 
 $programOptions = [];
 if ($hasProgramsTable) {
@@ -23,6 +24,24 @@ if ($hasProgramsTable) {
     $st->execute([$collegeId]);
     $programOptions = array_map('strval', $st->fetchAll(PDO::FETCH_COLUMN) ?: []);
 }
+
+/**
+ * @param mixed $raw
+ * @return list<string>
+ */
+$normalizeAssignedPrograms = static function ($raw) use ($programOptions): array {
+    if (!is_array($raw)) {
+        $raw = $raw !== null && $raw !== '' ? [$raw] : [];
+    }
+    $out = [];
+    foreach ($raw as $name) {
+        $name = trim((string) $name);
+        if ($name !== '' && in_array($name, $programOptions, true) && !in_array($name, $out, true)) {
+            $out[] = $name;
+        }
+    }
+    return $out;
+};
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string) ($_POST['action'] ?? '');
@@ -33,26 +52,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$hasProgramsTable) {
             throw new RuntimeException('Programs table is missing. Run upgrade_roles.php first.');
         }
+        if (!$hasChairProgramsTable) {
+            throw new RuntimeException('Could not prepare program_chair_programs. Run upgrade_roles.php.');
+        }
 
         if ($action === 'add') {
             $username = trim((string) ($_POST['username'] ?? ''));
             $fullName = trim((string) ($_POST['full_name'] ?? ''));
-            $assignedProgram = trim((string) ($_POST['assigned_program'] ?? ''));
+            $assignedPrograms = $normalizeAssignedPrograms($_POST['assigned_programs'] ?? []);
             $email = $hasUserEmail ? trim((string) ($_POST['email'] ?? '')) : '';
             $password = (string) ($_POST['password'] ?? '');
             $hasValidEmail = $hasUserEmail && $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL);
             $plainForMail = '';
 
-            if ($username === '' || $fullName === '' || $assignedProgram === '') {
-                throw new RuntimeException('Username, full name, and program are required.');
-            }
-            if (!in_array($assignedProgram, $programOptions, true)) {
-                throw new RuntimeException('Please select a valid program from Programs.');
+            if ($username === '' || $fullName === '' || $assignedPrograms === []) {
+                throw new RuntimeException('Username, full name, and at least one program are required.');
             }
             if ($hasUserEmail && $email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 throw new RuntimeException('Invalid email address.');
             }
 
+            $primaryProgram = $assignedPrograms[0];
             $cred = prepare_new_account_password($password, $hasValidEmail);
             $password = $cred['plain'];
             $plainForMail = $hasValidEmail ? $cred['plain'] : '';
@@ -68,10 +88,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ? 'INSERT INTO users (username,password,full_name,email,role,assigned_program,college_id,is_active) VALUES (?,?,?,?,?,?,?,?)'
                 : 'INSERT INTO users (username,password,full_name,role,assigned_program,college_id,is_active) VALUES (?,?,?,?,?,?,?)';
             $params = $hasUserEmail
-                ? [$username, $cred['hash'], $fullName, $email, 'program_chair', $assignedProgram, $collegeId, !empty($_POST['is_active']) ? 1 : 0]
-                : [$username, $cred['hash'], $fullName, 'program_chair', $assignedProgram, $collegeId, !empty($_POST['is_active']) ? 1 : 0];
+                ? [$username, $cred['hash'], $fullName, $email, 'program_chair', $primaryProgram, $collegeId, !empty($_POST['is_active']) ? 1 : 0]
+                : [$username, $cred['hash'], $fullName, 'program_chair', $primaryProgram, $collegeId, !empty($_POST['is_active']) ? 1 : 0];
             db()->prepare($sql)->execute($params);
             $newPcId = (int) db()->lastInsertId();
+            program_chair_set_assigned_programs($newPcId, $assignedPrograms, $primaryProgram);
             $stPc = db()->prepare(
                 'SELECT id, username, full_name, email, role, assigned_program, college_id, is_active FROM users WHERE id = ? LIMIT 1'
             );
@@ -79,9 +100,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $afterPc = $stPc->fetch(PDO::FETCH_ASSOC);
             if ($afterPc) {
                 $afterPc['password'] = '[set at creation]';
+                $afterPc['assigned_programs'] = implode(', ', $assignedPrograms);
             }
             log_user_activity('add', 'Program chairs', 'Program chair user #' . $newPcId, null, $afterPc ? (array) $afterPc : null);
-            log_dean_activity('program_chair_create', 'Created program chair for ' . $assignedProgram);
+            log_dean_activity('program_chair_create', 'Created program chair for ' . implode(', ', $assignedPrograms));
 
             $mailOk = $hasValidEmail
                 ? notify_new_account_credentials($newPcId, $email, $fullName, $username, $plainForMail, 'program_chair')
@@ -94,16 +116,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id = (int) $_POST['id'];
             $username = trim((string) ($_POST['username'] ?? ''));
             $fullName = trim((string) ($_POST['full_name'] ?? ''));
-            $assignedProgram = trim((string) ($_POST['assigned_program'] ?? ''));
+            $assignedPrograms = $normalizeAssignedPrograms($_POST['assigned_programs'] ?? []);
             $email = $hasUserEmail ? trim((string) ($_POST['email'] ?? '')) : '';
             $resetPassword = trim((string) ($_POST['reset_password'] ?? ''));
             $generateAndEmail = !empty($_POST['generate_temp_password_email']);
 
-            if ($username === '' || $fullName === '' || $assignedProgram === '') {
-                throw new RuntimeException('Username, full name, and program are required.');
-            }
-            if (!in_array($assignedProgram, $programOptions, true)) {
-                throw new RuntimeException('Please select a valid program from Programs.');
+            if ($username === '' || $fullName === '' || $assignedPrograms === []) {
+                throw new RuntimeException('Username, full name, and at least one program are required.');
             }
             if ($hasUserEmail && $email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 throw new RuntimeException('Invalid email address.');
@@ -128,13 +147,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
+            $previousPrograms = program_chair_assigned_programs($id);
+            $previousPrimary = trim((string) ($beforePc['assigned_program'] ?? ''));
+            $primaryProgram = in_array($previousPrimary, $assignedPrograms, true)
+                ? $previousPrimary
+                : $assignedPrograms[0];
+
             $sql = $hasUserEmail
                 ? 'UPDATE users SET username=?, full_name=?, email=?, assigned_program=?, is_active=? WHERE id=? AND role="program_chair" AND college_id=?'
                 : 'UPDATE users SET username=?, full_name=?, assigned_program=?, is_active=? WHERE id=? AND role="program_chair" AND college_id=?';
             $params = $hasUserEmail
-                ? [$username, $fullName, $email, $assignedProgram, !empty($_POST['is_active']) ? 1 : 0, $id, $collegeId]
-                : [$username, $fullName, $assignedProgram, !empty($_POST['is_active']) ? 1 : 0, $id, $collegeId];
+                ? [$username, $fullName, $email, $primaryProgram, !empty($_POST['is_active']) ? 1 : 0, $id, $collegeId]
+                : [$username, $fullName, $primaryProgram, !empty($_POST['is_active']) ? 1 : 0, $id, $collegeId];
             db()->prepare($sql)->execute($params);
+            program_chair_set_assigned_programs($id, $assignedPrograms, $primaryProgram);
 
             $plainForMail = '';
             if ($generateAndEmail) {
@@ -170,6 +196,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($afterPc !== [] && ($generateAndEmail || $resetPassword !== '')) {
                 $afterPc['password'] = '[changed]';
             }
+            if ($beforePc) {
+                $beforePc['assigned_programs'] = implode(', ', $previousPrograms);
+            }
+            if ($afterPc !== []) {
+                $afterPc['assigned_programs'] = implode(', ', $assignedPrograms);
+            }
             log_user_activity(
                 'edit',
                 'Program chairs',
@@ -185,6 +217,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
             $stBpc->execute([$id, $collegeId]);
             $beforeDelPc = $stBpc->fetch(PDO::FETCH_ASSOC);
+            if ($beforeDelPc) {
+                $beforeDelPc['assigned_programs'] = implode(', ', program_chair_assigned_programs($id));
+            }
             $st = db()->prepare('DELETE FROM users WHERE id=? AND role="program_chair" AND college_id=?');
             $st->execute([$id, $collegeId]);
             if ($st->rowCount() < 1) {
@@ -202,10 +237,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $editRow = null;
+$editPrograms = [];
 if (isset($_GET['edit'])) {
     $st = db()->prepare('SELECT * FROM users WHERE id=? AND role="program_chair" AND college_id=?');
     $st->execute([(int) $_GET['edit'], $collegeId]);
     $editRow = $st->fetch() ?: null;
+    if ($editRow) {
+        $editPrograms = program_chair_assigned_programs((int) $editRow['id']);
+        if ($editPrograms === []) {
+            $legacy = trim((string) ($editRow['assigned_program'] ?? ''));
+            if ($legacy !== '') {
+                $editPrograms = [$legacy];
+            }
+        }
+    }
 }
 
 $chairs = [];
@@ -214,10 +259,20 @@ if ($hasAssignedProgram) {
         'SELECT id, username, full_name, email, assigned_program, is_active
          FROM users
          WHERE role="program_chair" AND college_id=?
-         ORDER BY assigned_program, full_name'
+         ORDER BY full_name, assigned_program'
     );
     $st->execute([$collegeId]);
     $chairs = $st->fetchAll();
+    foreach ($chairs as &$chairRow) {
+        $programs = program_chair_assigned_programs((int) $chairRow['id']);
+        if ($programs === []) {
+            $legacy = trim((string) ($chairRow['assigned_program'] ?? ''));
+            $programs = $legacy !== '' ? [$legacy] : [];
+        }
+        $chairRow['assigned_programs_list'] = $programs;
+        $chairRow['assigned_programs_label'] = $programs !== [] ? implode(', ', $programs) : '—';
+    }
+    unset($chairRow);
 }
 
 $currentUser = current_user() ?? [];
@@ -266,6 +321,10 @@ require_once __DIR__ . '/includes/header.php';
   .pc-input-group label { font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:#4a6b85; }
   .pc-input-group input, .pc-input-group select { padding:12px 14px; border-radius:16px; border:1.5px solid #e2edf2; background:#fefefe; font-size:.9rem; transition:all .2s; }
   .pc-input-group input:focus, .pc-input-group select:focus { outline:none; border-color:#2c8cac; box-shadow:0 0 0 3px rgba(44,140,172,.2); }
+  .pc-program-checks { display:flex; flex-direction:column; gap:8px; max-height:220px; overflow:auto; padding:12px 14px; border-radius:16px; border:1.5px solid #e2edf2; background:#fefefe; }
+  .pc-program-checks label { text-transform:none; letter-spacing:0; font-weight:500; font-size:.85rem; color:#2a445b; display:flex; align-items:center; gap:8px; margin:0; }
+  .pc-program-checks input[type="checkbox"] { width:16px; height:16px; accent-color:#1f6e8c; flex-shrink:0; }
+  .pc-program-hint { font-size:.75rem; color:#6b89a0; font-weight:500; text-transform:none; letter-spacing:0; }
   .pc-checkbox-group { display:flex; align-items:center; gap:8px; color:#2a445b; margin-top:8px; font-size:.85rem; }
   .pc-checkbox-group input[type="checkbox"] { width:16px; height:16px; accent-color:#1f6e8c; }
   .pc-save-btn { background:#1f6e8c; border:none; padding:12px 24px; border-radius:40px; font-weight:600; color:#fff; font-size:.9rem; display:inline-flex; align-items:center; gap:12px; cursor:pointer; transition:.2s; }
@@ -276,6 +335,8 @@ require_once __DIR__ . '/includes/header.php';
   .pc-table th { text-align:left; padding:18px 16px; background:#f9fbfd; font-weight:600; color:#2c4c6e; border-bottom:1px solid #e6edf2; }
   .pc-table td { padding:14px 16px; border-bottom:1px solid #eff3f8; vertical-align:middle; color:#2a445b; }
   .pc-table tr:hover td { background:#fafcff; }
+  .pc-program-pills { display:flex; flex-wrap:wrap; gap:6px; }
+  .pc-program-pill { display:inline-block; padding:4px 10px; border-radius:50px; font-size:.7rem; font-weight:600; background:#eaf4fc; color:#1f6e8c; }
   .pc-status-badge { display:inline-block; padding:4px 12px; border-radius:50px; font-size:.7rem; font-weight:600; text-transform:capitalize; }
   .pc-status-active { background:#e0f2e9; color:#1f7840; }
   .pc-status-inactive { background:#ffe6e5; color:#b33; }
@@ -301,7 +362,10 @@ require_once __DIR__ . '/includes/header.php';
   html[data-bs-theme="dark"] .pc-stat-info h3 { color:#e3f3ff; }
   html[data-bs-theme="dark"] .pc-card-header { border-bottom-color:#2b3a49; }
   html[data-bs-theme="dark"] .pc-input-group input,
-  html[data-bs-theme="dark"] .pc-input-group select { background:#0f1821; border-color:#2e4152; color:#deebf5; }
+  html[data-bs-theme="dark"] .pc-input-group select,
+  html[data-bs-theme="dark"] .pc-program-checks { background:#0f1821; border-color:#2e4152; color:#deebf5; }
+  html[data-bs-theme="dark"] .pc-program-checks label { color:#c5d9e7; }
+  html[data-bs-theme="dark"] .pc-program-hint { color:#9ab0c2; }
   html[data-bs-theme="dark"] .pc-input-group input:focus,
   html[data-bs-theme="dark"] .pc-input-group select:focus { border-color:#4ea4c6; box-shadow:0 0 0 3px rgba(78,164,198,.28); }
   html[data-bs-theme="dark"] .pc-checkbox-group { color:#c5d9e7; }
@@ -309,6 +373,7 @@ require_once __DIR__ . '/includes/header.php';
   html[data-bs-theme="dark"] .pc-table th { background:#1b2834; border-bottom-color:#30414f; }
   html[data-bs-theme="dark"] .pc-table td { color:#c8dced; border-bottom-color:#2b3a47; }
   html[data-bs-theme="dark"] .pc-table tr:hover td { background:#1a2530; }
+  html[data-bs-theme="dark"] .pc-program-pill { background:#203346; color:#87c8ea; }
   html[data-bs-theme="dark"] .pc-status-active { background:#1d3a2b; color:#8fddb1; }
   html[data-bs-theme="dark"] .pc-status-inactive { background:#45262a; color:#f4aab1; }
   html[data-bs-theme="dark"] .pc-icon-btn { color:#90c7e5; }
@@ -374,14 +439,22 @@ require_once __DIR__ . '/includes/header.php';
 
                 <div class="pc-input-group"><label>Username</label><input name="username" maxlength="50" required value="<?= htmlspecialchars((string) ($editRow['username'] ?? '')) ?>"></div>
                 <div class="pc-input-group"><label>Full Name</label><input name="full_name" required value="<?= htmlspecialchars((string) ($editRow['full_name'] ?? '')) ?>"></div>
-                <div class="pc-input-group">
-                    <label>Assigned Program</label>
-                    <select name="assigned_program" required>
-                        <option value="">Select program...</option>
-                        <?php foreach ($programOptions as $programName): ?>
-                            <option value="<?= htmlspecialchars($programName) ?>" <?= ((string) ($editRow['assigned_program'] ?? '')) === $programName ? 'selected' : '' ?>><?= htmlspecialchars($programName) ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                <div class="pc-input-group" style="grid-column:1 / -1;">
+                    <label>Assigned Programs</label>
+                    <span class="pc-program-hint">Select one or more programs this chair will handle.</span>
+                    <div class="pc-program-checks">
+                        <?php if ($programOptions === []): ?>
+                            <span class="text-muted">No active programs yet. Add programs first.</span>
+                        <?php else: ?>
+                            <?php foreach ($programOptions as $programName): ?>
+                                <label>
+                                    <input type="checkbox" name="assigned_programs[]" value="<?= htmlspecialchars($programName) ?>"
+                                        <?= in_array($programName, $editPrograms, true) ? 'checked' : '' ?>>
+                                    <span><?= htmlspecialchars($programName) ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
                 <?php if ($hasUserEmail): ?>
                     <div class="pc-input-group"><label>Email</label><input type="email" name="email" value="<?= htmlspecialchars((string) ($editRow['email'] ?? '')) ?>"></div>
@@ -457,7 +530,7 @@ require_once __DIR__ . '/includes/header.php';
                     <tr>
                         <th>Username</th>
                         <th>Name</th>
-                        <th>Program</th>
+                        <th>Programs</th>
                         <?php if ($hasUserEmail): ?><th>Email</th><?php endif; ?>
                         <th>Status</th>
                         <th>Actions</th>
@@ -468,7 +541,16 @@ require_once __DIR__ . '/includes/header.php';
                         <tr>
                             <td><?= htmlspecialchars((string) $chair['username']) ?></td>
                             <td><?= htmlspecialchars((string) $chair['full_name']) ?></td>
-                            <td><?= htmlspecialchars((string) $chair['assigned_program']) ?></td>
+                            <td>
+                                <div class="pc-program-pills">
+                                    <?php foreach (($chair['assigned_programs_list'] ?? []) as $progName): ?>
+                                        <span class="pc-program-pill"><?= htmlspecialchars((string) $progName) ?></span>
+                                    <?php endforeach; ?>
+                                    <?php if (($chair['assigned_programs_list'] ?? []) === []): ?>
+                                        <span class="text-muted">—</span>
+                                    <?php endif; ?>
+                                </div>
+                            </td>
                             <?php if ($hasUserEmail): ?><td><?= htmlspecialchars((string) ($chair['email'] ?? '')) ?></td><?php endif; ?>
                             <td>
                                 <span class="pc-status-badge <?= (int) $chair['is_active'] === 1 ? 'pc-status-active' : 'pc-status-inactive' ?>">

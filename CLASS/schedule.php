@@ -70,6 +70,8 @@ $targetSelect = $hasGeTargetsTable
     : '';
 $targetJoin = $hasGeTargetsTable ? ' LEFT JOIN ge_schedule_targets gst ON gst.schedule_id = s.id ' : '';
 $courseLabSelect = $hasCourseLabFlag ? ', c.is_laboratory' : '';
+$hasSessionKind = db_column_exists('schedules', 'session_kind');
+$sessionKindSelect = $hasSessionKind ? ', s.session_kind' : '';
 $courseBlockSelect = '';
 if ($hasCourseYearLevel || $hasCourseSection) {
     $courseBlockSelect = ', c.department AS course_block_department';
@@ -86,6 +88,7 @@ $sql = "SELECT s.id, s.faculty_id, s.course_id, s.schedule_type, s.day_of_week, 
         col.college_name, COALESCE(uc.role, '') AS creator_role
         {$courseLabSelect}
         {$courseBlockSelect}
+        {$sessionKindSelect}
         {$targetSelect}
         FROM schedules s
         INNER JOIN faculty f ON f.id = s.faculty_id
@@ -184,15 +187,19 @@ $formatTime12h = static function (?string $time): string {
     return $dt ? $dt->format('g:i A') : $raw;
 };
 
-/** Laboratory-style block: lab room, or a single scheduled block of 3+ hours. */
-$segmentIsLaboratory = static function (array $r): bool {
-    if (strtolower(trim((string) ($r['room_type'] ?? ''))) === 'laboratory') {
-        return true;
+/** Laboratory vs lecture badge: prefer session_kind; pure lecture courses stay Lecture even at 3h. */
+$segmentIsLaboratory = static function (array $r) use ($hasCourseLabFlag): bool {
+    $courseIsLab = null;
+    if ($hasCourseLabFlag && array_key_exists('is_laboratory', $r)) {
+        $courseIsLab = (int) ($r['is_laboratory'] ?? 0) === 1;
     }
-    $st = time_to_minutes(substr((string) ($r['start_time'] ?? ''), 0, 8));
-    $en = time_to_minutes(substr((string) ($r['end_time'] ?? ''), 0, 8));
-    $d = $en - $st;
-    return $d > 0 && $d >= 180;
+    return schedule_session_is_laboratory(
+        (string) ($r['start_time'] ?? ''),
+        (string) ($r['end_time'] ?? ''),
+        (string) ($r['room_type'] ?? ''),
+        isset($r['session_kind']) ? (string) $r['session_kind'] : null,
+        $courseIsLab
+    );
 };
 
 /** Block label from course program/year/section (Dean module) when row is not a GE target. */

@@ -26,8 +26,8 @@ $formatTime12h = static function (?string $time): string {
     $dt = DateTime::createFromFormat('H:i', $raw);
     return $dt ? $dt->format('g:i A') : $raw;
 };
-$isLabSession = static function (?string $start, ?string $end, ?string $roomType = null): bool {
-    return schedule_session_is_laboratory($start, $end, $roomType);
+$isLabSession = static function (?string $start, ?string $end, ?string $roomType = null, ?string $sessionKind = null, ?bool $courseIsLab = null): bool {
+    return schedule_session_is_laboratory($start, $end, $roomType, $sessionKind, $courseIsLab);
 };
 
 if ($studentId < 1) {
@@ -103,11 +103,17 @@ unset($_SESSION['flash']);
 $classes = [];
 $announcements = [];
 
+$hasCourseLabFlag = db_column_exists('courses', 'is_laboratory');
+$hasSessionKind = db_column_exists('schedules', 'session_kind');
+$labKindSelect = ($hasCourseLabFlag ? ', c.is_laboratory' : '')
+    . ($hasSessionKind ? ', s.session_kind' : '');
+
 if ($missingTables === []) {
     $st = db()->prepare(
         'SELECT oc.id, oc.title, oc.description, oc.meet_link, oc.status,
                 c.course_code, c.course_name, f.full_name AS faculty_name,
-                s.semester, s.school_year, s.day_of_week, s.start_time, s.end_time, s.online_live_at,
+                s.semester, s.school_year, s.day_of_week, s.start_time, s.end_time, s.online_live_at'
+        . $labKindSelect . ',
                 (SELECT COUNT(*) FROM classroom_content cc WHERE cc.classroom_id = oc.id AND cc.content_type = "announcement") AS announcement_count,
                 (SELECT COUNT(*) FROM classroom_assessments ca WHERE ca.classroom_id = oc.id) AS assessment_count,
                 (SELECT COUNT(*)
@@ -200,7 +206,19 @@ require_once __DIR__ . '/includes/header.php';
                                         <div class="text-muted small"><?= htmlspecialchars((string) $class['course_code']) ?> - <?= htmlspecialchars((string) $class['course_name']) ?></div>
                                     </div>
                                     <div class="d-flex flex-wrap justify-content-end gap-1">
-                                        <?php if ($isLabSession((string) ($class['start_time'] ?? ''), (string) ($class['end_time'] ?? ''))): ?>
+                                        <?php
+                                        $classIsLab = array_key_exists('is_laboratory', $class)
+                                            ? ((int) ($class['is_laboratory'] ?? 0) === 1)
+                                            : null;
+                                        $classKind = isset($class['session_kind']) ? (string) $class['session_kind'] : null;
+                                        if ($isLabSession(
+                                            (string) ($class['start_time'] ?? ''),
+                                            (string) ($class['end_time'] ?? ''),
+                                            null,
+                                            $classKind,
+                                            $classIsLab
+                                        )):
+                                        ?>
                                             <span class="badge bg-warning text-dark"><i class="fa-solid fa-flask me-1"></i>Laboratory</span>
                                         <?php else: ?>
                                             <span class="badge bg-info text-dark"><i class="fa-solid fa-chalkboard me-1"></i>Lecture</span>

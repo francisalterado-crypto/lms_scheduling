@@ -213,6 +213,10 @@ function render_admin_nav_sections(string $currentPage, int $messagingUnread, bo
                 'file' => 'admin_login_slideshow.php', 'href' => 'admin_login_slideshow.php', 'icon' => 'fa-images', 'label' => 'Login slideshow',
                 'tooltip' => 'Upload and manage images that auto-scroll on the public login page.',
             ],
+            [
+                'file' => 'faculty_edutools.php', 'href' => 'faculty_edutools.php', 'icon' => 'fa-wand-magic-sparkles', 'label' => 'EduTools',
+                'tooltip' => 'Education sources: writing tools (Turnitin, Grammarly, QuillBot, AI detector), AI & research (ChatGPT, Perplexity, NotebookLM, Wolfram), notebooks, Khan Academy, and Notion—plus a built-in notebook.',
+            ],
         ],
         'Management' => [
             [
@@ -344,6 +348,10 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'label' => 'My classrooms',
                     'tooltip' => 'Create and manage online classrooms for your own teaching load.',
                 ],
+                [
+                    'file' => 'faculty_edutools.php', 'href' => 'faculty_edutools.php', 'icon' => 'fa-wand-magic-sparkles', 'label' => 'EduTools',
+                    'tooltip' => 'Education sources: writing tools (Turnitin, Grammarly, QuillBot, AI detector), AI & research (ChatGPT, Perplexity, NotebookLM, Wolfram), notebooks, Khan Academy, and Notion—plus a built-in notebook.',
+                ],
             ],
             'Scheduling' => [
                 ['file' => 'add_schedule.php', 'href' => 'add_schedule.php', 'icon' => 'fa-plus', 'label' => 'Add schedule'],
@@ -387,6 +395,10 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'icon' => 'fa-chalkboard',
                     'label' => 'My classrooms',
                     'tooltip' => 'Create and manage online classrooms for your own teaching load.',
+                ],
+                [
+                    'file' => 'faculty_edutools.php', 'href' => 'faculty_edutools.php', 'icon' => 'fa-wand-magic-sparkles', 'label' => 'EduTools',
+                    'tooltip' => 'Education sources: writing tools (Turnitin, Grammarly, QuillBot, AI detector), AI & research (ChatGPT, Perplexity, NotebookLM, Wolfram), notebooks, Khan Academy, and Notion—plus a built-in notebook.',
                 ],
             ],
             'Management' => [

@@ -97,8 +97,8 @@ $formatTime12h = static function (?string $time): string {
     return $dt ? $dt->format('g:i A') : $raw;
 };
 
-/** Faculty clicked “Go live” within the last 2 hours (shown to dean on weekly view). */
-$scheduleShowsLive = static function (?string $liveAt): bool {
+/** Faculty clicked “Go live” and class is still within its scheduled day/time window. */
+$scheduleShowsLive = static function (array $scheduleRow, ?string $liveAt): bool {
     if ($liveAt === null || $liveAt === '') {
         return false;
     }
@@ -106,7 +106,10 @@ $scheduleShowsLive = static function (?string $liveAt): bool {
     if ($t === false) {
         return false;
     }
-    return (time() - $t) <= 2 * 3600;
+    if ((time() - $t) > 2 * 3600) {
+        return false;
+    }
+    return !empty(classroom_attendance_login_allowed($scheduleRow)['allowed']);
 };
 
 $byDay = [];
@@ -260,7 +263,7 @@ require_once __DIR__ . '/includes/header.php';
                                 $onlineUrl = $hasOnlineUrlCol ? trim((string) ($s['online_class_url'] ?? '')) : '';
                                 $liveAtStr = $hasLiveAtCol ? ($s['online_live_at'] ?? null) : null;
                                 $liveAtStr = $liveAtStr !== null && $liveAtStr !== '' ? (string) $liveAtStr : null;
-                                $isLive = $hasLiveAtCol && $scheduleShowsLive($liveAtStr);
+                                $isLive = $hasLiveAtCol && $scheduleShowsLive($s, $liveAtStr);
                                 ?>
                                 <?php if ($hasOnlineUrlCol && $onlineUrl !== ''): ?>
                                     <div class="mt-1 pt-1 border-top border-secondary-subtle small">
@@ -287,6 +290,6 @@ require_once __DIR__ . '/includes/header.php';
     </table>
 </div>
 
-<p class="text-muted small mt-3 no-print">Use filters to show faculty-specific or room-specific schedules. <strong>LIVE</strong> appears when the instructor taps <em>Go live</em> on My Schedule (within the last 2 hours). Print uses a simplified layout.</p>
+<p class="text-muted small mt-3 no-print">Use filters to show faculty-specific or room-specific schedules. <strong>LIVE</strong> appears when the instructor taps <em>Go live</em> on My Schedule during the class day and time. Print uses a simplified layout.</p>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

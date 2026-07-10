@@ -322,12 +322,45 @@ $studentClassIsLive = static function (?string $liveAt) use ($hasStudentLiveAt):
 };
 
 $studentTodayClasses = [];
+$studentTimeSlots = [];
+$studentScheduleOverlapsHour = static function (array $scheduleRow, int $hour): bool {
+    $slotStart = $hour * 60;
+    $slotEnd = ($hour + 1) * 60;
+    $st = time_to_minutes(substr((string) ($scheduleRow['start_time'] ?? ''), 0, 8));
+    $en = time_to_minutes(substr((string) ($scheduleRow['end_time'] ?? ''), 0, 8));
+    return $st < $slotEnd && $en > $slotStart;
+};
+$studentScheduleStartsInHour = static function (array $scheduleRow, int $hour): bool {
+    $st = time_to_minutes(substr((string) ($scheduleRow['start_time'] ?? ''), 0, 8));
+    return $st >= ($hour * 60) && $st < (($hour + 1) * 60);
+};
+
 if ($role === 'student' && isset($studentScheduleByDay[$today])) {
     $nowTime = date('H:i:s');
     foreach ($studentScheduleByDay[$today] as $schedRow) {
         if ((string) ($schedRow['end_time'] ?? '') >= $nowTime) {
             $studentTodayClasses[] = $schedRow;
         }
+    }
+}
+
+if ($role === 'student' && $studentScheduleClasses !== []) {
+    $gridStartMin = defined('TIME_MIN') ? time_to_minutes((string) TIME_MIN) : 7 * 60;
+    $gridEndMin = defined('TIME_MAX') ? time_to_minutes((string) TIME_MAX) : 21 * 60;
+    foreach ($studentScheduleClasses as $schedRow) {
+        $st = time_to_minutes(substr((string) ($schedRow['start_time'] ?? ''), 0, 8));
+        $en = time_to_minutes(substr((string) ($schedRow['end_time'] ?? ''), 0, 8));
+        if ($st < $gridStartMin) {
+            $gridStartMin = $st;
+        }
+        if ($en > $gridEndMin) {
+            $gridEndMin = $en;
+        }
+    }
+    $gridStartHour = (int) floor($gridStartMin / 60);
+    $gridEndHour = (int) max($gridStartHour + 1, (int) ceil($gridEndMin / 60));
+    for ($h = $gridStartHour; $h < $gridEndHour; $h++) {
+        $studentTimeSlots[] = $h;
     }
 }
 
@@ -513,12 +546,16 @@ require_once __DIR__ . '/includes/header.php';
     }
 
     .student-calendar-wrap .schedule-weekly th.is-today,
-    .student-calendar-wrap .schedule-cell.is-today {
+    .student-calendar-wrap .schedule-cell.is-today:not(.schedule-cell--vacant) {
         background: rgba(31, 111, 67, 0.08);
     }
 
     .student-calendar-wrap .schedule-weekly th.is-today {
         box-shadow: inset 0 -3px 0 #1f6f43;
+    }
+
+    .student-calendar-wrap .schedule-cell.is-today.schedule-cell--vacant {
+        background-color: rgba(31, 111, 67, 0.04);
     }
 
     .student-calendar-wrap .schedule-block {
@@ -959,14 +996,17 @@ require_once __DIR__ . '/includes/header.php';
                 <div class="student-calendar-legend mb-3">
                     <span><i class="fa-solid fa-circle-dot"></i> Today: <?= htmlspecialchars($today) ?></span>
                     <span><i class="fa-solid fa-book-open"></i> <?= count($studentScheduleClasses) ?> enrolled class<?= count($studentScheduleClasses) === 1 ? '' : 'es' ?></span>
+                    <span><i class="fa-regular fa-clock"></i> Empty cells = vacant time</span>
                     <?php if ($hasStudentLiveAt): ?>
                         <span><i class="fa-solid fa-circle text-danger"></i> LIVE = instructor is broadcasting now</span>
                     <?php endif; ?>
                 </div>
+                <p class="text-muted small mb-2">Times on the left mark each hour. Check a day column against the time axis to see when you have class and which hours are vacant.</p>
                 <div class="table-responsive">
-                    <table class="table table-bordered bg-body schedule-weekly mb-0">
+                    <table class="table table-bordered bg-body schedule-weekly schedule-weekly--timed mb-0">
                         <thead class="table-primary">
                             <tr>
+                                <th class="text-center schedule-time-col" scope="col">Time</th>
                                 <?php foreach (schedule_days_list() as $dayName): ?>
                                     <th class="text-center schedule-day-col<?= $dayName === $today ? ' is-today' : '' ?>">
                                         <?= htmlspecialchars($dayName) ?>
@@ -978,50 +1018,88 @@ require_once __DIR__ . '/includes/header.php';
                             </tr>
                         </thead>
                         <tbody>
-                            <tr>
-                                <?php foreach (schedule_days_list() as $dayName): ?>
-                                    <td class="align-top schedule-cell p-2<?= $dayName === $today ? ' is-today' : '' ?>">
-                                        <?php foreach ($studentScheduleByDay[$dayName] as $schedRow): ?>
-                                            <?php
-                                            $colorClass = 'c' . ((int) ($schedRow['course_id'] ?? 0) % 6);
-                                            $liveAt = $hasStudentLiveAt ? (string) ($schedRow['online_live_at'] ?? '') : '';
-                                            $isLive = $studentClassIsLive($liveAt);
-                                            $meetLink = trim((string) ($schedRow['meet_link'] ?? ''));
-                                            ?>
-                                            <div class="schedule-block <?= $colorClass ?>">
-                                                <div class="fw-semibold">
-                                                    <?= htmlspecialchars($formatTime12h((string) ($schedRow['start_time'] ?? ''))) ?>
-                                                    –
-                                                    <?= htmlspecialchars($formatTime12h((string) ($schedRow['end_time'] ?? ''))) ?>
-                                                </div>
-                                                <div>
-                                                    <strong><?= htmlspecialchars((string) $schedRow['course_code']) ?></strong>
-                                                    <?php if ($isLive): ?>
-                                                        <span class="badge bg-danger live-pulse-badge ms-1" style="font-size:0.65rem">LIVE</span>
+                            <?php foreach ($studentTimeSlots as $hour): ?>
+                                <?php
+                                $slotLabel = $formatTime12h(sprintf('%02d:00', $hour));
+                                $slotEndLabel = $formatTime12h(sprintf('%02d:00', $hour + 1));
+                                ?>
+                                <tr>
+                                    <th class="schedule-time-col text-end align-top" scope="row">
+                                        <div class="schedule-time-label fw-semibold"><?= htmlspecialchars($slotLabel) ?></div>
+                                        <div class="schedule-time-end small text-muted"><?= htmlspecialchars($slotEndLabel) ?></div>
+                                    </th>
+                                    <?php foreach (schedule_days_list() as $dayName): ?>
+                                        <?php
+                                        $slotClasses = [];
+                                        foreach ($studentScheduleByDay[$dayName] as $schedRow) {
+                                            if ($studentScheduleOverlapsHour($schedRow, $hour)) {
+                                                $slotClasses[] = $schedRow;
+                                            }
+                                        }
+                                        $isVacant = $slotClasses === [];
+                                        ?>
+                                        <td class="align-top schedule-cell p-2<?= $dayName === $today ? ' is-today' : '' ?><?= $isVacant ? ' schedule-cell--vacant' : '' ?>">
+                                            <?php if ($isVacant): ?>
+                                                <span class="schedule-vacant-label">Vacant</span>
+                                            <?php else: ?>
+                                                <?php foreach ($slotClasses as $schedRow): ?>
+                                                    <?php
+                                                    $startsHere = $studentScheduleStartsInHour($schedRow, $hour);
+                                                    $colorClass = 'c' . ((int) ($schedRow['course_id'] ?? 0) % 6);
+                                                    $liveAt = $hasStudentLiveAt ? (string) ($schedRow['online_live_at'] ?? '') : '';
+                                                    $isLive = $studentClassIsLive($liveAt);
+                                                    $meetLink = trim((string) ($schedRow['meet_link'] ?? ''));
+                                                    ?>
+                                                    <?php if (!$startsHere): ?>
+                                                        <div class="schedule-block schedule-block--continued <?= $colorClass ?>">
+                                                            <div class="small fw-semibold">
+                                                                <?= htmlspecialchars((string) $schedRow['course_code']) ?>
+                                                                <span class="text-muted fw-normal">(continues)</span>
+                                                                <?php if ($isLive): ?>
+                                                                    <span class="badge bg-danger live-pulse-badge ms-1" style="font-size:0.65rem">LIVE</span>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                            <div class="small text-muted">
+                                                                <?= htmlspecialchars($formatTime12h((string) ($schedRow['start_time'] ?? ''))) ?>
+                                                                –
+                                                                <?= htmlspecialchars($formatTime12h((string) ($schedRow['end_time'] ?? ''))) ?>
+                                                            </div>
+                                                        </div>
+                                                    <?php else: ?>
+                                                        <div class="schedule-block <?= $colorClass ?>">
+                                                            <div class="fw-semibold">
+                                                                <?= htmlspecialchars($formatTime12h((string) ($schedRow['start_time'] ?? ''))) ?>
+                                                                –
+                                                                <?= htmlspecialchars($formatTime12h((string) ($schedRow['end_time'] ?? ''))) ?>
+                                                            </div>
+                                                            <div>
+                                                                <strong><?= htmlspecialchars((string) $schedRow['course_code']) ?></strong>
+                                                                <?php if ($isLive): ?>
+                                                                    <span class="badge bg-danger live-pulse-badge ms-1" style="font-size:0.65rem">LIVE</span>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                            <div class="small"><?= htmlspecialchars((string) $schedRow['course_name']) ?></div>
+                                                            <div class="small text-muted"><?= htmlspecialchars((string) $schedRow['faculty_name']) ?></div>
+                                                            <div class="small"><i class="fa-solid fa-door-open me-1"></i><?= htmlspecialchars((string) $schedRow['room_code']) ?></div>
+                                                            <div class="small text-muted"><?= htmlspecialchars((string) $schedRow['semester']) ?> / <?= htmlspecialchars((string) $schedRow['school_year']) ?></div>
+                                                            <div class="mt-1 d-flex flex-wrap gap-1">
+                                                                <a href="student_classroom.php?id=<?= (int) $schedRow['classroom_id'] ?>" class="btn btn-sm btn-primary py-0 px-2"<?= student_tooltip_attr('Opens this class workspace with announcements, materials, and assessments.') ?>>Open</a>
+                                                                <?php if ($meetLink !== ''): ?>
+                                                                    <?php if ($isLive): ?>
+                                                                        <a href="<?= htmlspecialchars($meetLink) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-success py-0 px-2"<?= student_tooltip_attr('Your instructor is live. Opens the video meeting for this class in a new tab.') ?>><i class="fa-solid fa-video me-1"></i>Meet</a>
+                                                                    <?php else: ?>
+                                                                        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" disabled<?= student_tooltip_attr('Meet is available only when your instructor goes live for this class.') ?>><i class="fa-solid fa-video me-1"></i>Meet</button>
+                                                                    <?php endif; ?>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                        </div>
                                                     <?php endif; ?>
-                                                </div>
-                                                <div class="small"><?= htmlspecialchars((string) $schedRow['course_name']) ?></div>
-                                                <div class="small text-muted"><?= htmlspecialchars((string) $schedRow['faculty_name']) ?></div>
-                                                <div class="small"><i class="fa-solid fa-door-open me-1"></i><?= htmlspecialchars((string) $schedRow['room_code']) ?></div>
-                                                <div class="small text-muted"><?= htmlspecialchars((string) $schedRow['semester']) ?> / <?= htmlspecialchars((string) $schedRow['school_year']) ?></div>
-                                                <div class="mt-1 d-flex flex-wrap gap-1">
-                                                    <a href="student_classroom.php?id=<?= (int) $schedRow['classroom_id'] ?>" class="btn btn-sm btn-primary py-0 px-2"<?= student_tooltip_attr('Opens this class workspace with announcements, materials, and assessments.') ?>>Open</a>
-                                                    <?php if ($meetLink !== ''): ?>
-                                                        <?php if ($isLive): ?>
-                                                            <a href="<?= htmlspecialchars($meetLink) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-success py-0 px-2"<?= student_tooltip_attr('Your instructor is live. Opens the video meeting for this class in a new tab.') ?>><i class="fa-solid fa-video me-1"></i>Meet</a>
-                                                        <?php else: ?>
-                                                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" disabled<?= student_tooltip_attr('Meet is available only when your instructor goes live for this class.') ?>><i class="fa-solid fa-video me-1"></i>Meet</button>
-                                                        <?php endif; ?>
-                                                    <?php endif; ?>
-                                                </div>
-                                            </div>
-                                        <?php endforeach; ?>
-                                        <?php if ($studentScheduleByDay[$dayName] === []): ?>
-                                            <span class="text-muted small">—</span>
-                                        <?php endif; ?>
-                                    </td>
-                                <?php endforeach; ?>
-                            </tr>
+                                                <?php endforeach; ?>
+                                            <?php endif; ?>
+                                        </td>
+                                    <?php endforeach; ?>
+                                </tr>
+                            <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>
