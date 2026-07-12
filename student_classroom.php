@@ -376,6 +376,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
         } elseif ($action === 'post_discussion_message') {
             classroom_discussion_post($classroomId, $userId, (string) ($_POST['message_body'] ?? ''));
             $_SESSION['flash'] = 'Class discussion message posted.';
+        } elseif ($action === 'upload_banner') {
+            if (!classroom_banner_column_ready()) {
+                throw new RuntimeException('Header backgrounds need a database update. Run upgrade_roles.php once.');
+            }
+            if (!isset($_FILES['banner']) || !is_array($_FILES['banner'])) {
+                throw new RuntimeException('Please choose a background image to upload.');
+            }
+            $f = $_FILES['banner'];
+            classroom_banner_store_for_classroom($classroomId, [
+                'name' => (string) ($f['name'] ?? ''),
+                'type' => (string) ($f['type'] ?? ''),
+                'tmp_name' => (string) ($f['tmp_name'] ?? ''),
+                'error' => (int) ($f['error'] ?? UPLOAD_ERR_NO_FILE),
+                'size' => (int) ($f['size'] ?? 0),
+            ]);
+            $_SESSION['flash'] = 'Classroom header background updated.';
+        } elseif ($action === 'delete_banner') {
+            if (!classroom_banner_column_ready()) {
+                throw new RuntimeException('Header backgrounds are not installed.');
+            }
+            classroom_banner_remove_for_classroom($classroomId);
+            $_SESSION['flash'] = 'Classroom header background removed.';
         }
     } catch (Throwable $e) {
         if (db()->inTransaction()) {
@@ -517,6 +539,8 @@ require_once __DIR__ . '/includes/header.php';
 $classroomLiveAt = $hasLiveAt && $classroom ? (string) ($classroom['online_live_at'] ?? '') : '';
 $classroomIsLive = $hasLiveAt && $classIsLive($classroomLiveAt);
 $studentSyllabusReady = $classroom && $hasSyllabusCols && trim((string) ($classroom['syllabus_stored_name'] ?? '')) !== '';
+$classroomBannerUrl = $classroom ? classroom_banner_url_for($classroom) : null;
+$hasBannerCols = classroom_banner_column_ready();
 $attendanceHasLoginToday = trim((string) ($attendanceTodayLoginAt ?? '')) !== '';
 $attendanceHasLogoutToday = $hasAttendanceLogoutColumn && trim((string) ($attendanceTodayLogoutAt ?? '')) !== '';
 $attendanceLoginWindow = $classroom ? classroom_attendance_login_allowed($classroom) : [
@@ -546,25 +570,55 @@ if ($attendanceHasLogoutToday) {
     $attendanceStatusLabel = $hasAttendanceLogoutColumn ? 'In class' : 'Login recorded';
 }
 ?>
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 student-page-header">
-    <div class="min-w-0">
-        <h1 class="h3 mb-1">
-            <i class="fa-solid fa-book-open-reader me-2 text-primary"></i><?= htmlspecialchars((string) ($classroom['title'] ?? 'Classroom')) ?>
+<div class="classroom-banner mb-3<?= $classroomBannerUrl ? ' has-photo' : '' ?>"<?= $classroomBannerUrl ? ' style="--classroom-banner-image: url(\'' . htmlspecialchars($classroomBannerUrl, ENT_QUOTES) . '\')"' : '' ?>>
+    <div class="classroom-banner__overlay">
+        <h1 class="classroom-banner__title">
+            <?= htmlspecialchars((string) ($classroom['title'] ?? 'Classroom')) ?>
             <?php if ($classroomIsLive): ?>
                 <span class="badge bg-danger live-pulse-badge align-middle ms-2">LIVE</span>
             <?php endif; ?>
         </h1>
         <?php if ($classroom): ?>
-            <div class="text-muted student-class-meta">
-                <?= htmlspecialchars((string) $classroom['course_code']) ?> - <?= htmlspecialchars((string) $classroom['course_name']) ?>
-                | Instructor: <?= htmlspecialchars((string) $classroom['faculty_name']) ?>
+            <div class="classroom-banner__meta">
+                <?= htmlspecialchars((string) $classroom['course_code']) ?> — <?= htmlspecialchars((string) $classroom['course_name']) ?>
+                <span class="classroom-banner__sep">·</span>
+                Instructor: <?= htmlspecialchars((string) $classroom['faculty_name']) ?>
             </div>
             <?php if ($classroomIsLive): ?>
-                <div class="small text-danger fw-semibold mt-1">
+                <div class="classroom-banner__live-note">
                     <i class="fa-solid fa-circle-play me-1"></i>Your instructor is live now.
                 </div>
             <?php endif; ?>
         <?php endif; ?>
+    </div>
+    <?php if ($classroom && $hasBannerCols): ?>
+        <div class="classroom-banner__actions">
+            <form method="post" enctype="multipart/form-data" class="classroom-banner__upload-form" id="studentBannerUploadForm">
+                <input type="hidden" name="action" value="upload_banner">
+                <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
+                <label class="btn btn-light btn-sm classroom-banner__upload-btn" for="studentBannerFile"<?= student_tooltip_attr('Choose a JPEG, PNG, or WebP image to use as this class header background.') ?>>
+                    <i class="fa-solid fa-image me-1"></i><?= $classroomBannerUrl ? 'Change background' : 'Upload background' ?>
+                </label>
+                <input id="studentBannerFile" type="file" name="banner" class="visually-hidden" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" required>
+            </form>
+            <?php if ($classroomBannerUrl): ?>
+                <form method="post" class="d-inline" onsubmit="return confirm('Remove the header background image?');">
+                    <input type="hidden" name="action" value="delete_banner">
+                    <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
+                    <button type="submit" class="btn btn-outline-light btn-sm"<?= student_tooltip_attr('Removes the custom background and restores the default header style.') ?>><i class="fa-solid fa-trash me-1"></i>Remove</button>
+                </form>
+            <?php endif; ?>
+        </div>
+    <?php elseif ($classroom && !$hasBannerCols): ?>
+        <div class="classroom-banner__actions">
+            <span class="badge text-bg-warning">Run upgrade_roles.php to enable background upload</span>
+        </div>
+    <?php endif; ?>
+</div>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4 student-page-header student-page-header--below-banner">
+    <div class="min-w-0 d-none d-md-block">
+        <div class="text-muted small">Class workspace</div>
     </div>
     <div class="d-flex flex-wrap align-items-start align-items-md-center gap-2 student-page-header__actions">
         <?php if ($studentSyllabusReady): ?>
@@ -897,6 +951,14 @@ if ($attendanceHasLogoutToday) {
 document.getElementById('studentClassDiscussionThread')?.scrollTo(0, document.getElementById('studentClassDiscussionThread').scrollHeight);
 </script>
 <?php endif; ?>
+
+<script>
+document.getElementById('studentBannerFile')?.addEventListener('change', function () {
+    if (this.files && this.files.length > 0) {
+        document.getElementById('studentBannerUploadForm')?.submit();
+    }
+});
+</script>
 
 <script>
 (function () {

@@ -210,6 +210,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             }
 
             $_SESSION['flash'] = 'Content updated.';
+        } elseif ($action === 'upload_banner' || $action === 'delete_banner') {
+            $bannerFlash = faculty_classroom_process_banner_post($classroomId, $facultyId, $classroom);
+            if ($bannerFlash !== null) {
+                $_SESSION['flash'] = $bannerFlash;
+            }
         }
     } catch (Throwable $e) {
         $_SESSION['flash'] = 'Error: ' . $e->getMessage();
@@ -264,22 +269,15 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 
 <div class="fc-manage container-fluid px-0">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-        <div>
-            <h1 class="fc-page-title mb-2">
-                <i class="fa-solid fa-calendar-week me-2" style="color: var(--fc-accent);"></i><?= htmlspecialchars($requestedWeek !== '' ? $requestedWeek : 'Course content by week') ?>
-            </h1>
-            <?php if ($classroom): ?>
-                <p class="fc-meta-line mb-0">
-                    <span class="fw-semibold text-body"><?= htmlspecialchars((string) $classroom['title']) ?></span>
-                    <span class="mx-2 text-muted">·</span>
-                    <i class="fa-solid fa-book me-1 opacity-75"></i><?= htmlspecialchars((string) $classroom['course_code']) ?> — <?= htmlspecialchars((string) $classroom['course_name']) ?>
-                    <span class="mx-2 text-muted">·</span>
-                    <?= htmlspecialchars((string) $classroom['semester']) ?> / <?= htmlspecialchars((string) $classroom['school_year']) ?>
-                </p>
-            <?php endif; ?>
-        </div>
-        <a href="faculty_classroom.php?id=<?= (int) $classroomId ?>" class="btn btn-outline-secondary btn-sm rounded-pill align-self-start"<?= app_tooltip_attr('Returns to the main classroom page with all weeks and posting tools.') ?>><i class="fa-solid fa-arrow-left me-1"></i>Back to class</a>
+<?php if ($classroom): ?>
+    <?php faculty_classroom_render_banner($classroom, [
+        'title' => $requestedWeek !== '' ? $requestedWeek : (string) ($classroom['title'] ?? 'Classroom'),
+        'meta_extra' => $requestedWeek !== '' ? (string) ($classroom['title'] ?? '') : '',
+        'form_id' => 'facultyWeekBanner',
+    ]); ?>
+<?php endif; ?>
+    <div class="d-flex flex-wrap justify-content-end align-items-start gap-2 mb-4">
+        <a href="faculty_classroom.php?id=<?= (int) $classroomId ?>" class="btn btn-outline-secondary btn-sm rounded-pill"<?= app_tooltip_attr('Returns to the main classroom page with all weeks and posting tools.') ?>><i class="fa-solid fa-arrow-left me-1"></i>Back to class</a>
     </div>
 
 <?php if ($flash): ?>

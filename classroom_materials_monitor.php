@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-require_role(['admin', 'dean', 'program_chair', 'gened']);
+require_role(['super_admin', 'admin', 'dean', 'program_chair', 'gened']);
 
 $role = (string) ($_SESSION['role'] ?? '');
 $classroomId = (int) ($_GET['id'] ?? 0);

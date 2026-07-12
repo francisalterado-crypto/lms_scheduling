@@ -603,6 +603,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exec_safe($pdo, 'ALTER TABLE online_classrooms ADD COLUMN syllabus_stored_name VARCHAR(255) NULL');
         exec_safe($pdo, 'ALTER TABLE online_classrooms ADD COLUMN syllabus_original_name VARCHAR(255) NULL');
         exec_safe($pdo, 'ALTER TABLE online_classrooms ADD COLUMN syllabus_mime VARCHAR(120) NULL');
+        exec_safe($pdo, 'ALTER TABLE online_classrooms ADD COLUMN banner_stored_name VARCHAR(255) NULL');
+        exec_safe($pdo, 'ALTER TABLE online_classrooms ADD COLUMN banner_original_name VARCHAR(255) NULL');
+        exec_safe($pdo, 'ALTER TABLE online_classrooms ADD COLUMN banner_mime VARCHAR(120) NULL');
 
         $superAdminId = (int) $pdo->query("SELECT id FROM users WHERE role='super_admin' ORDER BY id LIMIT 1")->fetchColumn();
         if ($superAdminId < 1) {

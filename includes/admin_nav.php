@@ -119,7 +119,7 @@ function app_render_topbar_avatar(string $role, ?string $profilePhotoUrl): void
  * @param bool $dismissOffcanvas when true, links close the mobile drawer (Bootstrap offcanvas)
  */
 /**
- * Super Admin: manage administrator accounts only (no college/schedule tools).
+ * Super Admin: account oversight, reports, and institution-wide weekly schedule view.
  *
  * @param string $currentPage basename of current script
  * @param int $messagingUnread unread message count (unused; kept for signature parity)
@@ -137,14 +137,21 @@ function render_super_admin_nav_sections(string $currentPage, int $messagingUnre
                 'label' => 'Dashboard',
                 'tooltip' => 'Returns to the Super Admin home with shortcuts to administrator account management.',
             ],
+            [
+                'file' => 'view_schedule.php',
+                'href' => 'view_schedule.php',
+                'icon' => 'fa-calendar-week',
+                'label' => 'Weekly schedule',
+                'tooltip' => 'Institution-wide week-at-a-glance schedule. Filter by college, program, term, faculty, or room.',
+            ],
         ],
         'Accounts' => [
             [
                 'file' => 'super_admin_accounts.php',
                 'href' => 'super_admin_accounts.php',
-                'icon' => 'fa-user-secret',
-                'label' => 'Super Administrator accounts',
-                'tooltip' => 'Create or update Super Administrator logins for institution-wide oversight and admin provisioning.',
+                'icon' => 'fa-users-gear',
+                'label' => 'Account monitor',
+                'tooltip' => 'Monitor all logins, reset passwords, and create accounts for any role (including Super Administrators).',
             ],
             [
                 'file' => 'super_admin_admins.php',

@@ -212,6 +212,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             $classroom['syllabus_original_name'] = null;
             $classroom['syllabus_mime'] = null;
             $_SESSION['flash'] = 'Syllabus removed. Upload a new syllabus before posting course content or announcements.';
+        } elseif ($action === 'upload_banner' || $action === 'delete_banner') {
+            $bannerFlash = faculty_classroom_process_banner_post($classroomId, $facultyId, $classroom);
+            if ($bannerFlash !== null) {
+                $_SESSION['flash'] = $bannerFlash;
+            }
         } elseif ($action === 'add_content') {
             $contentType = (string) ($_POST['content_type'] ?? 'material');
             $title = trim((string) ($_POST['title'] ?? ''));
@@ -522,27 +527,21 @@ $statusIsActive = $classroom && (string) $classroom['status'] === 'active';
 ?>
 
 <div class="fc-manage container-fluid px-0">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-        <div>
-            <h1 class="fc-page-title mb-2">
-                <i class="fa-solid fa-chalkboard-user me-2" style="color: var(--fc-accent);"></i><?= htmlspecialchars((string) ($classroom['title'] ?? 'Classroom')) ?>
-            </h1>
-            <?php if ($classroom): ?>
-                <p class="fc-meta-line mb-0">
-                    <i class="fa-solid fa-book me-1 opacity-75"></i><?= htmlspecialchars((string) $classroom['course_code']) ?> — <?= htmlspecialchars((string) $classroom['course_name']) ?>
-                    <span class="mx-2 text-muted">·</span>
-                    <i class="fa-regular fa-calendar me-1 opacity-75"></i><?= htmlspecialchars((string) $classroom['semester']) ?> / <?= htmlspecialchars((string) $classroom['school_year']) ?>
-                </p>
-            <?php endif; ?>
-        </div>
-        <div class="d-flex flex-wrap gap-2 justify-content-end">
-            <a href="faculty_classrooms.php" class="btn btn-outline-secondary btn-sm rounded-pill"<?= app_tooltip_attr('Returns to the list of all your online classes.') ?>><i class="fa-solid fa-arrow-left me-1"></i>All classrooms</a>
-            <a href="faculty_classroom_attendance.php?id=<?= (int) $classroomId ?>" class="btn btn-outline-secondary btn-sm rounded-pill"<?= app_tooltip_attr('Opens attendance records and auto-check for this class.') ?>><i class="fa-solid fa-user-check me-1"></i>Attendance</a>
-            <a href="faculty_classroom_assessments.php?id=<?= (int) $classroomId ?>" class="btn btn-outline-primary btn-sm rounded-pill"<?= app_tooltip_attr('Manage quizzes, assignments, and student submissions for this class.') ?>><i class="fa-solid fa-clipboard-list me-1"></i>Grading &amp; submissions</a>
-            <?php if ($meetHref !== ''): ?>
-                <a href="<?= htmlspecialchars($meetHref) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm rounded-pill"<?= app_tooltip_attr('Opens your Meet link in a new tab for live class sessions.') ?>><i class="fa-solid fa-video me-1"></i>Join Meet</a>
-            <?php endif; ?>
-        </div>
+<?php if ($classroom): ?>
+    <?php faculty_classroom_render_banner($classroom, ['form_id' => 'facultyClassroomBanner']); ?>
+<?php else: ?>
+    <h1 class="fc-page-title mb-4">
+        <i class="fa-solid fa-chalkboard-user me-2" style="color: var(--fc-accent);"></i>Classroom
+    </h1>
+<?php endif; ?>
+
+    <div class="d-flex flex-wrap justify-content-end align-items-start gap-2 mb-4">
+        <a href="faculty_classrooms.php" class="btn btn-outline-secondary btn-sm rounded-pill"<?= app_tooltip_attr('Returns to the list of all your online classes.') ?>><i class="fa-solid fa-arrow-left me-1"></i>All classrooms</a>
+        <a href="faculty_classroom_attendance.php?id=<?= (int) $classroomId ?>" class="btn btn-outline-secondary btn-sm rounded-pill"<?= app_tooltip_attr('Opens attendance records and auto-check for this class.') ?>><i class="fa-solid fa-user-check me-1"></i>Attendance</a>
+        <a href="faculty_classroom_assessments.php?id=<?= (int) $classroomId ?>" class="btn btn-outline-primary btn-sm rounded-pill"<?= app_tooltip_attr('Manage quizzes, assignments, and student submissions for this class.') ?>><i class="fa-solid fa-clipboard-list me-1"></i>Grading &amp; submissions</a>
+        <?php if ($meetHref !== ''): ?>
+            <a href="<?= htmlspecialchars($meetHref) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm rounded-pill"<?= app_tooltip_attr('Opens your Meet link in a new tab for live class sessions.') ?>><i class="fa-solid fa-video me-1"></i>Join Meet</a>
+        <?php endif; ?>
     </div>
 
 <?php if ($hasJoinCode && $classroom): ?>

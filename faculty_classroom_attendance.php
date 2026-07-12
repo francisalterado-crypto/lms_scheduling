@@ -236,6 +236,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             );
             $st->execute([$recordId, $classroomId, $facultyId]);
             $_SESSION['flash'] = $st->rowCount() > 0 ? 'Attendance record deleted.' : 'Attendance record not found.';
+        } elseif ($action === 'upload_banner' || $action === 'delete_banner') {
+            $bannerFlash = faculty_classroom_process_banner_post($classroomId, $facultyId, $classroom);
+            if ($bannerFlash !== null) {
+                $_SESSION['flash'] = $bannerFlash;
+            }
         }
     } catch (Throwable $e) {
         $_SESSION['flash'] = 'Error: ' . $e->getMessage();
@@ -315,18 +320,15 @@ if ($missingTables === [] && $classroom && $hasPresenceColumns) {
 $pageTitle = $printMode ? 'Attendance Printout' : 'Class Attendance';
 require_once __DIR__ . '/includes/header.php';
 ?>
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-    <div>
-        <h1 class="h3 mb-1"><i class="fa-solid fa-user-check me-2 text-primary"></i>Automatic Attendance</h1>
-        <?php if ($classroom): ?>
-            <div class="text-muted">
-                <?= htmlspecialchars((string) $classroom['course_code']) ?> - <?= htmlspecialchars((string) $classroom['course_name']) ?>
-                | <?= htmlspecialchars(str_replace(',', ', ', (string) $classroom['day_of_week'])) ?>
-                <?= htmlspecialchars($formatTime12h((string) ($classroom['start_time'] ?? ''))) ?> - <?= htmlspecialchars($formatTime12h((string) ($classroom['end_time'] ?? ''))) ?>
-                | <?= htmlspecialchars((string) $classroom['semester']) ?> / <?= htmlspecialchars((string) $classroom['school_year']) ?>
-            </div>
-        <?php endif; ?>
-    </div>
+<?php if ($classroom): ?>
+    <?php faculty_classroom_render_banner($classroom, [
+        'title' => (string) ($classroom['title'] ?? 'Classroom'),
+        'meta_extra' => 'Attendance',
+        'allow_upload' => !$printMode,
+        'form_id' => 'facultyAttendanceBanner',
+    ]); ?>
+<?php endif; ?>
+<div class="d-flex flex-wrap justify-content-end align-items-center gap-2 mb-4">
     <div class="d-flex gap-2 no-print">
         <a href="faculty_classroom.php?id=<?= (int) $classroomId ?>" class="btn btn-outline-secondary btn-sm"<?= app_tooltip_attr('Returns to the class workspace and content tools.') ?>>Back to Classroom</a>
         <a href="faculty_classroom_attendance.php?id=<?= (int) $classroomId ?>&attendance_date=<?= urlencode($attendanceDate) ?>&print=1" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm"<?= app_tooltip_attr('Opens a printer-friendly login/logout list for this date.') ?>>

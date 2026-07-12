@@ -449,6 +449,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             }
 
             $_SESSION['flash'] = 'Saved grade for student.';
+        } elseif ($action === 'upload_banner' || $action === 'delete_banner') {
+            $bannerFlash = faculty_classroom_process_banner_post($classroomId, $facultyId, $classroom);
+            if ($bannerFlash !== null) {
+                $_SESSION['flash'] = $bannerFlash;
+            }
         }
     } catch (Throwable $e) {
         if (db()->inTransaction()) {
@@ -1041,12 +1046,14 @@ require_once __DIR__ . '/includes/header.php';
 <div class="fac-assess-dashboard">
     <div class="dashboard-inner">
         <?php if ($classroom && $missingTables === []): ?>
+            <?php faculty_classroom_render_banner($classroom, [
+                'meta_extra' => 'Assessments & grading',
+                'form_id' => 'facultyAssessBanner',
+            ]); ?>
             <div class="top-nav">
                 <div class="course-info">
-                    <h1><i class="fa-solid fa-chalkboard-user" style="margin-right: 8px; color:#1e6f5c;"></i> Assessments &amp; grading</h1>
+                    <h1 class="h5 mb-0"><i class="fa-solid fa-clipboard-list" style="margin-right: 8px; color:#1e6f5c;"></i> Assessment tools</h1>
                     <div class="sub">
-                        <span><?= htmlspecialchars((string) $classroom['course_code']) ?> — <?= htmlspecialchars((string) $classroom['course_name']) ?></span>
-                        <span class="semester-badge"><i class="fa-regular fa-calendar-alt"></i> <?= htmlspecialchars((string) $classroom['semester']) ?> / <?= htmlspecialchars((string) $classroom['school_year']) ?></span>
                         <span><i class="fa-solid fa-list-check"></i> Written work, performance tasks, submissions &amp; grades</span>
                     </div>
                 </div>

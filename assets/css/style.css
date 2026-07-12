@@ -348,6 +348,14 @@ html[data-bs-theme="dark"] .course-color-legend-item {
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
 }
+.schedule-weekly--timed .schedule-cell--spanned {
+  vertical-align: top;
+}
+.schedule-weekly--timed .schedule-block--spanned {
+  min-height: calc(var(--block-span, 1) * 4.25rem - 0.5rem);
+  height: calc(100% - 0.25rem);
+  box-sizing: border-box;
+}
 
 /* Weekly schedule grid (view_schedule.php) — dark mode contrast */
 html[data-bs-theme="dark"] .schedule-weekly {
@@ -1835,5 +1843,129 @@ body.app-shell-sidebar--student .student-calendar-wrap .schedule-day-col {
   body.app-shell-sidebar--student .card[style*="max-width"] {
     max-width: 100% !important;
   }
+}
+
+/* Classroom header banner (Google Classroom–style) */
+.classroom-banner {
+  --classroom-banner-image: none;
+  position: relative;
+  min-height: 11.5rem;
+  border-radius: 0.85rem;
+  overflow: hidden;
+  color: #fff;
+  background:
+    linear-gradient(135deg, rgba(15, 76, 58, 0.92) 0%, rgba(31, 111, 67, 0.88) 45%, rgba(12, 74, 110, 0.9) 100%),
+    var(--classroom-banner-image);
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 0.35rem 1.25rem rgba(15, 23, 42, 0.12);
+}
+
+.classroom-banner.has-photo {
+  background-image:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.15) 0%, rgba(15, 23, 42, 0.72) 100%),
+    var(--classroom-banner-image);
+}
+
+.classroom-banner__overlay {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 11.5rem;
+  padding: 1.25rem 1.35rem 1.15rem;
+}
+
+.classroom-banner__title {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.4vw, 1.85rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.classroom-banner__meta {
+  margin-top: 0.4rem;
+  font-size: 0.95rem;
+  opacity: 0.95;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.classroom-banner__sep {
+  margin: 0 0.4rem;
+  opacity: 0.7;
+}
+
+.classroom-banner__live-note {
+  margin-top: 0.45rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fecaca;
+}
+
+.classroom-banner__actions {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+.classroom-banner__upload-btn {
+  font-weight: 600;
+  box-shadow: 0 0.15rem 0.5rem rgba(0, 0, 0, 0.2);
+}
+
+.classroom-banner--preview {
+  min-height: 8.5rem;
+  max-width: 42rem;
+}
+
+.classroom-banner--preview .classroom-banner__overlay {
+  min-height: 8.5rem;
+  padding: 1rem 1.1rem;
+}
+
+.classroom-banner--preview .classroom-banner__title {
+  font-size: 1.2rem;
+}
+
+.student-page-header--below-banner {
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 767.98px) {
+  .classroom-banner,
+  .classroom-banner__overlay {
+    min-height: 9.5rem;
+  }
+
+  .classroom-banner__overlay {
+    padding: 1rem;
+    padding-top: 3rem;
+  }
+
+  .classroom-banner__meta {
+    font-size: 0.85rem;
+  }
+
+  .classroom-banner__actions {
+    top: 0.65rem;
+    right: 0.65rem;
+    left: 0.65rem;
+    justify-content: flex-start;
+  }
+}
+
+html[data-bs-theme="dark"] .classroom-banner:not(.has-photo) {
+  background:
+    linear-gradient(135deg, rgba(20, 83, 45, 0.95) 0%, rgba(21, 94, 117, 0.92) 55%, rgba(30, 58, 95, 0.95) 100%),
+    var(--classroom-banner-image);
+  box-shadow: 0 0.35rem 1.25rem rgba(0, 0, 0, 0.35);
 }
 

@@ -636,6 +636,277 @@ function classroom_syllabus_href(int $classroomId): string
     return 'classroom_syllabus.php?id=' . $classroomId;
 }
 
+function classroom_banner_column_ready(): bool
+{
+    static $ready = null;
+    if ($ready === null) {
+        $ready = db_column_exists('online_classrooms', 'banner_stored_name');
+    }
+    return $ready;
+}
+
+function classroom_banner_dir(): string
+{
+    return BASE_PATH . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'classroom_banners';
+}
+
+function classroom_banner_path(string $storedName): string
+{
+    return classroom_banner_dir() . DIRECTORY_SEPARATOR . basename($storedName);
+}
+
+function classroom_banner_href(int $classroomId): string
+{
+    return 'classroom_banner.php?id=' . $classroomId;
+}
+
+function classroom_banner_url_for(array $classroom): ?string
+{
+    if (!classroom_banner_column_ready()) {
+        return null;
+    }
+    $stored = trim((string) ($classroom['banner_stored_name'] ?? ''));
+    if ($stored === '') {
+        return null;
+    }
+    $path = classroom_banner_path($stored);
+    if (!is_file($path)) {
+        return null;
+    }
+    $id = (int) ($classroom['id'] ?? 0);
+    return $id > 0 ? classroom_banner_href($id) : null;
+}
+
+/**
+ * @param array<string,mixed> $file
+ */
+function classroom_banner_store(int $classroomId, int $facultyId, array $file): string
+{
+    if ($classroomId < 1) {
+        throw new RuntimeException('Invalid classroom.');
+    }
+    // facultyId kept for call-site compatibility; ownership is enforced by the caller.
+    unset($facultyId);
+    return classroom_banner_store_for_classroom($classroomId, $file);
+}
+
+/**
+ * Store a classroom header background. Caller must verify the user may edit this class.
+ *
+ * @param array<string,mixed> $file
+ */
+function classroom_banner_store_for_classroom(int $classroomId, array $file): string
+{
+    if ($classroomId < 1) {
+        throw new RuntimeException('Invalid classroom.');
+    }
+    if (!classroom_banner_column_ready()) {
+        throw new RuntimeException('Classroom banners are not installed. Run upgrade_roles.php once.');
+    }
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        throw new RuntimeException('Please choose a background image to upload.');
+    }
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Background image upload failed.');
+    }
+
+    $size = (int) ($file['size'] ?? 0);
+    if ($size < 1) {
+        throw new RuntimeException('Background image file is empty.');
+    }
+    if ($size > 5 * 1024 * 1024) {
+        throw new RuntimeException('Background image is too large (max 5 MB).');
+    }
+
+    $tmp = (string) ($file['tmp_name'] ?? '');
+    if ($tmp === '' || !is_uploaded_file($tmp)) {
+        throw new RuntimeException('Invalid upload.');
+    }
+
+    $imageInfo = @getimagesize($tmp);
+    if ($imageInfo === false) {
+        throw new RuntimeException('File must be a JPEG, PNG, or WebP image.');
+    }
+
+    $mime = (string) ($imageInfo['mime'] ?? '');
+    $ext = match ($mime) {
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/webp' => 'webp',
+        default => '',
+    };
+    if ($ext === '') {
+        throw new RuntimeException('Only JPEG, PNG, and WebP images are allowed.');
+    }
+
+    $dir = classroom_banner_dir();
+    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+        throw new RuntimeException('Unable to create banner storage directory.');
+    }
+
+    $st = db()->prepare(
+        'SELECT banner_stored_name FROM online_classrooms WHERE id = ? LIMIT 1'
+    );
+    $st->execute([$classroomId]);
+    $oldStored = trim((string) ($st->fetchColumn() ?: ''));
+    if ($oldStored !== '') {
+        $oldPath = classroom_banner_path($oldStored);
+        if (is_file($oldPath)) {
+            @unlink($oldPath);
+        }
+    }
+
+    $original = trim((string) ($file['name'] ?? ''));
+    $original = str_replace(["\r", "\n"], '', basename($original));
+    if ($original === '') {
+        $original = 'banner.' . $ext;
+    }
+
+    $stored = 'class_' . $classroomId . '_' . bin2hex(random_bytes(12)) . '.' . $ext;
+    $dest = classroom_banner_path($stored);
+    if (!move_uploaded_file($tmp, $dest)) {
+        throw new RuntimeException('Failed to save background image.');
+    }
+
+    $upd = db()->prepare(
+        'UPDATE online_classrooms
+         SET banner_stored_name = ?, banner_original_name = ?, banner_mime = ?
+         WHERE id = ?'
+    );
+    $upd->execute([$stored, $original, $mime, $classroomId]);
+    if ($upd->rowCount() < 1) {
+        @unlink($dest);
+        throw new RuntimeException('Classroom not found.');
+    }
+
+    return $stored;
+}
+
+function classroom_banner_remove(int $classroomId, int $facultyId): void
+{
+    unset($facultyId);
+    classroom_banner_remove_for_classroom($classroomId);
+}
+
+function classroom_banner_remove_for_classroom(int $classroomId): void
+{
+    if ($classroomId < 1) {
+        throw new RuntimeException('Invalid classroom.');
+    }
+    if (!classroom_banner_column_ready()) {
+        throw new RuntimeException('Classroom banners are not installed.');
+    }
+
+    $st = db()->prepare(
+        'SELECT banner_stored_name FROM online_classrooms WHERE id = ? LIMIT 1'
+    );
+    $st->execute([$classroomId]);
+    $oldStored = trim((string) ($st->fetchColumn() ?: ''));
+    if ($oldStored !== '') {
+        $oldPath = classroom_banner_path($oldStored);
+        if (is_file($oldPath)) {
+            @unlink($oldPath);
+        }
+    }
+
+    db()->prepare(
+        'UPDATE online_classrooms
+         SET banner_stored_name = NULL, banner_original_name = NULL, banner_mime = NULL
+         WHERE id = ?'
+    )->execute([$classroomId]);
+}
+
+function classroom_banner_mime_for_stored(string $storedName): string
+{
+    return match (strtolower(pathinfo($storedName, PATHINFO_EXTENSION))) {
+        'jpg', 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        default => 'application/octet-stream',
+    };
+}
+
+/**
+ * Handle upload_banner / delete_banner POST for faculty manage-classroom pages.
+ * Returns a flash message when handled, or null when the action is not a banner action.
+ *
+ * @param array<string,mixed>|null $classroom Updated in place on success
+ */
+function faculty_classroom_process_banner_post(int $classroomId, int $facultyId, ?array &$classroom): ?string
+{
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || $classroomId < 1 || $facultyId < 1 || !$classroom) {
+        return null;
+    }
+
+    $action = (string) ($_POST['action'] ?? '');
+    if ($action !== 'upload_banner' && $action !== 'delete_banner') {
+        return null;
+    }
+
+    if (!classroom_banner_column_ready()) {
+        throw new RuntimeException('Run upgrade_roles.php to enable classroom header backgrounds.');
+    }
+
+    if ($action === 'upload_banner') {
+        if (!isset($_FILES['banner']) || !is_array($_FILES['banner'])) {
+            throw new RuntimeException('Please choose a background image to upload.');
+        }
+        $f = $_FILES['banner'];
+        $file = [
+            'name' => (string) ($f['name'] ?? ''),
+            'type' => (string) ($f['type'] ?? ''),
+            'tmp_name' => (string) ($f['tmp_name'] ?? ''),
+            'error' => (int) ($f['error'] ?? UPLOAD_ERR_NO_FILE),
+            'size' => (int) ($f['size'] ?? 0),
+        ];
+        $stored = classroom_banner_store($classroomId, $facultyId, $file);
+        $classroom['banner_stored_name'] = $stored;
+        $classroom['banner_original_name'] = (string) ($file['name'] ?? 'banner');
+        return 'Classroom header background updated. Students will see it on their class page.';
+    }
+
+    classroom_banner_remove($classroomId, $facultyId);
+    $classroom['banner_stored_name'] = null;
+    $classroom['banner_original_name'] = null;
+    $classroom['banner_mime'] = null;
+    return 'Classroom header background removed.';
+}
+
+/**
+ * Render the Google Classroom–style header used on all Manage Classroom pages.
+ *
+ * Options:
+ * - title: override banner title (default: classroom title)
+ * - meta_extra: optional plain-text suffix after course/semester meta
+ * - allow_upload: show upload/remove controls (default true)
+ * - form_id: unique form/input id prefix (default facultyBanner)
+ *
+ * @param array<string,mixed> $classroom
+ * @param array<string,mixed> $options
+ */
+function faculty_classroom_render_banner(array $classroom, array $options = []): void
+{
+    $classroomId = (int) ($classroom['id'] ?? 0);
+    $bannerUrl = classroom_banner_url_for($classroom);
+    $hasBannerCols = classroom_banner_column_ready();
+    $allowUpload = (bool) ($options['allow_upload'] ?? true);
+    $title = trim((string) ($options['title'] ?? ''));
+    if ($title === '') {
+        $title = (string) ($classroom['title'] ?? 'Classroom');
+    }
+    $metaExtra = trim((string) ($options['meta_extra'] ?? ''));
+    $formId = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) ($options['form_id'] ?? 'facultyBanner')) ?: 'facultyBanner';
+    $fileInputId = $formId . 'File';
+    $uploadFormId = $formId . 'UploadForm';
+
+    $courseCode = trim((string) ($classroom['course_code'] ?? ''));
+    $courseName = trim((string) ($classroom['course_name'] ?? ''));
+    $semester = trim((string) ($classroom['semester'] ?? ''));
+    $schoolYear = trim((string) ($classroom['school_year'] ?? ''));
+
+    require __DIR__ . '/faculty_classroom_banner.php';
+}
+
 function classroom_content_attachment_download_name(string $originalName, string $storedName = ''): string
 {
     $name = trim($originalName);

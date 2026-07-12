@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-require_role(['admin', 'dean', 'program_chair', 'gened', 'faculty']);
+require_role(['super_admin', 'admin', 'dean', 'program_chair', 'gened', 'faculty']);
 $role = (string) ($_SESSION['role'] ?? '');
 $collegeId = current_college_id();
 $programScope = is_program_chair() ? program_scope_or_fail() : null;
@@ -253,6 +253,74 @@ $scheduleStartsInHour = static function (array $scheduleRow, int $hour): bool {
     return $st >= ($hour * 60) && $st < (($hour + 1) * 60);
 };
 
+/**
+ * Merge a straight multi-hour class into one tall cell (rowspan) when the next
+ * hour(s) are only a continuation of the same block (no other class begins there).
+ * @var array<string, array<int, array{startHour:int, span:int}>> $rowspanPlans
+ * @var array<string, array<int, int>> $coveredByRowspan day => hour => startHour that owns the rowspan
+ */
+$rowspanPlans = [];
+$coveredByRowspan = [];
+foreach (schedule_days_list() as $dayName) {
+    $dayList = $byDay[$dayName] ?? [];
+    foreach ($dayList as $schedRow) {
+        $sid = (int) ($schedRow['id'] ?? 0);
+        if ($sid < 1) {
+            continue;
+        }
+        $overlapHours = [];
+        foreach ($timeSlots as $hour) {
+            if ($scheduleOverlapsHour($schedRow, $hour)) {
+                $overlapHours[] = $hour;
+            }
+        }
+        if (count($overlapHours) < 2) {
+            continue;
+        }
+        $startHour = $overlapHours[0];
+        $span = 1;
+        for ($i = 1, $n = count($overlapHours); $i < $n; $i++) {
+            if ($overlapHours[$i] !== $overlapHours[$i - 1] + 1) {
+                break;
+            }
+            $nextHour = $overlapHours[$i];
+            $hourClear = true;
+            foreach ($dayList as $other) {
+                if (!$scheduleOverlapsHour($other, $nextHour)) {
+                    continue;
+                }
+                // Another class appears in this next hour but not at the start → stop merging here.
+                if (!$scheduleOverlapsHour($other, $startHour)) {
+                    $hourClear = false;
+                    break;
+                }
+            }
+            if (!$hourClear) {
+                break;
+            }
+            $span++;
+        }
+        if ($span < 2) {
+            continue;
+        }
+        // Only block if a different start-hour already claimed a continuation slot.
+        $blocked = false;
+        for ($h = $startHour + 1; $h < $startHour + $span; $h++) {
+            if (isset($coveredByRowspan[$dayName][$h]) && $coveredByRowspan[$dayName][$h] !== $startHour) {
+                $blocked = true;
+                break;
+            }
+        }
+        if ($blocked) {
+            continue;
+        }
+        $rowspanPlans[$dayName][$sid] = ['startHour' => $startHour, 'span' => $span];
+        for ($h = $startHour + 1; $h < $startHour + $span; $h++) {
+            $coveredByRowspan[$dayName][$h] = $startHour;
+        }
+    }
+}
+
 $depts = ($role === 'dean' || $role === 'program_chair') && $collegeId
     ? (function () use ($collegeId) {
         $st = db()->prepare('SELECT DISTINCT department FROM faculty WHERE department != "" AND college_id=? ORDER BY department');
@@ -475,7 +543,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </form>
 
-<p class="text-muted small mb-2 no-print">Times on the left mark each hour. Empty cells are vacant; occupied cells show classes that fall in that hour.</p>
+<p class="text-muted small mb-2 no-print">Times on the left mark each hour. Empty cells are vacant. A straight class (for example 8:00 AM–10:00 AM) shows as one tall block across those hours when the next slot is only a continuation.</p>
 <div class="table-responsive">
     <table class="table table-bordered bg-body schedule-weekly schedule-weekly--timed">
         <thead class="table-primary">
@@ -499,6 +567,10 @@ require_once __DIR__ . '/includes/header.php';
                     </th>
                     <?php foreach (schedule_days_list() as $day): ?>
                         <?php
+                        // Cell already occupied by a multi-hour rowspan from an earlier hour.
+                        if (isset($coveredByRowspan[$day][$hour])) {
+                            continue;
+                        }
                         $slotClasses = [];
                         foreach ($byDay[$day] as $s) {
                             if ($scheduleOverlapsHour($s, $hour)) {
@@ -506,14 +578,32 @@ require_once __DIR__ . '/includes/header.php';
                             }
                         }
                         $isVacant = $slotClasses === [];
+                        $cellRowspan = 1;
+                        foreach ($slotClasses as $s) {
+                            $sid = (int) ($s['id'] ?? 0);
+                            if ($sid > 0 && isset($rowspanPlans[$day][$sid]) && $rowspanPlans[$day][$sid]['startHour'] === $hour) {
+                                $cellRowspan = max($cellRowspan, (int) $rowspanPlans[$day][$sid]['span']);
+                            }
+                        }
                         ?>
-                        <td class="align-top schedule-cell p-2<?= $isVacant ? ' schedule-cell--vacant' : '' ?>">
+                        <td class="align-top schedule-cell p-2<?= $isVacant ? ' schedule-cell--vacant' : '' ?><?= $cellRowspan > 1 ? ' schedule-cell--spanned' : '' ?>"<?= $cellRowspan > 1 ? ' rowspan="' . $cellRowspan . '"' : '' ?>>
                             <?php if ($isVacant): ?>
                                 <span class="schedule-vacant-label">Vacant</span>
                             <?php else: ?>
                                 <?php foreach ($slotClasses as $s): ?>
                                     <?php
                                     $startsHere = $scheduleStartsInHour($s, $hour);
+                                    $sid = (int) ($s['id'] ?? 0);
+                                    $blockSpan = ($sid > 0 && isset($rowspanPlans[$day][$sid]) && $rowspanPlans[$day][$sid]['startHour'] === $hour)
+                                        ? (int) $rowspanPlans[$day][$sid]['span']
+                                        : 1;
+                                    // Skip "(continues)" only inside the merged rowspan range.
+                                    if (!$startsHere && $sid > 0 && isset($rowspanPlans[$day][$sid])) {
+                                        $plan = $rowspanPlans[$day][$sid];
+                                        if ($hour >= $plan['startHour'] && $hour < $plan['startHour'] + $plan['span']) {
+                                            continue;
+                                        }
+                                    }
                                     $blockFacultyId = (int) ($s['faculty_id'] ?? 0);
                                     $blockCourseId = (int) ($s['course_id'] ?? 0);
                                     $c = schedule_block_color_class(
@@ -543,7 +633,7 @@ require_once __DIR__ . '/includes/header.php';
                                             <?php endif; ?>
                                         </div>
                                     <?php else: ?>
-                                        <div class="schedule-block <?= $c ?>">
+                                        <div class="schedule-block <?= $c ?><?= $blockSpan > 1 ? ' schedule-block--spanned' : '' ?>"<?= $blockSpan > 1 ? ' style="--block-span:' . $blockSpan . '"' : '' ?>>
                                             <div class="fw-semibold"><?= htmlspecialchars($formatTime12h((string) $s['start_time'])) ?> – <?= htmlspecialchars($formatTime12h((string) $s['end_time'])) ?></div>
                                             <div><?= htmlspecialchars($s['course_code']) ?><?php if ($isGeCourse): ?> <span class="badge bg-info text-dark" style="font-size:0.65rem">GE</span><?php endif; ?></div>
                                             <?php if ($showHostCollege): ?>
