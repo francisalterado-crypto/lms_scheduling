@@ -862,6 +862,7 @@ require_once __DIR__ . '/includes/header.php';
         <div class="sa-action-bar">
             <button type="button" class="sa-btn sa-btn-dark" id="darkModeToggleBtn">Dark</button>
             <button type="button" class="sa-btn sa-btn-super" id="superAdminInfoBtn">Super Administrator - SUPER_ADMIN</button>
+            <a href="super_admin_programs.php" class="sa-btn"<?= app_tooltip_attr('Opens the university-wide program offers catalog to view, edit, or delete any college program.') ?>>Program offers</a>
             <span class="sa-role-badge">Elevated session - Full system audit rights</span>
         </div>
 

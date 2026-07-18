@@ -3,6 +3,11 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/config/config.php';
 
+if (!defined('APP_TIMEZONE')) {
+    define('APP_TIMEZONE', 'Asia/Manila');
+}
+date_default_timezone_set(APP_TIMEZONE);
+
 function db(): PDO
 {
     static $pdo = null;
@@ -19,6 +24,9 @@ function db(): PDO
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             ]);
+            // Keep MySQL NOW()/TIMESTAMP in Philippine Standard Time regardless of host TZ.
+            $offset = (new DateTime('now', new DateTimeZone(APP_TIMEZONE)))->format('P');
+            $pdo->exec('SET time_zone = ' . $pdo->quote($offset));
         } catch (PDOException $e) {
             $code = (string) $e->getCode();
             $msg = $e->getMessage();

@@ -4,6 +4,10 @@
  */
 declare(strict_types=1);
 
+/** Application timezone (Philippine Standard Time). Keep this on production so times match PH. */
+define('APP_TIMEZONE', 'Asia/Manila');
+date_default_timezone_set(APP_TIMEZONE);
+
 define('DB_HOST', '127.0.0.1');
 /** MySQL port (default 3306). Use XAMPP Control Panel → MySQL → Config to confirm. */
 define('DB_PORT', 3306);

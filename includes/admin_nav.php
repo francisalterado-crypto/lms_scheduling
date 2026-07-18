@@ -161,6 +161,15 @@ function render_super_admin_nav_sections(string $currentPage, int $messagingUnre
                 'tooltip' => 'Create or update System Administrator accounts (scheduling admins). Each account can show a title in the activity log.',
             ],
         ],
+        'Academic' => [
+            [
+                'file' => 'super_admin_programs.php',
+                'href' => 'super_admin_programs.php',
+                'icon' => 'fa-graduation-cap',
+                'label' => 'Program offers',
+                'tooltip' => 'View, edit, or delete all program offers across every college in the university.',
+            ],
+        ],
         'Reports' => [
             [
                 'file' => 'super_admin_faculty_inventory.php',
