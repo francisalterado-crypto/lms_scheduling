@@ -36,6 +36,14 @@ function auth_touch_user_presence(int $userId): void
         return;
     }
 
+    // Throttle DB writes: at most once per 2 minutes per session.
+    $now = time();
+    $last = (int) ($_SESSION['last_seen_touch_at'] ?? 0);
+    if ($last > 0 && ($now - $last) < 120) {
+        return;
+    }
+    $_SESSION['last_seen_touch_at'] = $now;
+
     try {
         db()->prepare('UPDATE users SET last_seen_at = NOW() WHERE id = ?')->execute([$userId]);
     } catch (Throwable $e) {
@@ -291,7 +299,10 @@ function program_chair_sync_session_programs(?int $userId = null): array
 
 function program_chair_switch_active_program(string $programName): void
 {
-    require_role(['program_chair']);
+    // Avoid require_role() here: it re-enters require_login() while the POST switch is handled.
+    if (!is_program_chair()) {
+        throw new RuntimeException('Only program chairs can switch active program.');
+    }
     $uid = (int) ($_SESSION['user_id'] ?? 0);
     $programName = trim($programName);
     $programs = program_chair_assigned_programs($uid);

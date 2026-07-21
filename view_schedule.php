@@ -635,7 +635,7 @@ require_once __DIR__ . '/includes/header.php';
                                     <?php else: ?>
                                         <div class="schedule-block <?= $c ?><?= $blockSpan > 1 ? ' schedule-block--spanned' : '' ?>"<?= $blockSpan > 1 ? ' style="--block-span:' . $blockSpan . '"' : '' ?>>
                                             <div class="fw-semibold"><?= htmlspecialchars($formatTime12h((string) $s['start_time'])) ?> – <?= htmlspecialchars($formatTime12h((string) $s['end_time'])) ?></div>
-                                            <div><?= htmlspecialchars($s['course_code']) ?><?php if ($isGeCourse): ?> <span class="badge bg-info text-dark" style="font-size:0.65rem">GE</span><?php endif; ?></div>
+                                            <div><?= htmlspecialchars($s['course_code']) ?><?php if ($isGeCourse): ?> <span class="badge bg-info text-dark" style="font-size:0.65rem">GE</span><?php endif; ?><?php if (!empty($s['is_makeup'])): ?> <span class="badge bg-warning text-dark" style="font-size:0.65rem">Makeup</span><?php endif; ?></div>
                                             <?php if ($showHostCollege): ?>
                                                 <div class="small text-muted"><i class="fa-solid fa-building-columns me-1"></i><?= htmlspecialchars($hostCollegeCode) ?></div>
                                             <?php endif; ?>

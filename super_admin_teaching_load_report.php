@@ -54,7 +54,7 @@ $sql = "SELECT s.id, s.faculty_id, s.course_id, s.college_id AS sched_college_id
         FROM schedules s
         INNER JOIN faculty f ON f.id = s.faculty_id
         INNER JOIN courses c ON c.id = s.course_id
-        INNER JOIN rooms r ON r.id = s.room_id
+        LEFT JOIN rooms r ON r.id = s.room_id
         WHERE 1=1";
 $params = [];
 if ($adminCollegeId > 0) {
@@ -75,34 +75,48 @@ $stmt = db()->prepare($sql);
 $stmt->execute($params);
 $schedRows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-$sessionHoursBetween = static function (string $start, string $end): float {
-    $rawS = substr($start, 0, 8);
-    $rawE = substr($end, 0, 8);
-    $ds = DateTime::createFromFormat('H:i:s', $rawS) ?: DateTime::createFromFormat('H:i', substr($start, 0, 5));
-    $de = DateTime::createFromFormat('H:i:s', $rawE) ?: DateTime::createFromFormat('H:i', substr($end, 0, 5));
-    if (!$ds || !$de) {
-        return 0.0;
+/** Normalize MySQL TIME / DATETIME-ish values to HH:MM:SS for minute math (host TZ-safe). */
+$normalizeScheduleTime = static function (string $value): string {
+    $value = trim($value);
+    if ($value === '') {
+        return '';
     }
-    $secs = $de->getTimestamp() - $ds->getTimestamp();
-    if ($secs <= 0) {
-        return 0.0;
+    // "YYYY-mm-dd HH:MM:SS" or "HH:MM:SS[.fraction]" / "HH:MM"
+    if (preg_match('/(\d{1,2}):(\d{2})(?::(\d{2}))?/', $value, $m)) {
+        return sprintf('%02d:%02d:%02d', (int) $m[1], (int) $m[2], (int) ($m[3] ?? 0));
     }
-    return round($secs / 3600, 2);
+    return $value;
 };
 
-$weeklyContactFromGroup = static function (array $group) use ($sessionHoursBetween): array {
+/** Contact hours between start/end — uses minutes, not DateTime (avoids server TZ / format quirks). */
+$sessionHoursBetween = static function (string $start, string $end) use ($normalizeScheduleTime): float {
+    $rawS = $normalizeScheduleTime($start);
+    $rawE = $normalizeScheduleTime($end);
+    if ($rawS === '' || $rawE === '') {
+        return 0.0;
+    }
+    $mins = time_to_minutes($rawE) - time_to_minutes($rawS);
+    if ($mins <= 0) {
+        return 0.0;
+    }
+    return round($mins / 60, 2);
+};
+
+$weeklyContactFromGroup = static function (array $group) use ($sessionHoursBetween, $normalizeScheduleTime): array {
     $lec = 0.0;
     $lab = 0.0;
     foreach ($group as $r) {
-        $h = $sessionHoursBetween((string) ($r['start_time'] ?? ''), (string) ($r['end_time'] ?? ''));
+        $start = $normalizeScheduleTime((string) ($r['start_time'] ?? ''));
+        $end = $normalizeScheduleTime((string) ($r['end_time'] ?? ''));
+        $h = $sessionHoursBetween($start, $end);
         $dayCount = count(parse_day_set((string) ($r['day_of_week'] ?? '')));
         if ($dayCount < 1) {
             $dayCount = 1;
         }
         $weeklyH = $h * $dayCount;
         if (schedule_session_is_laboratory(
-            (string) ($r['start_time'] ?? ''),
-            (string) ($r['end_time'] ?? ''),
+            $start,
+            $end,
             (string) ($r['room_type'] ?? ''),
             isset($r['session_kind']) ? (string) $r['session_kind'] : null,
             array_key_exists('is_laboratory', $r) ? ((int) ($r['is_laboratory'] ?? 0) === 1) : null
@@ -120,16 +134,23 @@ $weeklyContactFromGroup = static function (array $group) use ($sessionHoursBetwe
 };
 
 $courseOfferingUnits = static function (array $r) use ($hasLectureUnits, $hasLaboratoryUnits): float {
+    $catalog = (float) ($r['course_units_total'] ?? 0);
     if ($hasLectureUnits && $hasLaboratoryUnits) {
-        return (float) ($r['lecture_units'] ?? 0) + (float) ($r['laboratory_units'] ?? 0);
+        $sum = (float) ($r['lecture_units'] ?? 0) + (float) ($r['laboratory_units'] ?? 0);
+        // Server DBs may have lec/lab columns present but still empty after transfer.
+        return $sum > 0 ? $sum : $catalog;
     }
 
-    return (float) ($r['course_units_total'] ?? 0);
+    return $catalog;
 };
 
 $courseOfferingLecUnits = static function (array $r) use ($hasLectureUnits, $hasLaboratoryUnits, $courseOfferingUnits): float {
     if ($hasLectureUnits && $hasLaboratoryUnits) {
-        return (float) ($r['lecture_units'] ?? 0);
+        $lec = (float) ($r['lecture_units'] ?? 0);
+        $lab = (float) ($r['laboratory_units'] ?? 0);
+        if ($lec > 0 || $lab > 0) {
+            return $lec;
+        }
     }
 
     return $courseOfferingUnits($r);
@@ -161,17 +182,17 @@ foreach ($schedRows as $r) {
 foreach ($scheduleListGroups as &$g) {
     usort(
         $g,
-        static function (array $a, array $b): int {
+        static function (array $a, array $b) use ($normalizeScheduleTime): int {
             $aLab = schedule_session_is_laboratory(
-                (string) ($a['start_time'] ?? ''),
-                (string) ($a['end_time'] ?? ''),
+                $normalizeScheduleTime((string) ($a['start_time'] ?? '')),
+                $normalizeScheduleTime((string) ($a['end_time'] ?? '')),
                 (string) ($a['room_type'] ?? ''),
                 isset($a['session_kind']) ? (string) $a['session_kind'] : null,
                 array_key_exists('is_laboratory', $a) ? ((int) ($a['is_laboratory'] ?? 0) === 1) : null
             );
             $bLab = schedule_session_is_laboratory(
-                (string) ($b['start_time'] ?? ''),
-                (string) ($b['end_time'] ?? ''),
+                $normalizeScheduleTime((string) ($b['start_time'] ?? '')),
+                $normalizeScheduleTime((string) ($b['end_time'] ?? '')),
                 (string) ($b['room_type'] ?? ''),
                 isset($b['session_kind']) ? (string) $b['session_kind'] : null,
                 array_key_exists('is_laboratory', $b) ? ((int) ($b['is_laboratory'] ?? 0) === 1) : null
@@ -806,7 +827,8 @@ require_once __DIR__ . '/includes/header.php';
                                         $statusClass = $hours < $underMax ? 'status-under' : ($hours > $overMin ? 'status-over' : 'status-normal');
                                         $statusLabel = $hours < $underMax ? 'Under load' : ($hours > $overMin ? 'Over load' : 'Normal load');
                                         $employmentStatus = trim((string) ($row['employment_status'] ?? ''));
-                                        $weightedHours = in_array($employmentStatus, ['Permanent', 'Temporary'], true)
+                                        $employmentKey = strtolower($employmentStatus);
+                                        $weightedHours = in_array($employmentKey, ['permanent', 'temporary'], true)
                                             ? number_format($weightedTeachingHours($lecHours, $labHours), 2)
                                             : '—';
                                     ?>

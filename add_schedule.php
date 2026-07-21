@@ -590,16 +590,7 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 <h1 class="h3 mb-4"><i class="fa-solid fa-plus me-2 text-primary"></i>Add schedule</h1>
 
-<?php if ($errors): ?>
-    <div class="alert alert-warning">
-        <strong><i class="fa-solid fa-triangle-exclamation me-1"></i>Please fix the following:</strong>
-        <ul class="mb-0 mt-2">
-            <?php foreach ($errors as $e): ?>
-                <li><?= htmlspecialchars($e) ?></li>
-            <?php endforeach; ?>
-        </ul>
-    </div>
-<?php endif; ?>
+<?php render_schedule_errors_warning_popup($errors); ?>
 
 <div class="card shadow-sm">
     <div class="card-body">

@@ -317,6 +317,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'label' => 'My classrooms',
                     'tooltip' => 'Create and manage online classrooms for your own teaching load.',
                 ],
+                [
+                    'file' => 'faculty_student_list.php',
+                    'href' => 'faculty_student_list.php',
+                    'icon' => 'fa-users',
+                    'label' => 'Student list',
+                    'tooltip' => 'Lists your courses and registered students with present and absent attendance totals.',
+                ],
             ],
             'Scheduling' => [
                 [
@@ -363,6 +370,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'icon' => 'fa-chalkboard',
                     'label' => 'My classrooms',
                     'tooltip' => 'Create and manage online classrooms for your own teaching load.',
+                ],
+                [
+                    'file' => 'faculty_student_list.php',
+                    'href' => 'faculty_student_list.php',
+                    'icon' => 'fa-users',
+                    'label' => 'Student list',
+                    'tooltip' => 'Lists your courses and registered students with present and absent attendance totals.',
                 ],
                 [
                     'file' => 'faculty_edutools.php', 'href' => 'faculty_edutools.php', 'icon' => 'fa-wand-magic-sparkles', 'label' => 'EduTools',
@@ -413,6 +427,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'tooltip' => 'Create and manage online classrooms for your own teaching load.',
                 ],
                 [
+                    'file' => 'faculty_student_list.php',
+                    'href' => 'faculty_student_list.php',
+                    'icon' => 'fa-users',
+                    'label' => 'Student list',
+                    'tooltip' => 'Lists your courses and registered students with present and absent attendance totals.',
+                ],
+                [
                     'file' => 'faculty_edutools.php', 'href' => 'faculty_edutools.php', 'icon' => 'fa-wand-magic-sparkles', 'label' => 'EduTools',
                     'tooltip' => 'Education sources: writing tools (Turnitin, Grammarly, QuillBot, AI detector), AI & research (ChatGPT, Perplexity, NotebookLM, Wolfram), notebooks, Khan Academy, and Notion—plus a built-in notebook.',
                 ],
@@ -439,6 +460,10 @@ function role_nav_sections(string $role, int $messagingUnread): array
                 [
                     'file' => 'faculty_classrooms.php', 'href' => 'faculty_classrooms.php', 'icon' => 'fa-chalkboard', 'label' => 'My classrooms',
                     'tooltip' => 'Opens your online class spaces for assigned courses. Use this to post content, run Meet, and track students.',
+                ],
+                [
+                    'file' => 'faculty_student_list.php', 'href' => 'faculty_student_list.php', 'icon' => 'fa-users', 'label' => 'Student list',
+                    'tooltip' => 'Lists your courses and registered students with present and absent attendance totals.',
                 ],
                 [
                     'file' => 'faculty_schedule.php', 'href' => 'faculty_schedule.php', 'icon' => 'fa-calendar-check', 'label' => 'My schedule',

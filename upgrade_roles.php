@@ -156,6 +156,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exec_safe($pdo, "ALTER TABLE schedules ADD COLUMN year_level VARCHAR(20) NOT NULL DEFAULT ''");
         exec_safe($pdo, "ALTER TABLE schedules ADD COLUMN section VARCHAR(20) NOT NULL DEFAULT ''");
         exec_safe($pdo, "ALTER TABLE schedules ADD COLUMN session_kind ENUM('lecture','laboratory') NULL DEFAULT NULL");
+        exec_safe($pdo, 'ALTER TABLE schedules ADD COLUMN is_makeup TINYINT(1) NOT NULL DEFAULT 0');
+        exec_safe($pdo, 'ALTER TABLE schedules ADD COLUMN makeup_for_schedule_id INT NULL');
+        exec_safe(
+            $pdo,
+            "ALTER TABLE schedule_change_requests
+             ADD COLUMN request_type ENUM('change','makeup') NOT NULL DEFAULT 'change'"
+        );
+        exec_safe(
+            $pdo,
+            "ALTER TABLE schedule_change_requests
+             ADD COLUMN proposed_day_of_week SET('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday') NULL"
+        );
+        exec_safe($pdo, 'ALTER TABLE schedule_change_requests ADD COLUMN proposed_start_time TIME NULL');
+        exec_safe($pdo, 'ALTER TABLE schedule_change_requests ADD COLUMN proposed_end_time TIME NULL');
+        exec_safe($pdo, 'ALTER TABLE schedule_change_requests ADD COLUMN proposed_room_id INT NULL');
         exec_safe(
             $pdo,
             "UPDATE schedules s

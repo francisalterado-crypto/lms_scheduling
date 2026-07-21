@@ -15,7 +15,6 @@ $studentScheduleClasses = [];
 $studentScheduleByDay = [];
 $hasStudentLiveAt = db_column_exists('schedules', 'online_live_at');
 $isAdmin = $role === 'admin';
-$autoRefreshSeconds = 30;
 $stat1Label = 'Active faculty';
 $stat2Label = 'Courses';
 $stat3Label = 'Schedules';
@@ -497,10 +496,6 @@ require_once __DIR__ . '/includes/header.php';
         color: rgba(255,255,255,0.82);
     }
 
-    .dashboard-refresh .btn {
-        border-radius: 999px;
-    }
-
     .dash-stat {
         border: 0;
         border-radius: 22px;
@@ -871,6 +866,25 @@ require_once __DIR__ . '/includes/header.php';
             <div class="sa-footer-note">Super Admin is only for Administrator accounts (system admins). Not a student account.</div>
             <div class="sa-footer-note">No conflict queue for Super Admin. Use Administrator accounts for day-to-day scheduling tools.</div>
         </div>
+
+        <div class="modal fade" id="superAdminWarningModal" tabindex="-1" aria-labelledby="superAdminWarningModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-warning">
+                    <div class="modal-header bg-warning-subtle">
+                        <h5 class="modal-title text-warning-emphasis" id="superAdminWarningModalLabel">
+                            <i class="fa-solid fa-triangle-exclamation me-2"></i>Warning — SUPER_ADMIN
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-0">SUPER_ADMIN role: full system audit and account provisioning. Use standard admin login for daily scheduling.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-warning" data-bs-dismiss="modal">Understood</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 <?php else: ?>
     <div class="card dashboard-hero text-white mb-4">
@@ -894,10 +908,6 @@ require_once __DIR__ . '/includes/header.php';
                     </div>
                     <div class="dashboard-refresh mt-3 text-lg-end">
                         <div class="small no-print"><i class="fa-regular fa-calendar me-1"></i><?= htmlspecialchars(date('l, F j, Y')) ?></div>
-                        <div class="small no-print mt-1">
-                            <span id="autoRefreshLabel">Auto refresh every <?= $autoRefreshSeconds ?>s</span>
-                            <button type="button" class="btn btn-sm btn-outline-light ms-2 py-0 px-3" id="toggleAutoRefresh"<?= app_tooltip_attr('Pauses or resumes automatic dashboard refresh. Use this to stop the page reloading while you read numbers or links.') ?>>Pause</button>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -1221,35 +1231,6 @@ require_once __DIR__ . '/includes/header.php';
 
 <script>
     (function () {
-        const seconds = <?= (int) $autoRefreshSeconds ?>;
-        const toggleBtn = document.getElementById('toggleAutoRefresh');
-        const label = document.getElementById('autoRefreshLabel');
-        const key = 'dashboardAutoRefreshEnabled';
-        let enabled = localStorage.getItem(key);
-        enabled = enabled === null ? true : enabled === '1';
-
-        function render() {
-            if (!toggleBtn || !label) return;
-            label.textContent = enabled ? `Auto refresh every ${seconds}s` : 'Auto refresh paused';
-            toggleBtn.textContent = enabled ? 'Pause' : 'Resume';
-        }
-
-        if (toggleBtn) {
-            toggleBtn.addEventListener('click', function () {
-                enabled = !enabled;
-                localStorage.setItem(key, enabled ? '1' : '0');
-                render();
-            });
-        }
-
-        render();
-        setInterval(function () {
-            if (!enabled || document.hidden) return;
-            window.location.reload();
-        }, seconds * 1000);
-    })();
-
-    (function () {
         const darkToggle = document.getElementById('darkModeToggleBtn');
         const superAdminBtn = document.getElementById('superAdminInfoBtn');
         const container = document.getElementById('saContainer');
@@ -1283,20 +1264,12 @@ require_once __DIR__ . '/includes/header.php';
         });
 
         superAdminBtn.addEventListener('click', function () {
-            const existingToast = document.querySelector('.super-toast-msg');
-            if (existingToast) existingToast.remove();
-            const toast = document.createElement('div');
-            toast.className = 'super-toast-msg';
-            toast.style.position = 'fixed';
-            toast.style.bottom = '28px';
-            toast.style.left = '50%';
-            toast.style.transform = 'translateX(-50%)';
-            toast.style.zIndex = '9999';
-            toast.innerHTML = '<div style="background:#1f3e4b;color:#f9e0b0;padding:12px 20px;border-radius:60px;font-weight:500;box-shadow:0 20px 32px -10px rgba(0,0,0,0.2);">SUPER_ADMIN role: full system audit and account provisioning. Use standard admin login for daily scheduling.</div>';
-            document.body.appendChild(toast);
-            setTimeout(function () {
-                if (toast && toast.remove) toast.remove();
-            }, 5000);
+            const modalEl = document.getElementById('superAdminWarningModal');
+            if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+                window.alert('Warning — SUPER_ADMIN\n\nSUPER_ADMIN role: full system audit and account provisioning. Use standard admin login for daily scheduling.');
+                return;
+            }
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
         });
     })();
 </script>

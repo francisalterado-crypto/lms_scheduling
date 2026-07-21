@@ -35,6 +35,14 @@ function auth_touch_user_presence(int $userId): void
         return;
     }
 
+    // Throttle DB writes: at most once per 2 minutes per session.
+    $now = time();
+    $last = (int) ($_SESSION['last_seen_touch_at'] ?? 0);
+    if ($last > 0 && ($now - $last) < 120) {
+        return;
+    }
+    $_SESSION['last_seen_touch_at'] = $now;
+
     try {
         db()->prepare('UPDATE users SET last_seen_at = NOW() WHERE id = ?')->execute([$userId]);
     } catch (Throwable $e) {

@@ -295,6 +295,11 @@ function save_faculty_course_color(int $facultyId, int $courseId, int $colorInde
 }
 
 /**
+ * Makeup schedule helpers.
+ */
+require_once __DIR__ . '/makeup_helpers.php';
+
+/**
  * Ensure a program name exists for a college (e.g. "General Education" for GE program chairs).
  */
 function ensure_college_program_name(int $collegeId, string $programName): void
@@ -1838,12 +1843,14 @@ function fetch_room_day_schedules(
     string $schoolYear,
     ?int $excludeId = null
 ): array {
-    $sql = "SELECT id, start_time, end_time FROM schedules
-            WHERE room_id = ? AND semester = ? AND school_year = ?
-            AND FIND_IN_SET(?, day_of_week) > 0";
+    $sql = "SELECT s.id, s.start_time, s.end_time, COALESCE(f.full_name, '') AS faculty_name
+            FROM schedules s
+            LEFT JOIN faculty f ON f.id = s.faculty_id
+            WHERE s.room_id = ? AND s.semester = ? AND s.school_year = ?
+            AND FIND_IN_SET(?, s.day_of_week) > 0";
     $params = [$roomId, $semester, $schoolYear, $day];
     if ($excludeId !== null) {
-        $sql .= ' AND id != ?';
+        $sql .= ' AND s.id != ?';
         $params[] = $excludeId;
     }
     $stmt = db()->prepare($sql);
@@ -2015,9 +2022,10 @@ function detect_cross_college_room_conflicts(
         return [];
     }
 
-    $sql = "SELECT s.id, s.start_time, s.end_time, c.college_name
+    $sql = "SELECT s.id, s.start_time, s.end_time, c.college_name, COALESCE(f.full_name, '') AS faculty_name
             FROM schedules s
             LEFT JOIN colleges c ON c.id = s.college_id
+            LEFT JOIN faculty f ON f.id = s.faculty_id
             WHERE s.room_id = ? AND s.college_id IS NOT NULL AND s.college_id <> ?
               AND s.semester = ? AND s.school_year = ?
               AND FIND_IN_SET(?, s.day_of_week) > 0";
@@ -2036,7 +2044,9 @@ function detect_cross_college_room_conflicts(
         $re = time_to_minutes(substr((string) $row['end_time'], 0, 8));
         if (intervals_overlap($st, $en, $rs, $re)) {
             $collegeName = (string) ($row['college_name'] ?: 'Other college');
-            $cross[] = "Cross-college room conflict on {$day}: room is used by {$collegeName}.";
+            $bookedBy = trim((string) ($row['faculty_name'] ?? ''));
+            $byClause = $bookedBy !== '' ? " ({$bookedBy})" : '';
+            $cross[] = "Cross-college room conflict on {$day}: room is used by {$collegeName}{$byClause}.";
         }
     }
     return array_values(array_unique($cross));
@@ -2124,6 +2134,13 @@ function checkConflicts(
     $en = time_to_minutes(substr($end_time, 0, 5) . ':00');
     $ignoreRoomOverlap = room_status_allows_overlap($room_id);
 
+    $facultyNameStmt = db()->prepare('SELECT full_name FROM faculty WHERE id = ? LIMIT 1');
+    $facultyNameStmt->execute([$faculty_id]);
+    $facultyName = trim((string) ($facultyNameStmt->fetchColumn() ?: ''));
+    if ($facultyName === '') {
+        $facultyName = 'Faculty';
+    }
+
     foreach ($days as $day) {
         // Faculty overlap (always internal because faculty belongs to one college)
         $frows = fetch_faculty_day_schedules($faculty_id, $day, $semester, $school_year, $exclude_id);
@@ -2131,9 +2148,11 @@ function checkConflicts(
             $rs = time_to_minutes(substr($row['start_time'], 0, 8));
             $re = time_to_minutes(substr($row['end_time'], 0, 8));
             if (intervals_overlap($st, $en, $rs, $re)) {
+                $existingStart = substr((string) $row['start_time'], 0, 8);
+                $existingEnd = substr((string) $row['end_time'], 0, 8);
                 $conflicts[] = [
                     'type' => 'faculty',
-                    'description' => "Faculty already has a class on {$day} overlapping {$start_time}-{$end_time}.",
+                    'description' => "{$facultyName} already has a class on {$day} overlapping {$start_time}-{$end_time} (existing: {$existingStart}-{$existingEnd}).",
                     'scope' => 'internal',
                 ];
             }
@@ -2146,9 +2165,11 @@ function checkConflicts(
                 $rs = time_to_minutes(substr($row['start_time'], 0, 8));
                 $re = time_to_minutes(substr($row['end_time'], 0, 8));
                 if (intervals_overlap($st, $en, $rs, $re)) {
+                    $bookedBy = trim((string) ($row['faculty_name'] ?? ''));
+                    $byClause = $bookedBy !== '' ? " by {$bookedBy}" : '';
                     $conflicts[] = [
                         'type' => 'room',
-                        'description' => "Room is already booked on {$day} during this time.",
+                        'description' => "Room is already booked on {$day} during this time{$byClause}.",
                         'scope' => 'internal',
                     ];
                 }
@@ -2171,7 +2192,7 @@ function checkConflicts(
         if ($existingMin + $newMin > $maxMin) {
             $conflicts[] = [
                 'type' => 'time',
-                'description' => "Faculty would exceed {$maxH} hours on {$day}.",
+                'description' => "{$facultyName} would exceed {$maxH} hours on {$day}.",
                 'scope' => 'internal',
             ];
         }
@@ -2426,4 +2447,59 @@ function vpaa_signatory_full_name(): string
     $resolved = trim((string) ($st->fetchColumn() ?: ''));
 
     return $resolved;
+}
+
+/**
+ * Show schedule validation/conflict errors as a warning popup modal.
+ *
+ * @param list<string> $errors
+ */
+function render_schedule_errors_warning_popup(
+    array $errors,
+    string $title = 'Warning — Please fix the following',
+    string $okLabel = 'OK'
+): void {
+    if ($errors === []) {
+        return;
+    }
+    $modalId = 'scheduleErrorsWarningModal';
+    ?>
+    <div class="modal fade" id="<?= htmlspecialchars($modalId) ?>" tabindex="-1" aria-labelledby="<?= htmlspecialchars($modalId) ?>Label" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-warning">
+                <div class="modal-header bg-warning-subtle">
+                    <h5 class="modal-title text-warning-emphasis" id="<?= htmlspecialchars($modalId) ?>Label">
+                        <i class="fa-solid fa-triangle-exclamation me-2"></i><?= htmlspecialchars($title) ?>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="mb-0">
+                        <?php foreach ($errors as $e): ?>
+                            <li><?= htmlspecialchars((string) $e) ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-warning" data-bs-dismiss="modal"><?= htmlspecialchars($okLabel) ?></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var modalEl = document.getElementById(<?= json_encode($modalId) ?>);
+        if (!modalEl) return;
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            return;
+        }
+        var items = [];
+        modalEl.querySelectorAll('.modal-body li').forEach(function (li) {
+            items.push(li.textContent.trim());
+        });
+        window.alert(<?= json_encode($title) ?> + ':\n\n- ' + items.join('\n- '));
+    });
+    </script>
+    <?php
 }

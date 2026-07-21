@@ -258,6 +258,8 @@ if ($hasLaboratoryUnits) {
 }
 $hasSessionKind = db_column_exists('schedules', 'session_kind');
 $sessionKindSelect = $hasSessionKind ? ', s.session_kind' : '';
+$hasMakeupCol = db_column_exists('schedules', 'is_makeup');
+$makeupSelect = $hasMakeupCol ? ', s.is_makeup' : '';
 
 $sql = "SELECT s.id, s.faculty_id, s.course_id, s.schedule_type, s.day_of_week, s.start_time, s.end_time, s.semester, s.school_year,
         s.college_id AS sched_college_id, c.college_id AS course_college_id,
@@ -267,6 +269,7 @@ $sql = "SELECT s.id, s.faculty_id, s.course_id, s.schedule_type, s.day_of_week, 
         {$courseLabSelect}
         {$courseBlockSelect}
         {$sessionKindSelect}
+        {$makeupSelect}
         {$targetSelect}
         FROM schedules s
         INNER JOIN faculty f ON f.id = s.faculty_id
@@ -842,7 +845,7 @@ require_once __DIR__ . '/includes/header.php';
                                 </div>
                             <?php endforeach; ?>
                         </td>
-                        <td data-label="COURSE"><strong><?= htmlspecialchars($r0['course_code']) ?></strong><br><span class="small text-muted"><?= htmlspecialchars($r0['course_name']) ?></span></td>
+                        <td data-label="COURSE"><strong><?= htmlspecialchars($r0['course_code']) ?></strong><?php if (!empty($r0['is_makeup'])): ?> <span class="badge bg-warning text-dark">Makeup</span><?php endif; ?><br><span class="small text-muted"><?= htmlspecialchars($r0['course_name']) ?></span></td>
                         <td data-label="FACULTY"><?= htmlspecialchars($r0['faculty_name']) ?></td>
                         <td data-label="ROOM">
                             <?php foreach ($lines as $idx => $r): ?>

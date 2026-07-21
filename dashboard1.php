@@ -11,7 +11,6 @@ $collegeId = current_college_id();
 $programScope = is_program_chair() ? program_scope_or_fail() : null;
 $today = date('l');
 $isAdmin = $role === 'admin';
-$autoRefreshSeconds = 30;
 $stat1Label = 'Active faculty';
 $stat2Label = 'Courses';
 $stat3Label = 'Schedules';
@@ -302,10 +301,6 @@ require_once __DIR__ . '/includes/header.php';
         color: rgba(255,255,255,0.82);
     }
 
-    .dashboard-refresh .btn {
-        border-radius: 999px;
-    }
-
     .dash-stat {
         border: 0;
         border-radius: 22px;
@@ -401,10 +396,6 @@ require_once __DIR__ . '/includes/header.php';
                     </div>
                     <div class="dashboard-refresh mt-3 text-lg-end">
                         <div class="small no-print"><i class="fa-regular fa-calendar me-1"></i><?= htmlspecialchars(date('l, F j, Y')) ?></div>
-                        <div class="small no-print mt-1">
-                            <span id="autoRefreshLabel">Auto refresh every <?= $autoRefreshSeconds ?>s</span>
-                            <button type="button" class="btn btn-sm btn-outline-light ms-2 py-0 px-3" id="toggleAutoRefresh">Pause</button>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -546,36 +537,5 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </div>
 </div>
-
-<script>
-    (function () {
-        const seconds = <?= (int) $autoRefreshSeconds ?>;
-        const toggleBtn = document.getElementById('toggleAutoRefresh');
-        const label = document.getElementById('autoRefreshLabel');
-        const key = 'dashboardAutoRefreshEnabled';
-        let enabled = localStorage.getItem(key);
-        enabled = enabled === null ? true : enabled === '1';
-
-        function render() {
-            if (!toggleBtn || !label) return;
-            label.textContent = enabled ? `Auto refresh every ${seconds}s` : 'Auto refresh paused';
-            toggleBtn.textContent = enabled ? 'Pause' : 'Resume';
-        }
-
-        if (toggleBtn) {
-            toggleBtn.addEventListener('click', function () {
-                enabled = !enabled;
-                localStorage.setItem(key, enabled ? '1' : '0');
-                render();
-            });
-        }
-
-        render();
-        setInterval(function () {
-            if (!enabled || document.hidden) return;
-            window.location.reload();
-        }, seconds * 1000);
-    })();
-</script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
