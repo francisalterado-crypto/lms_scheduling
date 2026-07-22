@@ -179,12 +179,7 @@ require_once __DIR__ . '/includes/header.php';
     <a href="faculty_schedule.php" class="btn btn-outline-secondary btn-sm"<?= app_tooltip_attr('Returns to your weekly teaching schedule and online links. Use this when you are done managing class spaces.') ?>><i class="fa-solid fa-calendar-check me-1"></i>Back to My Schedule</a>
 </div>
 
-<?php if ($flash): ?>
-    <div class="alert alert-info alert-dismissible fade show">
-        <?= htmlspecialchars($flash) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"<?= app_tooltip_attr('Dismisses this alert after you have read it.') ?>></button>
-    </div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <?php if (!$hasClassrooms): ?>
     <div class="alert alert-warning">

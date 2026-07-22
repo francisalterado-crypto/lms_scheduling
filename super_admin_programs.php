@@ -257,7 +257,7 @@ $editCollegeId = (int) ($editRow['college_id'] ?? 0);
 ?>
 <h1 class="h3 mb-2"><i class="fa-solid fa-graduation-cap me-2 text-primary"></i>Program offers</h1>
 <p class="text-muted mb-4">University-wide catalog of programs offered by each college. Super Admin can add, edit, or delete any offer.</p>
-<?php if ($flash): ?><div class="alert alert-info"><?= htmlspecialchars((string) $flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 <?php if (!$hasProgramsTable || !$hasCollegesTable): ?>
     <div class="alert alert-warning">Programs module is unavailable. Please run <a href="upgrade_roles.php">upgrade_roles.php</a>.</div>
 <?php else: ?>

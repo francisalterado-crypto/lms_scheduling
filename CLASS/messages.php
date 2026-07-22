@@ -127,7 +127,7 @@ $invalidClassroom = $usesClassroomDiscussions && $classroomId > 0 && !$activeCla
         Choose one of your enrolled <strong>subjects</strong> to reply in the shared class conversation.
     <?php endif; ?>
 </p>
-<?php if ($flash): ?><div class="alert alert-info py-2"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 <?php if ($invalidWith): ?>
     <div class="alert alert-warning">You cannot open that conversation.</div>
 <?php endif; ?>

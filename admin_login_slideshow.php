@@ -87,9 +87,7 @@ require_once __DIR__ . '/includes/header.php';
     Only active images are shown, in the order listed below.
 </p>
 
-<?php if ($flash): ?>
-    <div class="alert alert-info"><?= htmlspecialchars($flash) ?></div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <?php if (!$tableReady): ?>
     <div class="alert alert-warning">

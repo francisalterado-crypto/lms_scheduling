@@ -63,7 +63,7 @@ $pageTitle = 'Manage Colleges';
 require_once __DIR__ . '/includes/header.php';
 ?>
 <h1 class="h3 mb-4"><i class="fa-solid fa-building-columns me-2 text-primary"></i>Manage Colleges</h1>
-<?php if ($flash): ?><div class="alert alert-info"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-white"><strong><?= $edit ? 'Edit College' : 'Add College' ?></strong></div>

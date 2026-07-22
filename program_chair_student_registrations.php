@@ -87,11 +87,7 @@ require_once __DIR__ . '/includes/header.php';
         </a>
     </div>
 
-    <?php if ($flash !== ''): ?>
-        <div class="alert <?= str_starts_with((string) $flash, 'Error:') ? 'alert-danger' : 'alert-success' ?> rounded-3">
-            <?= htmlspecialchars($flash) ?>
-        </div>
-    <?php endif; ?>
+    <?php if ($flash !== ''): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
     <?php if ($pending === []): ?>
         <div class="card border-0 shadow-sm rounded-4">

@@ -357,12 +357,7 @@ require_once __DIR__ . '/includes/header.php';
         </div>
     </div>
 
-    <?php if ($flash): ?>
-        <div class="alert alert-info alert-dismissible fade show no-print">
-            <?= htmlspecialchars($flash) ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"<?= app_tooltip_attr('Dismisses this notice after you have read it.') ?>></button>
-        </div>
-    <?php endif; ?>
+    <?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
     <?php if (!$hasEmploymentStatusColumn): ?>
         <div class="alert alert-warning py-2">

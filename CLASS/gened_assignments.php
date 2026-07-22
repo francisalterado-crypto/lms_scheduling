@@ -81,7 +81,7 @@ $pageTitle = 'GE Course Offerings';
 require_once __DIR__ . '/includes/header.php';
 ?>
 <h1 class="h3 mb-4"><i class="fa-solid fa-building-user me-2 text-primary"></i>GE Course Offerings by College</h1>
-<?php if ($flash): ?><div class="alert alert-info"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 <?php if (!$hasIsGened || !$hasAssignTable): ?>
     <div class="alert alert-warning">Run <a href="upgrade_roles.php">upgrade_roles.php</a> to enable GE assignments.</div>
 <?php endif; ?>

@@ -142,7 +142,7 @@ $messagesLayoutClass = 'row g-3 student-messages-layout'
 <?php if (messaging_thread_max_messages() > 0): ?>
     <p class="text-muted small mb-3"><i class="fa-solid fa-layer-group me-1"></i>Each conversation keeps the latest <strong><?= (int) messaging_thread_max_messages() ?></strong> messages; older ones are removed automatically (FIFO).</p>
 <?php endif; ?>
-<?php if ($flash): ?><div class="alert alert-info py-2"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 <?php if ($invalidWith): ?>
     <div class="alert alert-warning">You cannot open that conversation.</div>
 <?php endif; ?>

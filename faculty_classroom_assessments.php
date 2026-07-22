@@ -26,7 +26,15 @@ $flash = $_SESSION['flash'] ?? '';
 unset($_SESSION['flash']);
 
 $classroomId = (int) ($_GET['id'] ?? $_POST['classroom_id'] ?? 0);
+if (db_table_exists('classroom_assessments') && !db_column_exists('classroom_assessments', 'time_limit_minutes')) {
+    try {
+        db()->exec('ALTER TABLE classroom_assessments ADD COLUMN time_limit_minutes INT UNSIGNED NULL DEFAULT NULL');
+    } catch (Throwable $e) {
+        // Column may already exist under a concurrent request.
+    }
+}
 $hasCreditedWeek = db_column_exists('classroom_assessments', 'credited_week');
+$hasTimeLimit = db_column_exists('classroom_assessments', 'time_limit_minutes');
 $requiredTables = [
     'online_classrooms',
     'classroom_students',
@@ -81,6 +89,25 @@ function faculty_assessment_due_for_input(?string $dueAt): string
         return '';
     }
     return date('Y-m-d\TH:i', $ts);
+}
+
+/** Parse timer duration from POST (hours + minutes, or legacy minutes-only). Null = no timer. */
+function faculty_assessment_time_limit_from_post(array $post): ?int
+{
+    $enabled = !empty($post['timer_enabled']);
+    if (!$enabled) {
+        return null;
+    }
+    $hours = max(0, (int) ($post['timer_hours'] ?? 0));
+    $minutes = max(0, (int) ($post['timer_minutes'] ?? 0));
+    if (isset($post['time_limit_minutes']) && (string) ($post['timer_hours'] ?? '') === '' && (string) ($post['timer_minutes'] ?? '') === '') {
+        $minutes = max(0, (int) $post['time_limit_minutes']);
+    }
+    $total = ($hours * 60) + $minutes;
+    if ($total < 1) {
+        return null;
+    }
+    return min(720, $total);
 }
 
 function faculty_assess_lc(string $s): string
@@ -207,6 +234,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             $description = classroom_content_prepare_body((string) ($_POST['description'] ?? ''));
             $totalPoints = (float) ($_POST['total_points'] ?? 0);
             $dueAt = faculty_assessment_datetime_save((string) ($_POST['due_at'] ?? ''));
+            $timeLimitMinutes = $hasTimeLimit ? faculty_assessment_time_limit_from_post($_POST) : null;
             $creditedWeek = $hasCreditedWeek ? trim((string) ($_POST['credited_week'] ?? '')) : '';
             $questions = faculty_parse_questions_json((string) ($_POST['questions_json'] ?? '[]'), $assessmentType);
 
@@ -220,7 +248,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             $totalPoints = $calculatedPoints;
 
             db()->beginTransaction();
-            if ($hasCreditedWeek) {
+            if ($hasCreditedWeek && $hasTimeLimit) {
+                db()->prepare(
+                    'INSERT INTO classroom_assessments (classroom_id, faculty_id, assessment_type, title, description, total_points, due_at, time_limit_minutes, credited_week)
+                     VALUES (?,?,?,?,?,?,?,?,?)'
+                )->execute([
+                    $classroomId,
+                    $facultyId,
+                    $assessmentType,
+                    $title,
+                    $description,
+                    $totalPoints,
+                    $dueAt,
+                    $timeLimitMinutes,
+                    $creditedWeek,
+                ]);
+            } elseif ($hasTimeLimit) {
+                db()->prepare(
+                    'INSERT INTO classroom_assessments (classroom_id, faculty_id, assessment_type, title, description, total_points, due_at, time_limit_minutes)
+                     VALUES (?,?,?,?,?,?,?,?)'
+                )->execute([
+                    $classroomId,
+                    $facultyId,
+                    $assessmentType,
+                    $title,
+                    $description,
+                    $totalPoints,
+                    $dueAt,
+                    $timeLimitMinutes,
+                ]);
+            } elseif ($hasCreditedWeek) {
                 db()->prepare(
                     'INSERT INTO classroom_assessments (classroom_id, faculty_id, assessment_type, title, description, total_points, due_at, credited_week)
                      VALUES (?,?,?,?,?,?,?,?)'
@@ -278,6 +335,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             $description = classroom_content_prepare_body((string) ($_POST['description'] ?? ''));
             $totalPoints = (float) ($_POST['total_points'] ?? 0);
             $dueAt = faculty_assessment_datetime_save((string) ($_POST['due_at'] ?? ''));
+            $timeLimitMinutes = $hasTimeLimit ? faculty_assessment_time_limit_from_post($_POST) : null;
             $creditedWeek = $hasCreditedWeek ? trim((string) ($_POST['credited_week'] ?? '')) : '';
             $questions = faculty_parse_questions_json((string) ($_POST['questions_json'] ?? '[]'), $assessmentType);
 
@@ -290,7 +348,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             $totalPoints = array_sum(array_map(static fn (array $q): float => (float) $q['points'], $questions));
 
             db()->beginTransaction();
-            if ($hasCreditedWeek) {
+            if ($hasCreditedWeek && $hasTimeLimit) {
+                $st = db()->prepare(
+                    'UPDATE classroom_assessments
+                     SET assessment_type = ?, title = ?, description = ?, total_points = ?, due_at = ?, time_limit_minutes = ?, credited_week = ?
+                     WHERE id = ? AND classroom_id = ? AND faculty_id = ?'
+                );
+                $st->execute([
+                    $assessmentType,
+                    $title,
+                    $description,
+                    $totalPoints,
+                    $dueAt,
+                    $timeLimitMinutes,
+                    $creditedWeek,
+                    $assessmentId,
+                    $classroomId,
+                    $facultyId,
+                ]);
+            } elseif ($hasTimeLimit) {
+                $st = db()->prepare(
+                    'UPDATE classroom_assessments
+                     SET assessment_type = ?, title = ?, description = ?, total_points = ?, due_at = ?, time_limit_minutes = ?
+                     WHERE id = ? AND classroom_id = ? AND faculty_id = ?'
+                );
+                $st->execute([
+                    $assessmentType,
+                    $title,
+                    $description,
+                    $totalPoints,
+                    $dueAt,
+                    $timeLimitMinutes,
+                    $assessmentId,
+                    $classroomId,
+                    $facultyId,
+                ]);
+            } elseif ($hasCreditedWeek) {
                 $st = db()->prepare(
                     'UPDATE classroom_assessments
                      SET assessment_type = ?, title = ?, description = ?, total_points = ?, due_at = ?, credited_week = ?
@@ -1041,6 +1134,20 @@ require_once __DIR__ . '/includes/header.php';
         background: #0f5a49;
         border-color: #0f5a49;
     }
+    .assessment-timer-preview {
+        display: inline-block;
+        font-family: "Consolas", "Courier New", monospace;
+        font-size: 1.35rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        background: #0b1220;
+        color: #22d3ee;
+        padding: 0.35rem 0.75rem;
+        border-radius: 0.5rem;
+        box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.35);
+        min-width: 6.5rem;
+        text-align: center;
+    }
 </style>
 
 <div class="fac-assess-dashboard">
@@ -1093,9 +1200,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         <?php else: ?>
 
-            <?php if ($flash !== ''): ?>
-                <div id="facAssessFlash" class="d-none"><?= htmlspecialchars($flash) ?></div>
-            <?php endif; ?>
+            <?php if ($flash !== ''): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
             <div class="fac-dash-card">
                 <div class="section-title">
@@ -1205,7 +1310,15 @@ require_once __DIR__ . '/includes/header.php';
                                                 <?php else: ?>
                                                     <span style="color:#94a3b8;font-size:0.8rem;font-style:italic;">No description</span>
                                                 <?php endif; ?>
-                                                <div style="color:#64748b;font-size:0.75rem;margin-top:0.25rem;"><?= (int) $questionCount ?> question<?= $questionCount === 1 ? '' : 's' ?></div>
+                                                <div style="color:#64748b;font-size:0.75rem;margin-top:0.25rem;"><?= (int) $questionCount ?> question<?= $questionCount === 1 ? '' : 's' ?><?php
+                                                    $rowTimeLimit = (int) ($row['time_limit_minutes'] ?? 0);
+                                                    if ($hasTimeLimit && $rowTimeLimit > 0):
+                                                        $rh = intdiv($rowTimeLimit, 60);
+                                                        $rm = $rowTimeLimit % 60;
+                                                        $rLabel = $rh > 0 ? ($rh . 'h' . ($rm > 0 ? ' ' . $rm . 'm' : '')) : ($rm . ' min');
+                                                        echo ' · <i class="fa-regular fa-clock"></i> ' . htmlspecialchars($rLabel);
+                                                    endif;
+                                                ?></div>
                                             </td>
                                             <td class="d-none d-lg-table-cell" style="color:#5b6e8c;font-size:0.85rem;"><?= $dueRaw !== '' ? htmlspecialchars($dueRaw) : '—' ?></td>
                                             <td class="action-icons">
@@ -1216,6 +1329,7 @@ require_once __DIR__ . '/includes/header.php';
                                                     data-title="<?= htmlspecialchars((string) $row['title']) ?>"
                                                     data-points="<?= htmlspecialchars((string) $row['total_points']) ?>"
                                                     data-due="<?= htmlspecialchars(faculty_assessment_due_for_input($dueRaw !== '' ? $dueRaw : null)) ?>"
+                                                    data-time-limit="<?= (int) ($row['time_limit_minutes'] ?? 0) ?>"
                                                     data-credited-week="<?= htmlspecialchars((string) ($row['credited_week'] ?? '')) ?>"
                                                     data-description="<?= htmlspecialchars(str_replace(["\r", "\n", "\t"], ' ', $desc), ENT_QUOTES, 'UTF-8') ?>"
                                                     data-questions="<?= htmlspecialchars((string) json_encode($serializedQuestions, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>">
@@ -1445,6 +1559,30 @@ require_once __DIR__ . '/includes/header.php';
                             </select>
                         </div>
                         <?php endif; ?>
+                        <?php if ($hasTimeLimit): ?>
+                        <div class="col-12">
+                            <div class="border rounded-3 p-3 bg-light-subtle">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" name="timer_enabled" value="1" id="add_timer_enabled">
+                                    <label class="form-check-label fw-semibold" for="add_timer_enabled">Timer settings</label>
+                                </div>
+                                <div class="row g-2 align-items-end" id="addTimerFields" style="display:none;">
+                                    <div class="col-auto">
+                                        <label class="form-label small mb-0" for="add_timer_hours">Hours</label>
+                                        <input type="number" name="timer_hours" id="add_timer_hours" class="form-control" min="0" max="12" value="0" style="width:5.5rem;">
+                                    </div>
+                                    <div class="col-auto">
+                                        <label class="form-label small mb-0" for="add_timer_minutes">Minutes</label>
+                                        <input type="number" name="timer_minutes" id="add_timer_minutes" class="form-control" min="0" max="59" value="30" style="width:5.5rem;">
+                                    </div>
+                                    <div class="col-auto pb-1">
+                                        <span class="assessment-timer-preview" id="addTimerPreview" aria-hidden="true">00:30:00</span>
+                                    </div>
+                                </div>
+                                <div class="form-text small mt-1">When enabled, students see a digital countdown after they start the assessment. Leave off for untimed work.</div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
                         <div class="col-12">
                             <label class="form-label small fw-semibold">Questions</label>
                             <div class="small text-muted mb-1">Total items: <span id="addTotalItems">0</span></div>
@@ -1535,6 +1673,30 @@ require_once __DIR__ . '/includes/header.php';
                             </select>
                         </div>
                         <?php endif; ?>
+                        <?php if ($hasTimeLimit): ?>
+                        <div class="col-12">
+                            <div class="border rounded-3 p-3 bg-light-subtle">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" name="timer_enabled" value="1" id="edit_timer_enabled">
+                                    <label class="form-check-label fw-semibold" for="edit_timer_enabled">Timer settings</label>
+                                </div>
+                                <div class="row g-2 align-items-end" id="editTimerFields" style="display:none;">
+                                    <div class="col-auto">
+                                        <label class="form-label small mb-0" for="edit_timer_hours">Hours</label>
+                                        <input type="number" name="timer_hours" id="edit_timer_hours" class="form-control" min="0" max="12" value="0" style="width:5.5rem;">
+                                    </div>
+                                    <div class="col-auto">
+                                        <label class="form-label small mb-0" for="edit_timer_minutes">Minutes</label>
+                                        <input type="number" name="timer_minutes" id="edit_timer_minutes" class="form-control" min="0" max="59" value="30" style="width:5.5rem;">
+                                    </div>
+                                    <div class="col-auto pb-1">
+                                        <span class="assessment-timer-preview" id="editTimerPreview" aria-hidden="true">00:30:00</span>
+                                    </div>
+                                </div>
+                                <div class="form-text small mt-1">When enabled, students see a digital countdown after they start the assessment.</div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
                         <div class="col-12">
                             <label class="form-label small fw-semibold">Questions</label>
                             <div class="small text-muted mb-1">Total items: <span id="editTotalItems">0</span></div>
@@ -1589,11 +1751,6 @@ require_once __DIR__ . '/includes/header.php';
         toast.textContent = msg;
         toast.style.opacity = '1';
         setTimeout(function () { toast.style.opacity = '0'; }, ms);
-    }
-
-    var flashEl = document.getElementById('facAssessFlash');
-    if (flashEl && flashEl.textContent.trim()) {
-        showToast(flashEl.textContent.trim(), 3200);
     }
 
     var filterInput = document.getElementById('assessmentTableFilter');
@@ -1887,6 +2044,45 @@ require_once __DIR__ . '/includes/header.php';
         addBuilderApi.setRows([]);
     }
 
+    function formatTimerPreview(hours, minutes) {
+        var h = Math.max(0, parseInt(hours, 10) || 0);
+        var m = Math.max(0, parseInt(minutes, 10) || 0);
+        if (m > 59) {
+            h += Math.floor(m / 60);
+            m = m % 60;
+        }
+        h = Math.min(12, h);
+        var totalSecs = (h * 3600) + (m * 60);
+        var hh = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+        var mm = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
+        var ss = String(totalSecs % 60).padStart(2, '0');
+        return hh + ':' + mm + ':' + ss;
+    }
+
+    function bindTimerSettings(enabledId, fieldsId, hoursId, minutesId, previewId) {
+        var enabled = document.getElementById(enabledId);
+        var fields = document.getElementById(fieldsId);
+        var hours = document.getElementById(hoursId);
+        var minutes = document.getElementById(minutesId);
+        var preview = document.getElementById(previewId);
+        if (!enabled || !fields || !hours || !minutes) {
+            return;
+        }
+        var sync = function () {
+            fields.style.display = enabled.checked ? '' : 'none';
+            if (preview) {
+                preview.textContent = formatTimerPreview(hours.value, minutes.value);
+            }
+        };
+        enabled.addEventListener('change', sync);
+        hours.addEventListener('input', sync);
+        minutes.addEventListener('input', sync);
+        sync();
+    }
+
+    bindTimerSettings('add_timer_enabled', 'addTimerFields', 'add_timer_hours', 'add_timer_minutes', 'addTimerPreview');
+    bindTimerSettings('edit_timer_enabled', 'editTimerFields', 'edit_timer_hours', 'edit_timer_minutes', 'editTimerPreview');
+
     var editModal = document.getElementById('modalEditAssessment');
     if (editModal) {
         editModal.addEventListener('show.bs.modal', function (ev) {
@@ -1899,6 +2095,22 @@ require_once __DIR__ . '/includes/header.php';
             var editWeekSel = document.getElementById('edit_credited_week');
             if (editWeekSel) {
                 editWeekSel.value = btn.getAttribute('data-credited-week') || '';
+            }
+            var editTimerEnabled = document.getElementById('edit_timer_enabled');
+            var editTimerHours = document.getElementById('edit_timer_hours');
+            var editTimerMinutes = document.getElementById('edit_timer_minutes');
+            if (editTimerEnabled && editTimerHours && editTimerMinutes) {
+                var limitMins = parseInt(btn.getAttribute('data-time-limit') || '0', 10) || 0;
+                if (limitMins > 0) {
+                    editTimerEnabled.checked = true;
+                    editTimerHours.value = String(Math.floor(limitMins / 60));
+                    editTimerMinutes.value = String(limitMins % 60);
+                } else {
+                    editTimerEnabled.checked = false;
+                    editTimerHours.value = '0';
+                    editTimerMinutes.value = '30';
+                }
+                editTimerEnabled.dispatchEvent(new Event('change'));
             }
             var editDescTa = document.getElementById('edit_description');
             if (editDescTa) {

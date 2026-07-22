@@ -362,9 +362,7 @@ require_once __DIR__ . '/includes/header.php';
     <button type="button" class="btn btn-outline-secondary no-print" onclick="window.print()"<?= app_tooltip_attr('Opens the print dialog for this weekly view. Use this for a paper copy or PDF without sidebar clutter.') ?>><i class="fa-solid fa-print me-1"></i>Print</button>
 </div>
 
-<?php if ($flash !== ''): ?>
-    <div class="alert <?= str_starts_with($flash, 'Error:') ? 'alert-danger' : 'alert-success' ?> no-print" role="status"><?= htmlspecialchars($flash) ?></div>
-<?php endif; ?>
+<?php if ($flash !== ''): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <?php if ($role === 'faculty' && $hasCourseColors && $facultyCourseLegend !== []): ?>
     <?php

@@ -94,6 +94,8 @@ foreach ($colleges as $col) {
 $pageTitle = 'GE Course Offerings';
 require_once __DIR__ . '/includes/header.php';
 ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
+
 <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&amp;display=swap" rel="stylesheet">
 <style>
     .ge-offerings-page {
@@ -583,11 +585,6 @@ require_once __DIR__ . '/includes/header.php';
         if (tmo) clearTimeout(tmo);
         tmo = setTimeout(function () { toast.classList.remove('ge-show'); }, 2600);
     };
-    <?php if ($flash !== ''): ?>
-    document.addEventListener('DOMContentLoaded', function () {
-        showGeToast(<?= json_encode($flash, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>, <?= str_starts_with($flash, 'Error:') ? 'true' : 'false' ?>);
-    });
-    <?php endif; ?>
 })();
 </script>
 

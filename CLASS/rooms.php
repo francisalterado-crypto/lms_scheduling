@@ -113,12 +113,7 @@ require_once __DIR__ . '/includes/header.php';
 <h1 class="h3 mb-4"><i class="fa-solid fa-door-open me-2 text-primary"></i>Rooms</h1>
 <p class="text-muted">Managing: <strong><?= htmlspecialchars($collegeName) ?></strong></p>
 
-<?php if ($flash): ?>
-    <div class="alert alert-info alert-dismissible fade show no-print">
-        <?= htmlspecialchars($flash) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"<?= app_tooltip_attr('Dismisses this status message after you have read it.') ?>></button>
-    </div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-white">

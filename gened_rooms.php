@@ -273,9 +273,7 @@ require_once __DIR__ . '/includes/header.php';
     }
 </style>
 
-<?php if ($flash): ?>
-    <div class="ge-inline-alert"><?= htmlspecialchars($flash) ?></div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 <?php if (!$hasIsGened): ?>
     <div class="ge-inline-alert warning">Run <a href="upgrade_roles.php">upgrade_roles.php</a> to enable GE rooms.</div>
 <?php endif; ?>

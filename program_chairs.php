@@ -402,12 +402,7 @@ require_once __DIR__ . '/includes/header.php';
         </div>
     </div>
 
-    <?php if ($flash): ?>
-        <div class="alert alert-info alert-dismissible fade show no-print">
-            <?= htmlspecialchars($flash) ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    <?php endif; ?>
+    <?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
     <?php if (!$hasAssignedProgram || !$hasProgramsTable): ?>
         <div class="alert alert-warning">Program Chair accounts require the upgraded schema. Run <a href="upgrade_roles.php">upgrade_roles.php</a> first.</div>

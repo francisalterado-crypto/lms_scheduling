@@ -337,12 +337,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </div>
 
-<?php if ($flash && !$printMode): ?>
-    <div class="alert alert-info alert-dismissible fade show">
-        <?= htmlspecialchars($flash) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"<?= app_tooltip_attr('Dismisses this alert after you have read it.') ?>></button>
-    </div>
-<?php endif; ?>
+<?php if ($flash && !$printMode): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <?php if ($missingTables !== []): ?>
     <div class="alert alert-warning">

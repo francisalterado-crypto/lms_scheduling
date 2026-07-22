@@ -188,7 +188,7 @@ $pageTitle = 'Settings';
 require_once __DIR__ . '/includes/header.php';
 ?>
 <h1 class="h3 mb-4"><i class="fa-solid fa-gear me-2 app-role-icon"></i>Account Settings</h1>
-<?php if ($flash): ?><div class="alert alert-info"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 <?php if ($forcePasswordChange): ?>
 <div class="alert alert-warning shadow-sm" style="max-width: 640px;">
     <strong>Password change required.</strong> You signed in with a temporary password. Choose a new password below before using the rest of the system.

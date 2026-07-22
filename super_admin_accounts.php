@@ -786,7 +786,7 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 <h1 class="h3 mb-2"><i class="fa-solid fa-users-gear me-2 text-primary"></i>Account monitor</h1>
 <p class="text-muted mb-3">Review every login, create accounts for any role, and manage Super Administrator logins.</p>
-<?php if ($flash): ?><div class="alert alert-info"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <ul class="nav nav-tabs mb-4">
     <li class="nav-item">

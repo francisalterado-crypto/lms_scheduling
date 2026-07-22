@@ -501,12 +501,7 @@ $statusIsActive = $classroom && (string) $classroom['status'] === 'active';
     </script>
 <?php endif; ?>
 
-<?php if ($flash): ?>
-    <div class="alert alert-info alert-dismissible fade show border-0 shadow-sm">
-        <?= htmlspecialchars($flash) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"<?= app_tooltip_attr('Dismisses this notice after you have read it.') ?>></button>
-    </div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <?php if ($missingTables !== []): ?>
     <div class="alert alert-warning border-0 shadow-sm">

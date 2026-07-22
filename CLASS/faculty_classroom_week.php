@@ -276,12 +276,7 @@ require_once __DIR__ . '/includes/header.php';
         <a href="faculty_classroom.php?id=<?= (int) $classroomId ?>" class="btn btn-outline-secondary btn-sm rounded-pill align-self-start"<?= app_tooltip_attr('Returns to the main classroom page with all weeks and posting tools.') ?>><i class="fa-solid fa-arrow-left me-1"></i>Back to class</a>
     </div>
 
-<?php if ($flash): ?>
-    <div class="alert alert-info alert-dismissible fade show border-0 shadow-sm">
-        <?= htmlspecialchars($flash) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"<?= app_tooltip_attr('Dismisses this notice after you have read it.') ?>></button>
-    </div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <?php if ($missingTables !== []): ?>
     <div class="alert alert-warning border-0 shadow-sm">

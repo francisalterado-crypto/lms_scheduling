@@ -432,12 +432,7 @@ require_once __DIR__ . '/includes/header.php';
             <i class="fa-solid fa-chevron-down" style="font-size:0.7rem;"></i>
         </div>
     </div>
-<?php if ($flash): ?>
-    <div class="alert alert-info alert-dismissible fade show" role="alert">
-        <?= htmlspecialchars($flash) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <div class="filter-card">
     <div>

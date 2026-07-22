@@ -150,14 +150,18 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 student-page-header">
     <h1 class="h3 mb-0"><i class="fa-solid fa-user-graduate me-2 text-primary"></i>My Classes</h1>
-</div>
-
-<?php if ($flash): ?>
-    <div class="alert alert-info alert-dismissible fade show">
-        <?= htmlspecialchars($flash) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"<?= student_tooltip_attr('Dismisses this notice. Use this after you have read the message so it stays out of your way.') ?>></button>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <button type="button" class="btn btn-outline-primary btn-sm" data-offline-save=""<?= student_tooltip_attr('Downloads all faculty announcements and materials from your enrolled classes so you can read them without internet.') ?>>
+            <i class="fa-solid fa-cloud-arrow-down me-1"></i>Save all for offline
+        </button>
+        <a href="student_offline.php" class="btn btn-outline-secondary btn-sm"<?= student_tooltip_attr('Opens your saved offline copy of faculty posts. Works even without internet after you save once.') ?>>
+            <i class="fa-solid fa-book-open me-1"></i>Read offline
+        </a>
     </div>
-<?php endif; ?>
+</div>
+<p class="small mb-3" data-offline-status="auto"></p>
+
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <?php if ($missingTables !== []): ?>
     <div class="alert alert-warning">
@@ -248,6 +252,9 @@ require_once __DIR__ . '/includes/header.php';
                                 </div>
                                 <div class="d-flex gap-2 flex-wrap">
                                     <a href="student_classroom.php?id=<?= (int) $class['id'] ?>" class="btn btn-primary btn-sm"<?= student_tooltip_attr('Opens this class workspace with announcements, materials, discussion, and assessments. Use this as your main entry for daily class work.') ?>>Open class</a>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" data-offline-save="<?= (int) $class['id'] ?>" data-offline-merge="1"<?= student_tooltip_attr('Saves this classroom faculty announcements and materials on your device for offline reading.') ?>>
+                                        <i class="fa-solid fa-download me-1"></i>Save offline
+                                    </button>
                                     <?php if (trim((string) $class['meet_link']) !== ''): ?>
                                         <?php if ($isLive): ?>
                                             <a href="<?= htmlspecialchars((string) $class['meet_link']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm"<?= student_tooltip_attr('Your instructor is live. Opens the video meeting for this class in a new tab.') ?>><i class="fa-solid fa-video me-1"></i>Join Meet</a>
@@ -287,4 +294,5 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 <?php endif; ?>
 
+<script src="assets/js/student_offline.js" defer></script>
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -852,9 +852,7 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         <?php else: ?>
 
-            <?php if ($flash !== ''): ?>
-                <div id="facAssessFlash" class="d-none"><?= htmlspecialchars($flash) ?></div>
-            <?php endif; ?>
+            <?php if ($flash !== ''): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
             <div class="fac-dash-card">
                 <div class="section-title">
@@ -1241,11 +1239,6 @@ require_once __DIR__ . '/includes/header.php';
         toast.textContent = msg;
         toast.style.opacity = '1';
         setTimeout(function () { toast.style.opacity = '0'; }, ms);
-    }
-
-    var flashEl = document.getElementById('facAssessFlash');
-    if (flashEl && flashEl.textContent.trim()) {
-        showToast(flashEl.textContent.trim(), 3200);
     }
 
     var filterInput = document.getElementById('assessmentTableFilter');

@@ -480,18 +480,19 @@ require_once __DIR__ . '/includes/header.php';
                 <h1><i class="fa-solid fa-chalkboard-user" style="color:#2c7a4d; margin-right: 8px;"></i>My Classrooms</h1>
                 <p>Western Philippines University · Faculty Teaching Hub</p>
             </div>
-            <div class="faculty-badge">
-                <i class="fa-solid fa-user-graduate"></i> Faculty Portal
-                <i class="fa-solid fa-chevron-down" style="font-size: 10px;"></i>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <a href="faculty_offline.php" class="footer-btn" style="padding: 0.45rem 0.9rem;"<?= app_tooltip_attr('View and sync posts or files queued on this device while offline.') ?>>
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Offline uploads
+                    <span class="badge text-bg-warning" data-offline-pending-count hidden>0</span>
+                </a>
+                <div class="faculty-badge">
+                    <i class="fa-solid fa-user-graduate"></i> Faculty Portal
+                    <i class="fa-solid fa-chevron-down" style="font-size: 10px;"></i>
+                </div>
             </div>
         </div>
 
-        <?php if ($flash): ?>
-            <div class="alert alert-info alert-dismissible fade show mb-4">
-                <?= htmlspecialchars($flash) ?>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"<?= app_tooltip_attr('Dismisses this alert after you have read it.') ?>></button>
-            </div>
-        <?php endif; ?>
+        <?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
         <?php if (!$hasClassrooms): ?>
             <div class="alert alert-warning">
@@ -682,5 +683,6 @@ require_once __DIR__ . '/includes/header.php';
         });
     })();
 </script>
+<script src="assets/js/faculty_offline.js" defer></script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

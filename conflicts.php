@@ -327,12 +327,7 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 <h1 class="h3 mb-4"><i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>Conflicts and Requests</h1>
 
-<?php if ($flash): ?>
-    <div class="alert alert-<?= $flashType === 'danger' ? 'danger' : 'success' ?> alert-dismissible fade show no-print">
-        <?= htmlspecialchars((string) $flash) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"<?= app_tooltip_attr('Dismisses this confirmation after you have read it.') ?>></button>
-    </div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <?php if ($role === 'admin'): ?>
     <div class="card shadow-sm mb-4">

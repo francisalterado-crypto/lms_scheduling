@@ -349,9 +349,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 <?php endif; ?>
 
-<?php if ($flash): ?>
-    <div class="alert alert-success"><?= htmlspecialchars($flash) ?></div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 <?php if ($errors): ?>
     <div class="alert alert-warning">
         <ul class="mb-0">

@@ -396,7 +396,7 @@ require_once __DIR__ . '/includes/header.php';
         <?php endif; ?>
     </div>
 
-    <?php if ($flash): ?><div class="alert alert-info"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+    <?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
     <?php if (!$hasUserEmail): ?>
         <div class="alert alert-warning">The <code>users.email</code> column is missing. Run <a href="upgrade_roles.php">upgrade_roles.php</a> once to add it, then reload this page.</div>
     <?php endif; ?>

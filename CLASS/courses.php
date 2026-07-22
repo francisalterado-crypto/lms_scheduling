@@ -339,9 +339,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </header>
 
-<?php if ($flash): ?>
-    <div class="alert alert-info app-alert border-info-subtle" role="status"><?= htmlspecialchars($flash) ?></div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 <?php if (!$hasLabFlag || !$hasLectureUnits || !$hasLaboratoryUnits): ?>
     <div class="alert alert-warning app-alert">Split unit fields are disabled until you run <a href="upgrade_roles.php">upgrade_roles.php</a>.</div>
 <?php endif; ?>

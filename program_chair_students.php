@@ -470,6 +470,8 @@ $pageTitle = 'Student management';
 $mainContainerClass = 'container-fluid py-4 py-md-5 app-main';
 require_once __DIR__ . '/includes/header.php';
 ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
+
 <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
 <style>
     .pcs-app {
@@ -1156,12 +1158,6 @@ require_once __DIR__ . '/includes/header.php';
         document.body.appendChild(t);
         setTimeout(function() { t.remove(); }, 3200);
     }
-
-    <?php if ($flash !== ''): ?>
-    document.addEventListener('DOMContentLoaded', function() {
-        pcsToast(<?= json_encode($flash, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>, <?= str_starts_with((string) $flash, 'Error:') ? 'true' : 'false' ?>);
-    });
-    <?php endif; ?>
 
     renderTable();
 })();

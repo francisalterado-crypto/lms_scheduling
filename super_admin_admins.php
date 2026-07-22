@@ -263,7 +263,7 @@ $pageTitle = 'Administrator accounts';
 require_once __DIR__ . '/includes/header.php';
 ?>
 <h1 class="h3 mb-4"><i class="fa-solid fa-users-gear me-2 text-primary"></i>Administrator accounts</h1>
-<?php if ($flash): ?><div class="alert alert-info"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <p class="text-muted">Create or update <strong>admin</strong> logins for day-to-day scheduling. Use <strong>Log title / office</strong> so activity in Settings shows which administrator performed each action (shown with full name and username).</p>
 

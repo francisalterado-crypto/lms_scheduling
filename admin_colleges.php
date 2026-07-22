@@ -503,24 +503,7 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 </div>
 
-<div id="toastMsg" class="toast-msg"><i class="fa-solid fa-circle-check"></i> <span id="toastText"></span></div>
-<script>
-    (function () {
-        const message = <?= json_encode($flash !== '' ? $flash : null) ?>;
-        if (!message) return;
-        const toast = document.getElementById('toastMsg');
-        const text = document.getElementById('toastText');
-        if (!toast || !text) return;
-        text.textContent = message;
-        if (/^Error:/i.test(message)) {
-            toast.style.background = '#b91c1c';
-        }
-        toast.classList.add('show');
-        setTimeout(function () {
-            toast.classList.remove('show');
-            toast.style.background = '#1e2f3e';
-        }, 2600);
-    })();
-</script>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
+
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

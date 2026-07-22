@@ -583,12 +583,7 @@ $statusIsActive = $classroom && (string) $classroom['status'] === 'active';
     </script>
 <?php endif; ?>
 
-<?php if ($flash): ?>
-    <div class="alert alert-info alert-dismissible fade show border-0 shadow-sm">
-        <?= htmlspecialchars($flash) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"<?= app_tooltip_attr('Dismisses this notice after you have read it.') ?>></button>
-    </div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <?php if ($missingTables !== []): ?>
     <div class="alert alert-warning border-0 shadow-sm">
@@ -713,6 +708,19 @@ $statusIsActive = $classroom && (string) $classroom['status'] === 'active';
                             <i class="fa-solid fa-lock me-2"></i>Posting is locked until you upload a <strong>course syllabus</strong> in the section above.
                         </div>
                     <?php endif; ?>
+                    <span class="d-none"
+                          data-offline-classroom-label="<?= htmlspecialchars(trim((string) ($classroom['course_code'] ?? '') . ' — ' . (string) ($classroom['title'] ?? 'Classroom'))) ?>"
+                          data-offline-course-code="<?= htmlspecialchars((string) ($classroom['course_code'] ?? '')) ?>"
+                          data-offline-course-name="<?= htmlspecialchars((string) ($classroom['course_name'] ?? '')) ?>"
+                          data-offline-classroom-title="<?= htmlspecialchars((string) ($classroom['title'] ?? 'Classroom')) ?>"></span>
+                    <p class="small mb-3" data-offline-status></p>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                        <a href="faculty_offline.php" class="btn btn-outline-secondary btn-sm"<?= app_tooltip_attr('View posts and files queued on this device while offline, and sync them when you are online.') ?>>
+                            <i class="fa-solid fa-cloud-arrow-up me-1"></i>Offline uploads
+                            <span class="badge text-bg-warning ms-1" data-offline-pending-count hidden>0</span>
+                        </a>
+                        <span class="small text-muted">Works offline: publish or attach files without internet, then sync later.</span>
+                    </div>
                     <form method="post" enctype="multipart/form-data" id="fc-add-content-form">
                         <input type="hidden" name="action" value="add_content">
                         <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
@@ -938,5 +946,6 @@ document.querySelectorAll('[data-wordpad]').forEach((shell) => {
     form.addEventListener('submit', syncEditor);
 });
 </script>
+<script src="assets/js/faculty_offline.js" defer></script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -16,7 +16,23 @@ $hasContentWeeks = db_column_exists('classroom_content', 'weeks');
 $hasContentDaysPerTopic = db_column_exists('classroom_content', 'days_per_topic');
 $hasContentTopicSchedule = $hasContentWeeks && $hasContentDaysPerTopic;
 $hasSyllabusCols = db_column_exists('online_classrooms', 'syllabus_stored_name');
+if (db_table_exists('classroom_assessments') && !db_column_exists('classroom_assessments', 'time_limit_minutes')) {
+    try {
+        db()->exec('ALTER TABLE classroom_assessments ADD COLUMN time_limit_minutes INT UNSIGNED NULL DEFAULT NULL');
+    } catch (Throwable $e) {
+        // Column may already exist under a concurrent request.
+    }
+}
+if (db_table_exists('classroom_submissions') && !db_column_exists('classroom_submissions', 'integrity_locked')) {
+    try {
+        db()->exec('ALTER TABLE classroom_submissions ADD COLUMN integrity_locked TINYINT(1) NOT NULL DEFAULT 0');
+    } catch (Throwable $e) {
+        // Column may already exist under a concurrent request.
+    }
+}
 $hasCreditedWeek = db_column_exists('classroom_assessments', 'credited_week');
+$hasTimeLimit = db_column_exists('classroom_assessments', 'time_limit_minutes');
+$hasIntegrityLocked = db_column_exists('classroom_submissions', 'integrity_locked');
 $hasAttendanceSessionsTable = db_table_exists('classroom_attendance_sessions');
 $hasAttendanceRecordsTable = db_table_exists('classroom_attendance_records');
 $hasAttendanceTables = $hasAttendanceSessionsTable && $hasAttendanceRecordsTable;
@@ -55,6 +71,13 @@ if ($studentId < 1) {
 
 $flash = $_SESSION['flash'] ?? '';
 unset($_SESSION['flash']);
+
+$assessmentAlreadySubmittedWarning = '';
+$alreadySubmittedMsg = 'This assessment was already submitted. Updating answers is not allowed.';
+if (is_string($flash) && $flash !== '' && stripos($flash, $alreadySubmittedMsg) !== false) {
+    $assessmentAlreadySubmittedWarning = $alreadySubmittedMsg;
+    $flash = '';
+}
 
 $classroomId = (int) ($_GET['id'] ?? $_POST['classroom_id'] ?? 0);
 $requiredTables = [
@@ -100,6 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
     try {
         if ($action === 'submit_assessment') {
             $assessmentId = (int) ($_POST['assessment_id'] ?? 0);
+            $integrityViolation = (string) ($_POST['integrity_violation'] ?? '') === '1';
             if ($assessmentId < 1) {
                 throw new RuntimeException('Invalid assessment.');
             }
@@ -110,6 +134,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             $st->execute([$assessmentId, $classroomId]);
             if (!$st->fetchColumn()) {
                 throw new RuntimeException('Assessment not found.');
+            }
+
+            $st = db()->prepare(
+                'SELECT COUNT(*) FROM classroom_submissions WHERE assessment_id = ? AND student_id = ?'
+            );
+            $st->execute([$assessmentId, $studentId]);
+            $exists = (int) $st->fetchColumn() > 0;
+            if ($exists) {
+                throw new RuntimeException('This assessment was already submitted. Updating answers is not allowed.');
             }
 
             $qst = db()->prepare(
@@ -130,11 +163,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
                 $stepsPayload = [];
             }
 
-            $st = db()->prepare(
-                'SELECT COUNT(*) FROM classroom_submissions WHERE assessment_id = ? AND student_id = ?'
-            );
-            $st->execute([$assessmentId, $studentId]);
-            $exists = (int) $st->fetchColumn() > 0;
             $autoTotal = 0.0;
             $requiresManual = false;
             $answerSummary = [];
@@ -144,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
                 $qid = (int) ($q['id'] ?? 0);
                 $answerTextRaw = trim((string) ($answersPayload[$qid] ?? ''));
                 $answerStepsRaw = trim((string) ($stepsPayload[$qid] ?? ''));
-                if ($answerTextRaw === '') {
+                if ($answerTextRaw === '' && !$integrityViolation) {
                     throw new RuntimeException('Please answer all questions before submitting.');
                 }
                 $graded = classroom_grade_question_submission($q, [
@@ -166,20 +194,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
                 ];
             }
 
+            $submissionStatus = 'submitted';
+            $lockFlag = $integrityViolation ? 1 : 0;
+
             db()->beginTransaction();
-            db()->prepare(
-                'INSERT INTO classroom_submissions (assessment_id, student_id, answer_text, status, auto_total_score, requires_manual_grade, submitted_at, updated_at)
-                 VALUES (?,?,?,?,?,?,NOW(),NOW())
-                 ON DUPLICATE KEY UPDATE answer_text = VALUES(answer_text), status = VALUES(status),
-                     auto_total_score = VALUES(auto_total_score), requires_manual_grade = VALUES(requires_manual_grade), updated_at = NOW()'
-            )->execute([
-                $assessmentId,
-                $studentId,
-                json_encode($answerSummary, JSON_UNESCAPED_UNICODE),
-                $exists ? 'resubmitted' : 'submitted',
-                $autoTotal,
-                $requiresManual ? 1 : 0,
-            ]);
+            if ($hasIntegrityLocked) {
+                db()->prepare(
+                    'INSERT INTO classroom_submissions (assessment_id, student_id, answer_text, status, auto_total_score, requires_manual_grade, integrity_locked, submitted_at, updated_at)
+                     VALUES (?,?,?,?,?,?,?,NOW(),NOW())
+                     ON DUPLICATE KEY UPDATE answer_text = VALUES(answer_text), status = VALUES(status),
+                         auto_total_score = VALUES(auto_total_score), requires_manual_grade = VALUES(requires_manual_grade),
+                         integrity_locked = GREATEST(integrity_locked, VALUES(integrity_locked)), updated_at = NOW()'
+                )->execute([
+                    $assessmentId,
+                    $studentId,
+                    json_encode($answerSummary, JSON_UNESCAPED_UNICODE),
+                    $submissionStatus,
+                    $autoTotal,
+                    $requiresManual ? 1 : 0,
+                    $lockFlag,
+                ]);
+            } else {
+                db()->prepare(
+                    'INSERT INTO classroom_submissions (assessment_id, student_id, answer_text, status, auto_total_score, requires_manual_grade, submitted_at, updated_at)
+                     VALUES (?,?,?,?,?,?,NOW(),NOW())
+                     ON DUPLICATE KEY UPDATE answer_text = VALUES(answer_text), status = VALUES(status),
+                         auto_total_score = VALUES(auto_total_score), requires_manual_grade = VALUES(requires_manual_grade), updated_at = NOW()'
+                )->execute([
+                    $assessmentId,
+                    $studentId,
+                    json_encode($answerSummary, JSON_UNESCAPED_UNICODE),
+                    $submissionStatus,
+                    $autoTotal,
+                    $requiresManual ? 1 : 0,
+                ]);
+            }
             $subId = (int) db()->lastInsertId();
             if ($subId < 1) {
                 $subSt = db()->prepare('SELECT id FROM classroom_submissions WHERE assessment_id = ? AND student_id = ? LIMIT 1');
@@ -209,6 +258,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
                 ]);
             }
 
+            if ($integrityViolation) {
+                $scoreFeedback = 'Assessment ended automatically because the student left or minimized the assessment window, or switched to another tab/application. Partial answers were scored as submitted.';
+            } elseif ($requiresManual) {
+                $scoreFeedback = 'Auto-score saved for objective items. Essay/problem steps may still need teacher review.';
+            } else {
+                $scoreFeedback = 'Auto-scored from objective items.';
+            }
+
             db()->prepare(
                 'INSERT INTO classroom_scores (assessment_id, student_id, score, feedback, graded_at)
                  VALUES (?,?,?,?,NOW())
@@ -217,11 +274,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
                 $assessmentId,
                 $studentId,
                 $autoTotal,
-                $requiresManual ? 'Auto-score saved for objective items. Essay/problem steps may still need teacher review.' : 'Auto-scored from objective items.',
+                $scoreFeedback,
             ]);
             db()->commit();
 
-            $_SESSION['flash'] = $exists ? 'Assessment answer updated.' : 'Assessment submitted successfully.';
+            if ($integrityViolation) {
+                $_SESSION['flash'] = 'Assessment ended and locked: you left or minimized the assessment window, or switched to another tab/application. Your answers were submitted and Update answer is now disabled.';
+            } else {
+                $_SESSION['flash'] = 'Assessment submitted successfully. Update answer is now disabled.';
+            }
         } elseif ($action === 'attendance_login' || $action === 'attendance_logout') {
             if (!$hasAttendanceTables) {
                 throw new RuntimeException('Attendance module needs a database update. Run upgrade_roles.php once.');
@@ -450,8 +511,12 @@ if ($missingTables === []) {
         $discussionMessages = classroom_discussion_messages($classroomId, $userId);
     }
 
+    $assessmentSelect = 'SELECT ca.*, sc.score, sc.feedback, sc.graded_at, sub.answer_text, sub.status AS submission_status, sub.submitted_at';
+    if ($hasIntegrityLocked) {
+        $assessmentSelect .= ', sub.integrity_locked';
+    }
     $st = db()->prepare(
-        'SELECT ca.*, sc.score, sc.feedback, sc.graded_at, sub.answer_text, sub.status AS submission_status, sub.submitted_at
+        $assessmentSelect . '
          FROM classroom_assessments ca
          LEFT JOIN classroom_scores sc ON sc.assessment_id = ca.id AND sc.student_id = ?
          LEFT JOIN classroom_submissions sub ON sub.assessment_id = ca.id AND sub.student_id = ?
@@ -553,7 +618,7 @@ $attendanceLoginWindow = $classroom ? classroom_attendance_login_allowed($classr
 ];
 $attendanceCanLogin = (!$attendanceHasLoginToday || $attendanceHasLogoutToday) && $attendanceLoginWindow['allowed'];
 $attendanceLoginTooltip = $attendanceLoginWindow['allowed']
-    ? 'Records that you joined today’s class session for attendance. Use this when class starts or when your instructor expects a login check.'
+    ? "Records that you joined today's class session for attendance. Use this when class starts or when your instructor expects a login check."
     : ($attendanceLoginWindow['reason'] !== ''
         ? $attendanceLoginWindow['reason']
         : 'Class login is only available during your scheduled class time.');
@@ -581,7 +646,7 @@ if ($attendanceHasLogoutToday) {
         <?php if ($classroom): ?>
             <div class="classroom-banner__meta">
                 <?= htmlspecialchars((string) $classroom['course_code']) ?> — <?= htmlspecialchars((string) $classroom['course_name']) ?>
-                <span class="classroom-banner__sep">·</span>
+                <span class="classroom-banner__sep">&middot;</span>
                 Instructor: <?= htmlspecialchars((string) $classroom['faculty_name']) ?>
             </div>
             <?php if ($classroomIsLive): ?>
@@ -626,6 +691,12 @@ if ($attendanceHasLogoutToday) {
         <?php elseif ($hasSyllabusCols && $classroom): ?>
             <span class="badge text-bg-secondary align-self-center">Syllabus pending</span>
         <?php endif; ?>
+        <button type="button" class="btn btn-outline-primary btn-sm px-3" data-offline-save="<?= (int) $classroomId ?>" data-offline-merge="1"<?= student_tooltip_attr('Saves this classroom faculty announcements and materials on your device so you can read them without internet.') ?>>
+            <i class="fa-solid fa-cloud-arrow-down me-1"></i>Save for offline
+        </button>
+        <a href="student_offline.php" class="btn btn-outline-secondary btn-sm px-3"<?= student_tooltip_attr('Opens your saved offline copy of faculty posts. Works even without internet after you save once.') ?>>
+            <i class="fa-solid fa-book-open me-1"></i>Read offline
+        </a>
         <a href="student_classrooms.php" class="btn btn-outline-secondary btn-sm px-3"<?= student_tooltip_attr('Returns to the list of all your enrolled classes. Use this when you are done with this class or want to switch subjects.') ?>>Back to My Classes</a>
         <?php if ($hasAttendanceTables): ?>
             <div class="border rounded-3 px-2 py-2 bg-light-subtle d-flex flex-column align-items-start gap-1 student-attendance-panel">
@@ -664,13 +735,9 @@ if ($attendanceHasLogoutToday) {
         <?php endif; ?>
     </div>
 </div>
+<p class="small text-muted mb-3" data-offline-status="auto"></p>
 
-<?php if ($flash): ?>
-    <div class="alert alert-info alert-dismissible fade show">
-        <?= htmlspecialchars($flash) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"<?= student_tooltip_attr('Dismisses this notice after you have read it.') ?>></button>
-    </div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <?php if ($missingTables !== []): ?>
     <div class="alert alert-warning">
@@ -773,7 +840,7 @@ if ($attendanceHasLogoutToday) {
                                             <div class="small <?= $message['mine'] ? 'text-white-50' : 'text-muted' ?> mb-1">
                                                 <?= $message['mine'] ? 'You' : htmlspecialchars($message['full_name']) ?>
                                                 <span class="badge bg-<?= htmlspecialchars(classroom_discussion_role_badge_class((string) $message['role'])) ?> ms-1"><?= htmlspecialchars(strtoupper((string) $message['role'])) ?></span>
-                                                · <?= htmlspecialchars(substr((string) $message['created_at'], 0, 16)) ?>
+                                                Â· <?= htmlspecialchars(substr((string) $message['created_at'], 0, 16)) ?>
                                             </div>
                                             <div><?= nl2br(htmlspecialchars((string) $message['body'])) ?></div>
                                         </div>
@@ -802,6 +869,9 @@ if ($attendanceHasLogoutToday) {
                     <?php endif; ?>
 
                     <?php foreach ($assessments as $assessment): ?>
+                        <?php
+                        $timeLimitMins = $hasTimeLimit ? (int) ($assessment['time_limit_minutes'] ?? 0) : 0;
+                        ?>
                         <div class="d-flex flex-wrap justify-content-between align-items-center border rounded p-3 mb-2" id="assessment-<?= (int) $assessment['id'] ?>">
                             <div class="min-w-0 me-3">
                                 <div>
@@ -809,6 +879,9 @@ if ($attendanceHasLogoutToday) {
                                     <span class="badge <?= classroom_assessment_type_badge_class((string) ($assessment['assessment_type'] ?? 'essay')) ?> ms-1">
                                         <?= htmlspecialchars(classroom_assessment_type_label((string) ($assessment['assessment_type'] ?? 'essay'))) ?>
                                     </span>
+                                    <?php if ($timeLimitMins > 0): ?>
+                                        <span class="badge bg-dark ms-1"><i class="fa-regular fa-clock me-1"></i><?= $timeLimitMins >= 60 ? ((int) floor($timeLimitMins / 60) . 'h ' . ($timeLimitMins % 60) . 'm') : ($timeLimitMins . ' min') ?></span>
+                                    <?php endif; ?>
                                 </div>
                                 <div class="small text-muted">
                                     <?= number_format((float) $assessment['total_points'], 2) ?> points
@@ -818,7 +891,13 @@ if ($attendanceHasLogoutToday) {
                                 </div>
                             </div>
                             <div class="d-flex align-items-center gap-2">
-                                <?php if ($assessment['score'] !== null): ?>
+                                <?php
+                                $listIntegrityLocked = ($hasIntegrityLocked && (int) ($assessment['integrity_locked'] ?? 0) === 1)
+                                    || stripos((string) ($assessment['feedback'] ?? ''), 'left or minimized the assessment window') !== false;
+                                ?>
+                                <?php if ($listIntegrityLocked): ?>
+                                    <span class="badge bg-danger">Locked</span>
+                                <?php elseif ($assessment['score'] !== null): ?>
                                     <span class="badge bg-success"><?= number_format((float) $assessment['score'], 2) ?> / <?= number_format((float) $assessment['total_points'], 2) ?></span>
                                 <?php elseif (!empty($assessment['submitted_at'])): ?>
                                     <span class="badge bg-info text-dark">Submitted</span>
@@ -838,17 +917,48 @@ if ($attendanceHasLogoutToday) {
     <?php
     $aid = (int) $assessment['id'];
     $questions = $assessmentQuestionMap[$aid] ?? [];
+    $timeLimitMins = $hasTimeLimit ? (int) ($assessment['time_limit_minutes'] ?? 0) : 0;
+    $alreadySubmitted = !empty($assessment['submitted_at']);
+    $integrityLocked = ($hasIntegrityLocked && (int) ($assessment['integrity_locked'] ?? 0) === 1)
+        || stripos((string) ($assessment['feedback'] ?? ''), 'left or minimized the assessment window') !== false;
+    $timedAttempt = $timeLimitMins > 0 && !$alreadySubmitted && !$integrityLocked && $questions !== [];
+    $timerLabel = '';
+    if ($timeLimitMins > 0) {
+        $th = intdiv($timeLimitMins, 60);
+        $tm = $timeLimitMins % 60;
+        if ($th > 0 && $tm > 0) {
+            $timerLabel = $th . ' hr ' . $tm . ' min';
+        } elseif ($th > 0) {
+            $timerLabel = $th . ' hr';
+        } else {
+            $timerLabel = $tm . ' min';
+        }
+    }
     ?>
-    <div class="modal fade" id="assessmentModal<?= $aid ?>" tabindex="-1" aria-labelledby="assessmentModalLabel<?= $aid ?>" aria-hidden="true">
+    <div class="modal fade assessment-take-modal" id="assessmentModal<?= $aid ?>" tabindex="-1" aria-labelledby="assessmentModalLabel<?= $aid ?>" aria-hidden="true"
+        data-bs-backdrop="static"
+        data-bs-keyboard="false"
+        data-assessment-id="<?= $aid ?>"
+        data-time-limit-minutes="<?= $timeLimitMins ?>"
+        data-student-id="<?= (int) $studentId ?>"
+        data-already-submitted="<?= $alreadySubmitted ? '1' : '0' ?>"
+        data-integrity-locked="<?= $integrityLocked ? '1' : '0' ?>"
+        data-timed-attempt="<?= $timedAttempt ? '1' : '0' ?>">
         <div class="modal-dialog modal-xl modal-fullscreen-sm-down modal-dialog-scrollable">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="assessmentModalLabel<?= $aid ?>">
+                <div class="modal-header flex-wrap gap-2">
+                    <h5 class="modal-title me-auto" id="assessmentModalLabel<?= $aid ?>">
                         <i class="fa-solid fa-file-pen me-2 text-primary"></i><?= htmlspecialchars((string) $assessment['title']) ?>
                         <span class="badge <?= classroom_assessment_type_badge_class((string) ($assessment['assessment_type'] ?? 'essay')) ?> ms-2 align-middle">
                             <?= htmlspecialchars(classroom_assessment_type_label((string) ($assessment['assessment_type'] ?? 'essay'))) ?>
                         </span>
                     </h5>
+                    <?php if ($timeLimitMins > 0): ?>
+                        <div class="assessment-digital-timer d-none" data-timer-display role="timer" aria-live="polite" aria-atomic="true">
+                            <span class="assessment-digital-timer__label">Time left</span>
+                            <span class="assessment-digital-timer__digits" data-timer-digits>00:00:00</span>
+                        </div>
+                    <?php endif; ?>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -857,6 +967,9 @@ if ($attendanceHasLogoutToday) {
                             <?= number_format((float) $assessment['total_points'], 2) ?> points
                             <?php if (!empty($assessment['due_at'])): ?>
                                 | Due: <?= htmlspecialchars((string) $assessment['due_at']) ?>
+                            <?php endif; ?>
+                            <?php if ($timeLimitMins > 0): ?>
+                                | <i class="fa-regular fa-clock"></i> Time limit: <?= htmlspecialchars($timerLabel) ?>
                             <?php endif; ?>
                         </div>
                         <?php if (trim((string) ($assessment['description'] ?? '')) !== ''): ?>
@@ -883,10 +996,48 @@ if ($attendanceHasLogoutToday) {
                         </div>
                     <?php endif; ?>
 
-                    <form method="post">
+                    <?php if ($integrityLocked): ?>
+                        <div class="alert alert-danger small">
+                            <i class="fa-solid fa-lock me-1"></i>
+                            This assessment is locked. You left or minimized the window (or switched tabs), so <strong>Update answer</strong> is disabled.
+                        </div>
+                    <?php elseif ($alreadySubmitted): ?>
+                        <div class="alert alert-secondary small">
+                            <i class="fa-solid fa-lock me-1"></i>
+                            This assessment is already submitted. <strong>Update answer</strong> is disabled.
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($timedAttempt): ?>
+                    <div class="assessment-timer-gate text-center py-4" data-timer-gate>
+                        <div class="assessment-digital-timer assessment-digital-timer--hero mb-3" aria-hidden="true">
+                            <span class="assessment-digital-timer__label">Time limit</span>
+                            <span class="assessment-digital-timer__digits"><?= sprintf('%02d:%02d:00', intdiv($timeLimitMins, 60), $timeLimitMins % 60) ?></span>
+                        </div>
+                        <p class="mb-3 text-muted">Once you start, the countdown begins. Your answers will be submitted automatically when time runs out.</p>
+                        <p class="mb-3 small text-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>Leaving, minimizing, closing, or switching to another tab/window will end this assessment immediately and disable further updates.</p>
+                        <button type="button" class="btn btn-primary btn-lg px-4" data-timer-start>
+                            <i class="fa-solid fa-play me-2"></i>Start assessment
+                        </button>
+                    </div>
+                    <?php endif; ?>
+
+                    <div class="assessment-timer-body" data-timer-body<?= $timedAttempt ? ' hidden' : '' ?>>
+                    <?php if (!$timedAttempt && !$integrityLocked && !$alreadySubmitted): ?>
+                        <div class="alert alert-warning small py-2">
+                            <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                            Stay on this assessment window. Leaving, minimizing, closing, or switching tabs/apps will end your assessment, submit your answers, and disable updates.
+                        </div>
+                    <?php endif; ?>
+                    <?php
+                    $answersReadOnly = $integrityLocked || $alreadySubmitted;
+                    $disabledAttr = $answersReadOnly ? ' disabled' : '';
+                    ?>
+                    <form method="post" data-assessment-form<?= $answersReadOnly ? ' onsubmit="return false;"' : '' ?>>
                         <input type="hidden" name="action" value="submit_assessment">
                         <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
                         <input type="hidden" name="assessment_id" value="<?= $aid ?>">
+                        <input type="hidden" name="integrity_violation" value="0" data-integrity-field>
                         <?php if ($questions === []): ?>
                             <div class="alert alert-warning small mb-2">This assessment has no questions yet.</div>
                         <?php endif; ?>
@@ -908,37 +1059,44 @@ if ($attendanceHasLogoutToday) {
                                     <?php foreach ($options as $oIdx => $opt): ?>
                                         <?php $val = (string) chr(65 + (int) $oIdx); ?>
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="answers[<?= $qid ?>]" id="qm<?= $aid ?>_<?= $qid ?>_<?= $val ?>" value="<?= htmlspecialchars($val) ?>" <?= $savedAnswer === $val ? 'checked' : '' ?> required>
+                                            <input class="form-check-input" type="radio" name="answers[<?= $qid ?>]" id="qm<?= $aid ?>_<?= $qid ?>_<?= $val ?>" value="<?= htmlspecialchars($val) ?>" <?= $savedAnswer === $val ? 'checked' : '' ?><?= $answersReadOnly ? '' : ' required' ?><?= $disabledAttr ?>>
                                             <label class="form-check-label" for="qm<?= $aid ?>_<?= $qid ?>_<?= $val ?>"><?= htmlspecialchars($val . '. ' . (string) $opt) ?></label>
                                         </div>
                                     <?php endforeach; ?>
                                 <?php elseif ($qType === 'true_false'): ?>
                                     <?php foreach (['true' => 'True', 'false' => 'False'] as $tfVal => $tfLabel): ?>
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="answers[<?= $qid ?>]" id="qm<?= $aid ?>_<?= $qid ?>_<?= $tfVal ?>" value="<?= $tfVal ?>" <?= strtolower($savedAnswer) === $tfVal ? 'checked' : '' ?> required>
+                                            <input class="form-check-input" type="radio" name="answers[<?= $qid ?>]" id="qm<?= $aid ?>_<?= $qid ?>_<?= $tfVal ?>" value="<?= $tfVal ?>" <?= strtolower($savedAnswer) === $tfVal ? 'checked' : '' ?><?= $answersReadOnly ? '' : ' required' ?><?= $disabledAttr ?>>
                                             <label class="form-check-label" for="qm<?= $aid ?>_<?= $qid ?>_<?= $tfVal ?>"><?= $tfLabel ?></label>
                                         </div>
                                     <?php endforeach; ?>
                                 <?php else: ?>
-                                    <textarea class="form-control mb-2" name="answers[<?= $qid ?>]" rows="<?= $qType === 'essay' ? 5 : 3 ?>" <?= (int) ($q['char_limit'] ?? 0) > 0 ? 'maxlength="' . (int) $q['char_limit'] . '"' : '' ?> required><?= htmlspecialchars($savedAnswer) ?></textarea>
+                                    <textarea class="form-control mb-2" name="answers[<?= $qid ?>]" rows="<?= $qType === 'essay' ? 5 : 3 ?>" <?= (int) ($q['char_limit'] ?? 0) > 0 ? 'maxlength="' . (int) $q['char_limit'] . '"' : '' ?><?= $answersReadOnly ? '' : ' required' ?><?= $disabledAttr ?>><?= htmlspecialchars($savedAnswer) ?></textarea>
                                     <?php if ((int) ($q['word_limit'] ?? 0) > 0): ?>
                                         <div class="small text-muted">Word limit: <?= (int) $q['word_limit'] ?></div>
                                     <?php endif; ?>
                                 <?php endif; ?>
                                 <?php if ((int) ($q['allow_steps'] ?? 0) === 1): ?>
                                     <label class="form-label small mt-2">Optional step-by-step work</label>
-                                    <textarea class="form-control" name="answer_steps[<?= $qid ?>]" rows="3" placeholder="Show your steps for teacher review"><?= htmlspecialchars($savedSteps) ?></textarea>
+                                    <textarea class="form-control" name="answer_steps[<?= $qid ?>]" rows="3" placeholder="Show your steps for teacher review"<?= $disabledAttr ?>><?= htmlspecialchars($savedSteps) ?></textarea>
                                 <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
-                        <?php if ($questions !== []): ?>
+                        <?php if ($questions !== [] && !$answersReadOnly): ?>
                         <div class="text-end">
-                            <button type="submit" class="btn btn-primary"<?= student_tooltip_attr('Sends your written answer to your instructor for grading. Use this when you are ready to submit or save changes to your response.') ?>>
-                                <i class="fa-solid fa-paper-plane me-1"></i><?= !empty($assessment['submitted_at']) ? 'Update answer' : 'Submit answer' ?>
+                            <button type="submit" class="btn btn-primary"<?= student_tooltip_attr('Sends your written answer to your instructor for grading. Use this when you are ready to submit.') ?>>
+                                <i class="fa-solid fa-paper-plane me-1"></i>Submit answer
+                            </button>
+                        </div>
+                        <?php elseif ($answersReadOnly): ?>
+                        <div class="text-end">
+                            <button type="button" class="btn btn-secondary" disabled aria-disabled="true">
+                                <i class="fa-solid fa-lock me-1"></i>Update answer disabled
                             </button>
                         </div>
                         <?php endif; ?>
                     </form>
+                    </div>
                 </div>
             </div>
         </div>
@@ -960,20 +1118,72 @@ document.getElementById('studentBannerFile')?.addEventListener('change', functio
 });
 </script>
 
-<script>
-(function () {
-    var hash = window.location.hash;
-    if (hash && hash.indexOf('#assessment-') === 0) {
-        var id = hash.substring('#assessment-'.length);
-        var modalEl = document.getElementById('assessmentModal' + id);
-        if (modalEl && typeof bootstrap !== 'undefined') {
-            var modal = new bootstrap.Modal(modalEl);
-            modal.show();
-        }
-    }
-})();
-</script>
+<style>
+.assessment-digital-timer {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(160deg, #0b1220 0%, #111827 100%);
+    color: #22d3ee;
+    border-radius: 0.65rem;
+    padding: 0.35rem 0.85rem;
+    min-width: 7.5rem;
+    box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.28), 0 6px 16px rgba(15, 23, 42, 0.18);
+}
+.assessment-digital-timer__label {
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    line-height: 1.2;
+}
+.assessment-digital-timer__digits {
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    line-height: 1.2;
+}
+.assessment-digital-timer.is-warning .assessment-digital-timer__digits {
+    color: #fbbf24;
+}
+.assessment-digital-timer.is-danger .assessment-digital-timer__digits {
+    color: #f87171;
+    animation: assessment-timer-pulse 1s ease-in-out infinite;
+}
+.assessment-digital-timer--hero {
+    margin: 0 auto;
+    padding: 0.75rem 1.25rem;
+    min-width: 10rem;
+}
+.assessment-digital-timer--hero .assessment-digital-timer__digits {
+    font-size: 2rem;
+}
+@keyframes assessment-timer-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
+</style>
 
+<div class="modal fade" id="assessmentIntegrityWarningModal" tabindex="-1" aria-labelledby="assessmentIntegrityWarningLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-warning">
+            <div class="modal-header bg-warning-subtle">
+                <h5 class="modal-title" id="assessmentIntegrityWarningLabel">
+                    <i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>Assessment ended
+                </h5>
+            </div>
+            <div class="modal-body">
+                Your assessment has ended because you left or minimized the assessment window, closed it, or switched to another tab or application.
+                <div class="mt-2 small text-muted">Your answers are being submitted now.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-warning" data-integrity-ack>OK</button>
+            </div>
+        </div>
+    </div>
+</div>
 <script>
 document.querySelectorAll('[data-wordpad]').forEach((shell) => {
     const fieldName = shell.getAttribute('data-wordpad-name') || 'body';
@@ -1038,4 +1248,15 @@ document.querySelectorAll('[data-wordpad]').forEach((shell) => {
 });
 </script>
 
-<?php require_once __DIR__ . '/includes/footer.php'; ?>
+<script src="assets/js/student_offline.js" defer></script>
+<?php
+if ($assessmentAlreadySubmittedWarning !== '') {
+    render_schedule_errors_warning_popup(
+        [$assessmentAlreadySubmittedWarning],
+        'Warning — Assessment already submitted',
+        'OK'
+    );
+}
+$footerScripts = ['assets/js/assessment_integrity.js?v=20260721c'];
+require_once __DIR__ . '/includes/footer.php';
+?>

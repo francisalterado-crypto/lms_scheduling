@@ -191,7 +191,7 @@ $pageTitle = 'GE Courses';
 require_once __DIR__ . '/includes/header.php';
 ?>
 <h1 class="h3 mb-4"><i class="fa-solid fa-book me-2 text-primary"></i>Gen Ed Courses</h1>
-<?php if ($flash): ?><div class="alert alert-info"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 <?php if (!$hasLabFlag || !$hasLectureUnits || !$hasLaboratoryUnits || !$hasIsGened): ?>
     <div class="alert alert-warning">Run <a href="upgrade_roles.php">upgrade_roles.php</a> to enable GE course features.</div>
 <?php endif; ?>

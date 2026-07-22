@@ -97,7 +97,7 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 <h1 class="h3 mb-4"><i class="fa-solid fa-user-gear me-2 text-primary"></i>GEN ED Admin Account</h1>
 <p class="small text-muted">Institution-wide General Education coordinator (GE schedule, GE faculty, GE courses).</p>
-<?php if ($flash): ?><div class="alert alert-info"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 <?php if (!$hasUserEmail): ?>
     <div class="alert alert-warning">The <code>users.email</code> column is missing. Run <a href="upgrade_roles.php">upgrade_roles.php</a> to enable email for credentials.</div>
 <?php endif; ?>

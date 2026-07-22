@@ -1646,3 +1646,50 @@ function render_schedule_errors_warning_popup(
     </script>
     <?php
 }
+
+/**
+ * Show a single notice as an Information popup modal.
+ */
+function render_information_popup(
+    string $message,
+    string $title = 'Information',
+    string $okLabel = 'OK'
+): void {
+    $message = trim($message);
+    if ($message === '') {
+        return;
+    }
+    $modalId = 'appInformationModal';
+    ?>
+    <div class="modal fade no-print" id="<?= htmlspecialchars($modalId) ?>" tabindex="-1" aria-labelledby="<?= htmlspecialchars($modalId) ?>Label" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-info">
+                <div class="modal-header bg-info-subtle">
+                    <h5 class="modal-title text-info-emphasis" id="<?= htmlspecialchars($modalId) ?>Label">
+                        <i class="fa-solid fa-circle-info me-2"></i><?= htmlspecialchars($title) ?>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <?= htmlspecialchars($message) ?>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-info" data-bs-dismiss="modal"><?= htmlspecialchars($okLabel) ?></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var modalEl = document.getElementById(<?= json_encode($modalId) ?>);
+        if (!modalEl) return;
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            return;
+        }
+        var body = modalEl.querySelector('.modal-body');
+        window.alert(<?= json_encode($title) ?> + ':\n\n' + (body ? body.textContent.trim() : ''));
+    });
+    </script>
+    <?php
+}

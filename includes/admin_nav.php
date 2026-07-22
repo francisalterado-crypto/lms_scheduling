@@ -318,6 +318,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'tooltip' => 'Create and manage online classrooms for your own teaching load.',
                 ],
                 [
+                    'file' => 'faculty_offline.php',
+                    'href' => 'faculty_offline.php',
+                    'icon' => 'fa-cloud-arrow-up',
+                    'label' => 'Offline uploads',
+                    'tooltip' => 'Queue course posts and file uploads while offline, then sync them automatically when you reconnect.',
+                ],
+                [
                     'file' => 'faculty_student_list.php',
                     'href' => 'faculty_student_list.php',
                     'icon' => 'fa-users',
@@ -370,6 +377,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'icon' => 'fa-chalkboard',
                     'label' => 'My classrooms',
                     'tooltip' => 'Create and manage online classrooms for your own teaching load.',
+                ],
+                [
+                    'file' => 'faculty_offline.php',
+                    'href' => 'faculty_offline.php',
+                    'icon' => 'fa-cloud-arrow-up',
+                    'label' => 'Offline uploads',
+                    'tooltip' => 'Queue course posts and file uploads while offline, then sync them automatically when you reconnect.',
                 ],
                 [
                     'file' => 'faculty_student_list.php',
@@ -427,6 +441,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'tooltip' => 'Create and manage online classrooms for your own teaching load.',
                 ],
                 [
+                    'file' => 'faculty_offline.php',
+                    'href' => 'faculty_offline.php',
+                    'icon' => 'fa-cloud-arrow-up',
+                    'label' => 'Offline uploads',
+                    'tooltip' => 'Queue course posts and file uploads while offline, then sync them automatically when you reconnect.',
+                ],
+                [
                     'file' => 'faculty_student_list.php',
                     'href' => 'faculty_student_list.php',
                     'icon' => 'fa-users',
@@ -460,6 +481,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                 [
                     'file' => 'faculty_classrooms.php', 'href' => 'faculty_classrooms.php', 'icon' => 'fa-chalkboard', 'label' => 'My classrooms',
                     'tooltip' => 'Opens your online class spaces for assigned courses. Use this to post content, run Meet, and track students.',
+                ],
+                [
+                    'file' => 'faculty_offline.php',
+                    'href' => 'faculty_offline.php',
+                    'icon' => 'fa-cloud-arrow-up',
+                    'label' => 'Offline uploads',
+                    'tooltip' => 'Queue course posts and file uploads while offline, then sync them automatically when you reconnect.',
                 ],
                 [
                     'file' => 'faculty_student_list.php', 'href' => 'faculty_student_list.php', 'icon' => 'fa-users', 'label' => 'Student list',
@@ -506,6 +534,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'icon' => 'fa-user-graduate',
                     'label' => 'My classes',
                     'tooltip' => 'Lists every online class you are enrolled in. Use this to open a class, join Meet, or enter a join code from your instructor.',
+                ],
+                [
+                    'file' => 'student_offline.php',
+                    'href' => 'student_offline.php',
+                    'icon' => 'fa-cloud-arrow-down',
+                    'label' => 'Offline reading',
+                    'tooltip' => 'Read saved faculty announcements and course materials without internet. Save while online first, then open this page offline.',
                 ],
                 [
                     'file' => 'student_edutools.php',

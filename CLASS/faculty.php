@@ -232,12 +232,7 @@ require_once __DIR__ . '/includes/header.php';
     <p class="text-muted">Program scope: <strong><?= htmlspecialchars($programScope) ?></strong></p>
 <?php endif; ?>
 
-<?php if ($flash): ?>
-    <div class="alert alert-info alert-dismissible fade show no-print">
-        <?= htmlspecialchars($flash) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"<?= app_tooltip_attr('Dismisses this notice after you have read it.') ?>></button>
-    </div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-white"><strong><?= $editRow ? 'Edit faculty' : 'Add faculty' ?></strong></div>

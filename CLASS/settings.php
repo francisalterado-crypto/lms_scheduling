@@ -55,7 +55,7 @@ $pageTitle = 'Settings';
 require_once __DIR__ . '/includes/header.php';
 ?>
 <h1 class="h3 mb-4"><i class="fa-solid fa-gear me-2 text-primary"></i>Account Settings</h1>
-<?php if ($flash): ?><div class="alert alert-info"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <div class="card shadow-sm" style="max-width: 640px;">
     <div class="card-header bg-white"><strong>Change Password</strong></div>

@@ -143,12 +143,7 @@ require_once __DIR__ . '/includes/header.php';
     <h1 class="h3 mb-0"><i class="fa-solid fa-user-graduate me-2 text-primary"></i>My Classes</h1>
 </div>
 
-<?php if ($flash): ?>
-    <div class="alert alert-info alert-dismissible fade show">
-        <?= htmlspecialchars($flash) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"<?= student_tooltip_attr('Dismisses this notice. Use this after you have read the message so it stays out of your way.') ?>></button>
-    </div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
 <?php if ($missingTables !== []): ?>
     <div class="alert alert-warning">

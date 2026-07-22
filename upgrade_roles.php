@@ -483,6 +483,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 description TEXT NULL,
                 total_points DECIMAL(8,2) NOT NULL DEFAULT 100.00,
                 due_at DATETIME NULL,
+                time_limit_minutes INT UNSIGNED NULL DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT fk_ca_classroom FOREIGN KEY (classroom_id) REFERENCES online_classrooms(id) ON DELETE CASCADE,
                 CONSTRAINT fk_ca_faculty FOREIGN KEY (faculty_id) REFERENCES faculty(id) ON DELETE CASCADE
@@ -501,6 +502,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         exec_safe($pdo, "ALTER TABLE classroom_assessments MODIFY COLUMN assessment_type ENUM('multiple_choice','true_false','essay','problem_solving') NOT NULL DEFAULT 'essay'");
         exec_safe($pdo, "ALTER TABLE classroom_assessments ADD COLUMN credited_week VARCHAR(100) NOT NULL DEFAULT ''");
+        exec_safe($pdo, "ALTER TABLE classroom_assessments ADD COLUMN time_limit_minutes INT UNSIGNED NULL DEFAULT NULL");
         exec_safe($pdo, "ALTER TABLE online_classrooms ADD COLUMN written_work_percentage DECIMAL(5,2) NOT NULL DEFAULT 50.00");
         exec_safe($pdo, "ALTER TABLE online_classrooms ADD COLUMN performance_task_percentage DECIMAL(5,2) NOT NULL DEFAULT 50.00");
         exec_safe(
@@ -536,6 +538,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         exec_safe($pdo, "ALTER TABLE classroom_submissions ADD COLUMN auto_total_score DECIMAL(8,2) NULL");
         exec_safe($pdo, "ALTER TABLE classroom_submissions ADD COLUMN requires_manual_grade TINYINT(1) NOT NULL DEFAULT 1");
+        exec_safe($pdo, "ALTER TABLE classroom_submissions ADD COLUMN integrity_locked TINYINT(1) NOT NULL DEFAULT 0");
         exec_safe(
             $pdo,
             "CREATE TABLE IF NOT EXISTS classroom_assessment_questions (

@@ -440,6 +440,7 @@ CREATE TABLE IF NOT EXISTS classroom_assessments (
   description TEXT NULL,
   total_points DECIMAL(8,2) NOT NULL DEFAULT 100.00,
   due_at DATETIME NULL,
+  time_limit_minutes INT UNSIGNED NULL DEFAULT NULL,
   credited_week VARCHAR(100) NOT NULL DEFAULT '',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_ca_classroom FOREIGN KEY (classroom_id) REFERENCES online_classrooms(id) ON DELETE CASCADE,

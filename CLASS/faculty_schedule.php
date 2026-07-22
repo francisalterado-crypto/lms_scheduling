@@ -308,9 +308,7 @@ require_once __DIR__ . '/includes/header.php';
     <a href="faculty_classrooms.php" class="btn btn-outline-primary btn-sm rounded-pill align-self-start"<?= app_tooltip_attr('Opens your online class list to manage content, students, and Meet links.') ?>><i class="fa-solid fa-chalkboard me-1" aria-hidden="true"></i>My classrooms</a>
 </header>
 
-<?php if ($flash): ?>
-    <div class="alert alert-success app-alert border-success-subtle" role="status"><?= htmlspecialchars($flash) ?></div>
-<?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 <?php if (!$hasOnlineUrl): ?>
     <div class="alert alert-warning app-alert">Online class links require a database update. Ask your administrator to run <a href="upgrade_roles.php">upgrade_roles.php</a> once.</div>
 <?php endif; ?>

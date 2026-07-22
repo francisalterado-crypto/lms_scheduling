@@ -186,7 +186,7 @@ require_once __DIR__ . '/includes/header.php';
 <h1 class="h3 mb-4"><i class="fa-solid fa-graduation-cap me-2 text-primary"></i>General Education Program Chair</h1>
 <p class="text-muted">College: <strong><?= htmlspecialchars($collegeName) ?></strong></p>
 <p class="small text-muted">Creates a <strong>program chair</strong> account scoped to the <strong><?= htmlspecialchars(GE_PROGRAM_CHAIR_LABEL) ?></strong> program (scheduling, courses, faculty for your college). This is separate from the institution-wide <strong>GEN ED</strong> coordinator account managed under <strong>Admin → GEN ED</strong>.</p>
-<?php if ($flash): ?><div class="alert alert-info"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 <?php if (!$hasAssignedProgram || !$hasProgramsTable): ?>
     <div class="alert alert-warning">Program Chair accounts require the upgraded schema. Run <a href="upgrade_roles.php">upgrade_roles.php</a> first.</div>
 <?php else: ?>
