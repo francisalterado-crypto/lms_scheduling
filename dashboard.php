@@ -61,20 +61,13 @@ if ($isAdmin) {
     $st = db()->prepare($scheduleSql);
     $st->execute($params);
     $totalSchedules = (int) $st->fetchColumn();
-    if ($role === 'program_chair' && db_table_exists('schedule_change_requests')) {
-        $st = db()->prepare(
-            "SELECT COUNT(*) FROM schedule_change_requests scr
-             INNER JOIN schedules s ON s.id = scr.schedule_id
-             INNER JOIN courses c ON c.id = s.course_id
-             WHERE s.college_id=? AND c.department=? AND scr.status='pending'"
-        );
-        $st->execute([$collegeId, $programScope]);
-        $openConflicts = (int) $st->fetchColumn();
-    } elseif ($role === 'program_chair') {
+    if ($role === 'program_chair') {
         $openConflicts = 0;
     } elseif (db_table_exists('schedule_change_requests')) {
         $st = db()->prepare(
-            "SELECT COUNT(*) FROM schedule_change_requests scr INNER JOIN schedules s ON s.id = scr.schedule_id WHERE s.college_id=? AND scr.status='pending'"
+            "SELECT COUNT(*) FROM schedule_change_requests scr
+             INNER JOIN schedules s ON s.id = scr.schedule_id
+             WHERE s.college_id=? AND scr.status='pending'"
         );
         $st->execute([$collegeId]);
         $openConflicts = (int) $st->fetchColumn();

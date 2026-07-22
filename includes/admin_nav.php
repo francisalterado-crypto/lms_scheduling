@@ -303,6 +303,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'tooltip' => 'Maintain program names and status under your college. Use this when curricula or program codes change.',
                 ],
                 [
+                    'file' => 'dean_student_registrations.php',
+                    'href' => 'dean_student_registrations.php',
+                    'icon' => 'fa-user-check',
+                    'label' => 'Registration approvals',
+                    'tooltip' => 'Review and approve student self-registration requests for any program in your college.',
+                ],
+                [
                     'file' => 'courses.php', 'href' => 'courses.php', 'icon' => 'fa-book', 'label' => 'Courses',
                     'tooltip' => 'Create and edit courses your college offers. Use this before building schedules each term.',
                 ],
@@ -330,6 +337,10 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'icon' => 'fa-users',
                     'label' => 'Student list',
                     'tooltip' => 'Lists your courses and registered students with present and absent attendance totals.',
+                ],
+                [
+                    'file' => 'faculty_schedule.php', 'href' => 'faculty_schedule.php', 'icon' => 'fa-calendar-check', 'label' => 'My schedule',
+                    'tooltip' => 'Shows your teaching timetable and online links. Use this to confirm times, rooms, and live session links.',
                 ],
             ],
             'Scheduling' => [
@@ -363,13 +374,6 @@ function role_nav_sections(string $role, int $messagingUnread): array
             'Academic' => [
                 ['file' => 'faculty.php', 'href' => 'faculty.php', 'icon' => 'fa-chalkboard-user', 'label' => 'Faculty'],
                 ['file' => 'program_chair_students.php', 'href' => 'program_chair_students.php', 'icon' => 'fa-user-graduate', 'label' => 'Students'],
-                [
-                    'file' => 'program_chair_student_registrations.php',
-                    'href' => 'program_chair_student_registrations.php',
-                    'icon' => 'fa-user-check',
-                    'label' => 'Registration approvals',
-                    'tooltip' => 'Review and approve student self-registration requests for your program.',
-                ],
                 ['file' => 'courses.php', 'href' => 'courses.php', 'icon' => 'fa-book', 'label' => 'Courses'],
                 [
                     'file' => 'faculty_classrooms.php',
@@ -391,6 +395,10 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'icon' => 'fa-users',
                     'label' => 'Student list',
                     'tooltip' => 'Lists your courses and registered students with present and absent attendance totals.',
+                ],
+                [
+                    'file' => 'faculty_schedule.php', 'href' => 'faculty_schedule.php', 'icon' => 'fa-calendar-check', 'label' => 'My schedule',
+                    'tooltip' => 'Shows your teaching timetable and online links. Use this to confirm times, rooms, and live session links.',
                 ],
                 [
                     'file' => 'faculty_edutools.php', 'href' => 'faculty_edutools.php', 'icon' => 'fa-wand-magic-sparkles', 'label' => 'EduTools',

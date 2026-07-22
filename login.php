@@ -131,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $regProgramName,
                 $regYearLevel
             );
-            $success = 'Registration submitted successfully. Your Program Chair will review your request. Once approved, you will receive an email with your username and temporary password.';
+            $success = 'Registration submitted successfully. Your Dean will review your request. Once approved, you will receive an email with your username and temporary password.';
             $viewMode = 'login';
             $usernameValue = '';
             $regFullName = '';
@@ -649,7 +649,7 @@ foreach ($sealCandidates as $sealPath) {
     <div class="form-panel">
         <div class="welcome-header">
             <h3 id="authHeading"><?= $viewMode === 'register' ? 'Create student account' : 'Welcome back' ?></h3>
-            <p id="authSubtitle"><?= htmlspecialchars($viewMode === 'register' ? 'Register under your college and program. Your Program Chair must approve before you can sign in. You will receive an email with your temporary password once approved.' : $roleSubtitle) ?></p>
+            <p id="authSubtitle"><?= htmlspecialchars($viewMode === 'register' ? 'Register under your college and program. Your Dean must approve before you can sign in. You will receive an email with your temporary password once approved.' : $roleSubtitle) ?></p>
         </div>
 
         <div class="role-section-label">Sign in as</div>
@@ -763,7 +763,7 @@ foreach ($sealCandidates as $sealPath) {
             <button type="submit" class="login-btn"<?= !$registrationReady ? ' disabled' : '' ?>>
                 <i class="fas fa-user-plus"></i> Submit registration
             </button>
-            <p class="register-note">Your Program Chair will review your registration before you can sign in.</p>
+            <p class="register-note">Your Dean will review your registration before you can sign in.</p>
         </form>
 
         <p class="portal-footer">Western Philippines University · WPU SABLA ePortal</p>
@@ -803,7 +803,7 @@ foreach ($sealCandidates as $sealPath) {
         registerForm.classList.toggle('show', isRegister);
         authHeading.textContent = isRegister ? 'Create student account' : 'Welcome back';
         authSubtitle.textContent = isRegister
-            ? 'Register under your college and program. Your Program Chair must approve before you can sign in. You will receive an email with your temporary password once approved.'
+            ? 'Register under your college and program. Your Dean must approve before you can sign in. You will receive an email with your temporary password once approved.'
             : (roleSubtitles[selectedRole] || '');
         document.querySelectorAll('.auth-switch-btn').forEach(function (btn) {
             btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);

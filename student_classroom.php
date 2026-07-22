@@ -4,8 +4,11 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/classroom_discussion_helpers.php';
+require_once __DIR__ . '/includes/assessment_retake_helpers.php';
 
 require_role(['student']);
+
+assessment_retake_ensure_table();
 
 $studentId = isset($_SESSION['student_id']) ? (int) $_SESSION['student_id'] : 0;
 $userId = (int) ($_SESSION['user_id'] ?? 0);
@@ -283,6 +286,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             } else {
                 $_SESSION['flash'] = 'Assessment submitted successfully. Update answer is now disabled.';
             }
+        } elseif ($action === 'request_retake') {
+            $assessmentId = (int) ($_POST['assessment_id'] ?? 0);
+            $reason = trim((string) ($_POST['reason'] ?? ''));
+            if ($assessmentId < 1) {
+                throw new RuntimeException('Invalid assessment.');
+            }
+
+            $st = db()->prepare(
+                'SELECT id FROM classroom_assessments WHERE id = ? AND classroom_id = ? LIMIT 1'
+            );
+            $st->execute([$assessmentId, $classroomId]);
+            if (!$st->fetchColumn()) {
+                throw new RuntimeException('Assessment not found.');
+            }
+
+            create_assessment_retake_request($classroomId, $assessmentId, $studentId, $reason);
+            $_SESSION['flash'] = 'Your request for another attempt has been sent to your instructor for approval.';
         } elseif ($action === 'attendance_login' || $action === 'attendance_logout') {
             if (!$hasAttendanceTables) {
                 throw new RuntimeException('Attendance module needs a database update. Run upgrade_roles.php once.');
@@ -481,6 +501,7 @@ $attendanceTodayLoginAt = null;
 $attendanceTodayLogoutAt = null;
 $assessmentQuestionMap = [];
 $submissionQuestionMap = [];
+$retakeRequestMap = [];
 
 if ($missingTables === []) {
     $st = db()->prepare(
@@ -551,6 +572,13 @@ if ($missingTables === []) {
         $sst->execute(array_merge([$studentId], $assessmentIds));
         foreach ($sst->fetchAll() as $row) {
             $submissionQuestionMap[(int) $row['assessment_id']][(int) $row['question_id']] = $row;
+        }
+
+        if (assessment_retake_table_ready()) {
+            $retakeRequestMap = assessment_retake_requests_for_student(
+                $studentId,
+                array_map(static fn (array $r): int => (int) $r['id'], $assessments)
+            );
         }
     }
 
@@ -894,9 +922,18 @@ if ($attendanceHasLogoutToday) {
                                 <?php
                                 $listIntegrityLocked = ($hasIntegrityLocked && (int) ($assessment['integrity_locked'] ?? 0) === 1)
                                     || stripos((string) ($assessment['feedback'] ?? ''), 'left or minimized the assessment window') !== false;
+                                $listRetakeReq = $retakeRequestMap[(string) (int) $assessment['id']] ?? null;
+                                $listRetakeStatus = is_array($listRetakeReq) ? (string) ($listRetakeReq['status'] ?? '') : '';
                                 ?>
                                 <?php if ($listIntegrityLocked): ?>
                                     <span class="badge bg-danger">Locked</span>
+                                    <?php if ($listRetakeStatus === 'pending'): ?>
+                                        <span class="badge bg-warning text-dark">Retake pending</span>
+                                    <?php elseif ($listRetakeStatus === 'rejected'): ?>
+                                        <span class="badge bg-secondary">Retake denied</span>
+                                    <?php endif; ?>
+                                <?php elseif ($listRetakeStatus === 'approved' && empty($assessment['submitted_at'])): ?>
+                                    <span class="badge bg-info text-dark">Retake approved</span>
                                 <?php elseif ($assessment['score'] !== null): ?>
                                     <span class="badge bg-success"><?= number_format((float) $assessment['score'], 2) ?> / <?= number_format((float) $assessment['total_points'], 2) ?></span>
                                 <?php elseif (!empty($assessment['submitted_at'])): ?>
@@ -921,6 +958,10 @@ if ($attendanceHasLogoutToday) {
     $alreadySubmitted = !empty($assessment['submitted_at']);
     $integrityLocked = ($hasIntegrityLocked && (int) ($assessment['integrity_locked'] ?? 0) === 1)
         || stripos((string) ($assessment['feedback'] ?? ''), 'left or minimized the assessment window') !== false;
+    $retakeReq = $retakeRequestMap[(string) $aid] ?? null;
+    $retakeStatus = is_array($retakeReq) ? (string) ($retakeReq['status'] ?? '') : '';
+    $retakeRemarks = is_array($retakeReq) ? trim((string) ($retakeReq['faculty_remarks'] ?? '')) : '';
+    $clearTimer = $retakeStatus === 'approved' && !$alreadySubmitted;
     $timedAttempt = $timeLimitMins > 0 && !$alreadySubmitted && !$integrityLocked && $questions !== [];
     $timerLabel = '';
     if ($timeLimitMins > 0) {
@@ -943,6 +984,7 @@ if ($attendanceHasLogoutToday) {
         data-student-id="<?= (int) $studentId ?>"
         data-already-submitted="<?= $alreadySubmitted ? '1' : '0' ?>"
         data-integrity-locked="<?= $integrityLocked ? '1' : '0' ?>"
+        data-clear-timer="<?= $clearTimer ? '1' : '0' ?>"
         data-timed-attempt="<?= $timedAttempt ? '1' : '0' ?>">
         <div class="modal-dialog modal-xl modal-fullscreen-sm-down modal-dialog-scrollable">
             <div class="modal-content">
@@ -1000,6 +1042,58 @@ if ($attendanceHasLogoutToday) {
                         <div class="alert alert-danger small">
                             <i class="fa-solid fa-lock me-1"></i>
                             This assessment is locked. You left or minimized the window (or switched tabs), so <strong>Update answer</strong> is disabled.
+                        </div>
+                        <?php if ($retakeStatus === 'pending'): ?>
+                            <div class="alert alert-warning small">
+                                <i class="fa-solid fa-hourglass-half me-1"></i>
+                                Your request for another attempt is <strong>pending</strong> faculty approval.
+                            </div>
+                        <?php elseif ($retakeStatus === 'rejected'): ?>
+                            <div class="alert alert-secondary small">
+                                <i class="fa-solid fa-circle-xmark me-1"></i>
+                                Your retake request was <strong>denied</strong>.
+                                <?php if ($retakeRemarks !== ''): ?>
+                                    <br>Instructor note: <?= htmlspecialchars($retakeRemarks) ?>
+                                <?php endif; ?>
+                            </div>
+                            <div class="border rounded p-3 mb-3 bg-light">
+                                <h6 class="mb-2"><i class="fa-solid fa-rotate-left me-1"></i>Request another attempt</h6>
+                                <p class="small text-muted mb-2">You may submit a new request with additional explanation.</p>
+                                <form method="post">
+                                    <input type="hidden" name="action" value="request_retake">
+                                    <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
+                                    <input type="hidden" name="assessment_id" value="<?= $aid ?>">
+                                    <label class="form-label small" for="retakeReason<?= $aid ?>">Your explanation</label>
+                                    <textarea class="form-control form-control-sm mb-2" name="reason" id="retakeReason<?= $aid ?>" rows="3" maxlength="2000" required placeholder="Briefly explain what happened and why you are requesting another chance…"></textarea>
+                                    <div class="text-end">
+                                        <button type="submit" class="btn btn-outline-primary btn-sm">
+                                            <i class="fa-solid fa-paper-plane me-1"></i>Send new request
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        <?php else: ?>
+                            <div class="border rounded p-3 mb-3 bg-light">
+                                <h6 class="mb-2"><i class="fa-solid fa-rotate-left me-1"></i>Request another attempt</h6>
+                                <p class="small text-muted mb-2">Explain why you believe you should be allowed to retake this assessment. Your instructor will review your request.</p>
+                                <form method="post">
+                                    <input type="hidden" name="action" value="request_retake">
+                                    <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
+                                    <input type="hidden" name="assessment_id" value="<?= $aid ?>">
+                                    <label class="form-label small" for="retakeReason<?= $aid ?>">Your explanation</label>
+                                    <textarea class="form-control form-control-sm mb-2" name="reason" id="retakeReason<?= $aid ?>" rows="3" maxlength="2000" required placeholder="Briefly explain what happened and why you are requesting another chance…"></textarea>
+                                    <div class="text-end">
+                                        <button type="submit" class="btn btn-outline-primary btn-sm">
+                                            <i class="fa-solid fa-paper-plane me-1"></i>Send request to instructor
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        <?php endif; ?>
+                    <?php elseif ($retakeStatus === 'approved' && !$alreadySubmitted): ?>
+                        <div class="alert alert-success small">
+                            <i class="fa-solid fa-check-circle me-1"></i>
+                            Your instructor approved another attempt. You may take this assessment again.
                         </div>
                     <?php elseif ($alreadySubmitted): ?>
                         <div class="alert alert-secondary small">

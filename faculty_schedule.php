@@ -4,12 +4,20 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-require_role(['faculty']);
+require_role(['faculty', 'program_chair', 'dean', 'gened']);
+$userRole = (string) ($_SESSION['role'] ?? '');
+$scheduleReviewer = schedule_change_reviewer_label($userRole);
 $facultyId = isset($_SESSION['faculty_id']) ? (int) $_SESSION['faculty_id'] : 0;
-$userId = (int) $_SESSION['user_id'];
+$userId = (int) ($_SESSION['user_id'] ?? 0);
 if ($facultyId < 1) {
     $facultyId = resolve_faculty_id_for_user($userId) ?? 0;
     $_SESSION['faculty_id'] = $facultyId > 0 ? $facultyId : null;
+}
+if ($facultyId < 1 && in_array($_SESSION['role'] ?? '', ['program_chair', 'dean', 'gened'], true)) {
+    $facultyId = ensure_faculty_profile_for_teaching_role($userId) ?? 0;
+    if ($facultyId > 0) {
+        $_SESSION['faculty_id'] = $facultyId;
+    }
 }
 if ($facultyId < 1) {
     exit('Faculty profile not linked to this account. Ask your dean to create/link your faculty profile.');
@@ -246,8 +254,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                      VALUES (?,?,?,?,?,?,?,?)'
                                 )->execute([$userId, $scheduleId, 'makeup', $message, $day, $startTime, $endTime, $roomId]);
                                 $_SESSION['flash'] = $conflictMsgs !== []
-                                    ? 'Makeup request submitted with known conflicts. Your dean will review them.'
-                                    : 'Makeup class request submitted to your dean.';
+                                    ? 'Makeup request submitted with known conflicts. ' . ucfirst($scheduleReviewer) . ' will review them.'
+                                    : 'Makeup class request submitted to ' . $scheduleReviewer . '.';
                             }
                         }
                     } catch (Throwable $e) {
@@ -267,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     db()->prepare('INSERT INTO schedule_change_requests (faculty_user_id, schedule_id, message) VALUES (?,?,?)')
                         ->execute([$userId, $scheduleId, $message]);
                 }
-                $_SESSION['flash'] = 'Change request submitted to your dean.';
+                $_SESSION['flash'] = 'Change request submitted to ' . $scheduleReviewer . '.';
             }
         }
         header('Location: faculty_schedule.php');
@@ -409,7 +417,7 @@ require_once __DIR__ . '/includes/header.php';
                             <input type="hidden" name="request_type" value="change">
                             <label class="visually-hidden" for="sched-req-<?= (int) $r['id'] ?>">Reason for schedule change</label>
                             <input id="sched-req-<?= (int) $r['id'] ?>" type="text" name="message" class="form-control form-control-sm" placeholder="Reason for change" required autocomplete="off">
-                            <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill align-self-start"<?= app_tooltip_attr('Sends a schedule change request to your dean with the reason you typed.') ?>>Request change</button>
+                            <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill align-self-start"<?= app_tooltip_attr('Sends a schedule change request to ' . $scheduleReviewer . ' with the reason you typed.') ?>>Request change</button>
                         </form>
                         <?php if ($hasMakeupSupport && (int) ($r['is_makeup'] ?? 0) !== 1): ?>
                             <form method="post" class="d-flex flex-column gap-2 border-top pt-2">
@@ -441,7 +449,7 @@ require_once __DIR__ . '/includes/header.php';
                                 <?php endif; ?>
                                 <label class="visually-hidden" for="makeup-msg-<?= (int) $r['id'] ?>">Makeup reason</label>
                                 <input id="makeup-msg-<?= (int) $r['id'] ?>" type="text" name="message" class="form-control form-control-sm" placeholder="Reason for makeup" required autocomplete="off">
-                                <button type="submit" class="btn btn-sm btn-warning rounded-pill align-self-start"<?= $makeupRooms === [] ? ' disabled' : '' ?><?= app_tooltip_attr('Requests a temporary makeup slot. Your dean reviews it and, if approved, adds it to the weekly schedule. Delete the makeup row after the class is held.') ?>>Request makeup</button>
+                                <button type="submit" class="btn btn-sm btn-warning rounded-pill align-self-start"<?= $makeupRooms === [] ? ' disabled' : '' ?><?= app_tooltip_attr('Requests a temporary makeup slot. ' . ucfirst($scheduleReviewer) . ' reviews it and, if approved, adds it to the weekly schedule. Delete the makeup row after the class is held.') ?>>Request makeup</button>
                             </form>
                         <?php endif; ?>
                     </td>

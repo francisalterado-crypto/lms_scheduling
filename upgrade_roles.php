@@ -541,6 +541,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exec_safe($pdo, "ALTER TABLE classroom_submissions ADD COLUMN integrity_locked TINYINT(1) NOT NULL DEFAULT 0");
         exec_safe(
             $pdo,
+            "CREATE TABLE IF NOT EXISTS assessment_retake_requests (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                classroom_id INT NOT NULL,
+                assessment_id INT NOT NULL,
+                student_id INT NOT NULL,
+                submission_id INT NULL,
+                reason TEXT NOT NULL,
+                status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+                reviewed_by_user_id INT NULL,
+                reviewed_at DATETIME NULL,
+                faculty_remarks VARCHAR(500) NOT NULL DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_arr_pending_classroom (status, classroom_id),
+                INDEX idx_arr_student_assessment (student_id, assessment_id),
+                CONSTRAINT fk_arr_classroom FOREIGN KEY (classroom_id) REFERENCES online_classrooms(id) ON DELETE CASCADE,
+                CONSTRAINT fk_arr_assessment FOREIGN KEY (assessment_id) REFERENCES classroom_assessments(id) ON DELETE CASCADE,
+                CONSTRAINT fk_arr_student FOREIGN KEY (student_id) REFERENCES classroom_students(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+        exec_safe(
+            $pdo,
             "CREATE TABLE IF NOT EXISTS classroom_assessment_questions (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 assessment_id INT NOT NULL,

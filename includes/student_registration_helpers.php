@@ -221,7 +221,7 @@ function registration_status_message_for_username(string $username): ?string
     }
     $status = (string) ($row['status'] ?? '');
     if ($status === 'pending') {
-        return 'Your registration is pending Program Chair approval. You will receive an email with your sign-in credentials once approved.';
+        return 'Your registration is pending approval by your Dean. You will receive an email with your sign-in credentials once approved.';
     }
     if ($status === 'rejected') {
         $reason = trim((string) ($row['rejection_reason'] ?? ''));
@@ -311,9 +311,12 @@ function create_student_account(
 }
 
 /**
+ * Load a registration request scoped to a college, optionally to one program.
+ * Pass null for $programScope to allow any program in the college (dean jurisdiction).
+ *
  * @return array<string, mixed>
  */
-function load_student_registration_request_for_chair(int $requestId, int $collegeId, string $programScope): array
+function load_student_registration_request_for_reviewer(int $requestId, int $collegeId, ?string $programScope): array
 {
     $st = db()->prepare('SELECT * FROM student_registration_requests WHERE id = ?');
     $st->execute([$requestId]);
@@ -321,12 +324,22 @@ function load_student_registration_request_for_chair(int $requestId, int $colleg
     if (!$req) {
         throw new RuntimeException('Registration request not found.');
     }
-    if ((int) ($req['college_id'] ?? 0) !== $collegeId
-        || trim((string) ($req['program_name'] ?? '')) !== trim($programScope)) {
-        throw new RuntimeException('This registration belongs to another college or program.');
+    if ((int) ($req['college_id'] ?? 0) !== $collegeId) {
+        throw new RuntimeException('This registration belongs to another college.');
+    }
+    if ($programScope !== null && trim((string) ($req['program_name'] ?? '')) !== trim($programScope)) {
+        throw new RuntimeException('This registration belongs to another program.');
     }
 
     return $req;
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function load_student_registration_request_for_chair(int $requestId, int $collegeId, string $programScope): array
+{
+    return load_student_registration_request_for_reviewer($requestId, $collegeId, $programScope);
 }
 
 function student_user_exists(string $username): bool
@@ -340,13 +353,13 @@ function student_user_exists(string $username): bool
 /**
  * @return array{email: string, mail_sent: bool, user_id?: int, already_approved?: bool}
  */
-function approve_student_registration_request(int $requestId, int $chairUserId, int $collegeId, string $programScope): array
+function approve_student_registration_request(int $requestId, int $reviewerUserId, int $collegeId, ?string $programScope): array
 {
     if (!student_registration_table_ready()) {
         throw new RuntimeException('Registration requests are not available.');
     }
 
-    $req = load_student_registration_request_for_chair($requestId, $collegeId, $programScope);
+    $req = load_student_registration_request_for_reviewer($requestId, $collegeId, $programScope);
     $status = (string) ($req['status'] ?? '');
     $username = (string) $req['username'];
     $email = trim((string) ($req['email'] ?? ''));
@@ -391,7 +404,7 @@ function approve_student_registration_request(int $requestId, int $chairUserId, 
             "UPDATE student_registration_requests
              SET status = 'approved', reviewed_by_user_id = ?, reviewed_at = NOW()
              WHERE id = ?"
-        )->execute([$chairUserId, $requestId]);
+        )->execute([$reviewerUserId, $requestId]);
     }
 
     $mailSent = false;
@@ -418,16 +431,16 @@ function approve_student_registration_request(int $requestId, int $chairUserId, 
 
 function reject_student_registration_request(
     int $requestId,
-    int $chairUserId,
+    int $reviewerUserId,
     int $collegeId,
-    string $programScope,
+    ?string $programScope,
     string $reason = ''
 ): void {
     if (!student_registration_table_ready()) {
         throw new RuntimeException('Registration requests are not available.');
     }
 
-    $req = load_student_registration_request_for_chair($requestId, $collegeId, $programScope);
+    $req = load_student_registration_request_for_reviewer($requestId, $collegeId, $programScope);
     if ((string) ($req['status'] ?? '') === 'rejected') {
         throw new RuntimeException('This registration was already rejected.');
     }
@@ -439,7 +452,30 @@ function reject_student_registration_request(
         "UPDATE student_registration_requests
          SET status = 'rejected', reviewed_by_user_id = ?, reviewed_at = NOW(), rejection_reason = ?
          WHERE id = ?"
-    )->execute([$chairUserId, trim($reason), $requestId]);
+    )->execute([$reviewerUserId, trim($reason), $requestId]);
+}
+
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function pending_registrations_for_college(int $collegeId, ?string $programScope = null): array
+{
+    if (!student_registration_table_ready()) {
+        return [];
+    }
+    $sql = "SELECT r.*, c.college_name
+         FROM student_registration_requests r
+         INNER JOIN colleges c ON c.id = r.college_id
+         WHERE r.status = 'pending' AND r.college_id = ?";
+    $params = [$collegeId];
+    if ($programScope !== null) {
+        $sql .= ' AND r.program_name = ?';
+        $params[] = $programScope;
+    }
+    $sql .= ' ORDER BY r.program_name ASC, r.created_at ASC';
+    $st = db()->prepare($sql);
+    $st->execute($params);
+    return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
 }
 
 /**
@@ -447,29 +483,27 @@ function reject_student_registration_request(
  */
 function pending_registrations_for_program(int $collegeId, string $programScope): array
 {
-    if (!student_registration_table_ready()) {
-        return [];
-    }
-    $st = db()->prepare(
-        "SELECT r.*, c.college_name
-         FROM student_registration_requests r
-         INNER JOIN colleges c ON c.id = r.college_id
-         WHERE r.status = 'pending' AND r.college_id = ? AND r.program_name = ?
-         ORDER BY r.created_at ASC"
-    );
-    $st->execute([$collegeId, $programScope]);
-    return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    return pending_registrations_for_college($collegeId, $programScope);
 }
 
-function count_pending_registrations_for_program(int $collegeId, string $programScope): int
+function count_pending_registrations_for_college(int $collegeId, ?string $programScope = null): int
 {
     if (!student_registration_table_ready()) {
         return 0;
     }
-    $st = db()->prepare(
-        "SELECT COUNT(*) FROM student_registration_requests
-         WHERE status = 'pending' AND college_id = ? AND program_name = ?"
-    );
-    $st->execute([$collegeId, $programScope]);
+    $sql = "SELECT COUNT(*) FROM student_registration_requests
+         WHERE status = 'pending' AND college_id = ?";
+    $params = [$collegeId];
+    if ($programScope !== null) {
+        $sql .= ' AND program_name = ?';
+        $params[] = $programScope;
+    }
+    $st = db()->prepare($sql);
+    $st->execute($params);
     return (int) $st->fetchColumn();
+}
+
+function count_pending_registrations_for_program(int $collegeId, string $programScope): int
+{
+    return count_pending_registrations_for_college($collegeId, $programScope);
 }

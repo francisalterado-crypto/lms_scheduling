@@ -122,7 +122,14 @@ if ($role === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['
     exit;
 }
 
-if (($role === 'dean' || $role === 'program_chair') && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['scr_id'])) {
+if ($role === 'program_chair' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['scr_id'])) {
+    $_SESSION['flash'] = 'Makeup class requests are reviewed by the dean.';
+    $_SESSION['flash_type'] = 'danger';
+    header('Location: conflicts.php');
+    exit;
+}
+
+if (($role === 'dean' || $role === 'admin') && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['scr_id'])) {
     $sid = (int) $_POST['scr_id'];
     $action = (string) ($_POST['action'] ?? '');
     $remarks = trim((string) ($_POST['remarks'] ?? ''));
@@ -137,15 +144,21 @@ if (($role === 'dean' || $role === 'program_chair') && $_SERVER['REQUEST_METHOD'
         exit;
     }
     $hasMakeupSupport = ensure_makeup_schedule_support();
-    $sqlFetchScr = 'SELECT scr.*
-         FROM schedule_change_requests scr
-         INNER JOIN schedules s ON s.id = scr.schedule_id
-         INNER JOIN courses c ON c.id = s.course_id
-         WHERE scr.id=? AND scr.status="pending" AND s.college_id=?';
-    $parFetchScr = [$sid, $collegeId];
-    if ($programScope !== null) {
-        $sqlFetchScr .= ' AND c.department=?';
-        $parFetchScr[] = $programScope;
+    if ($role === 'admin') {
+        $sqlFetchScr = 'SELECT scr.*
+             FROM schedule_change_requests scr
+             INNER JOIN schedules s ON s.id = scr.schedule_id
+             INNER JOIN users u ON u.id = scr.faculty_user_id
+             WHERE scr.id=? AND scr.status="pending" AND u.role="dean"';
+        $parFetchScr = [$sid];
+    } else {
+        $sqlFetchScr = 'SELECT scr.*
+             FROM schedule_change_requests scr
+             INNER JOIN schedules s ON s.id = scr.schedule_id
+             INNER JOIN courses c ON c.id = s.course_id
+             INNER JOIN users u ON u.id = scr.faculty_user_id
+             WHERE scr.id=? AND scr.status="pending" AND s.college_id=? AND u.role <> "dean"';
+        $parFetchScr = [$sid, $collegeId];
     }
     $sqlFetchScr .= ' LIMIT 1';
     $stScrB = db()->prepare($sqlFetchScr);
@@ -206,15 +219,21 @@ if (($role === 'dean' || $role === 'program_chair') && $_SERVER['REQUEST_METHOD'
         exit;
     }
 
-    $sql = 'UPDATE schedule_change_requests scr
-         INNER JOIN schedules s ON s.id = scr.schedule_id
-         INNER JOIN courses c ON c.id = s.course_id
-         SET scr.status=?, scr.dean_remarks=?, scr.reviewed_by=?, scr.reviewed_at=NOW()
-         WHERE scr.id=? AND scr.status="pending" AND s.college_id=?';
-    $params = [$status, $remarks, $userId, $sid, $collegeId];
-    if ($programScope !== null) {
-        $sql .= ' AND c.department=?';
-        $params[] = $programScope;
+    if ($role === 'admin') {
+        $sql = 'UPDATE schedule_change_requests scr
+             INNER JOIN schedules s ON s.id = scr.schedule_id
+             INNER JOIN users u ON u.id = scr.faculty_user_id
+             SET scr.status=?, scr.dean_remarks=?, scr.reviewed_by=?, scr.reviewed_at=NOW()
+             WHERE scr.id=? AND scr.status="pending" AND u.role="dean"';
+        $params = [$status, $remarks, $userId, $sid];
+    } else {
+        $sql = 'UPDATE schedule_change_requests scr
+             INNER JOIN schedules s ON s.id = scr.schedule_id
+             INNER JOIN courses c ON c.id = s.course_id
+             INNER JOIN users u ON u.id = scr.faculty_user_id
+             SET scr.status=?, scr.dean_remarks=?, scr.reviewed_by=?, scr.reviewed_at=NOW()
+             WHERE scr.id=? AND scr.status="pending" AND s.college_id=? AND u.role <> "dean"';
+        $params = [$status, $remarks, $userId, $sid, $collegeId];
     }
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
@@ -249,7 +268,23 @@ if (($role === 'dean' || $role === 'program_chair') && $_SERVER['REQUEST_METHOD'
             );
         }
     }
-    log_dean_activity('schedule_change_review', "Reviewed faculty schedule change request #{$sid}: {$status}");
+    if ($role === 'admin') {
+        log_admin_activity(
+            'edit',
+            'Schedule change requests',
+            'Reviewed dean schedule change request #' . $sid . ': ' . $status,
+            $beforeScr ? (array) $beforeScr : null,
+            [
+                'id' => $sid,
+                'status' => $status,
+                'dean_remarks' => $remarks,
+                'reviewed_by' => $userId,
+                'created_makeup_schedule_id' => $createdMakeupId ?: null,
+            ]
+        );
+    } else {
+        log_dean_activity('schedule_change_review', "Reviewed faculty schedule change request #{$sid}: {$status}");
+    }
     $_SESSION['flash'] = $createdMakeupId > 0
         ? 'Makeup request approved. Schedule #' . $createdMakeupId . ' was created. Delete it after the makeup class is held.'
         : 'Schedule change request updated.';
@@ -259,6 +294,7 @@ if (($role === 'dean' || $role === 'program_chair') && $_SERVER['REQUEST_METHOD'
 }
 
 $pendingRequests = [];
+$makeupRequests = [];
 $myRequests = [];
 $changeRequests = [];
 $legacyLogs = [];
@@ -276,18 +312,42 @@ if ($role === 'admin') {
          WHERE cr.status="pending"
          ORDER BY cr.created_at ASC'
     )->fetchAll();
-} elseif (($role === 'dean' || $role === 'program_chair') && $collegeId) {
-    if ($role === 'dean') {
-        $st = db()->prepare(
-            'SELECT cr.*, c.college_name
-             FROM conflict_requests cr
-             INNER JOIN colleges c ON c.id = cr.college_id
-             WHERE cr.college_id=?
-             ORDER BY cr.created_at DESC'
-        );
-        $st->execute([$collegeId]);
-        $myRequests = $st->fetchAll();
+
+    if ($hasMakeupSupport) {
+        $sql = 'SELECT scr.*, f.full_name AS faculty_name, co.course_code, c.college_name, r.room_code AS proposed_room_code
+             FROM schedule_change_requests scr
+             INNER JOIN schedules s ON s.id = scr.schedule_id
+             INNER JOIN users u ON u.id = scr.faculty_user_id
+             INNER JOIN faculty f ON f.user_id = scr.faculty_user_id
+             INNER JOIN courses co ON co.id = s.course_id
+             INNER JOIN colleges c ON c.id = s.college_id
+             LEFT JOIN rooms r ON r.id = scr.proposed_room_id
+             WHERE scr.status="pending" AND u.role="dean"';
+    } else {
+        $sql = 'SELECT scr.*, f.full_name AS faculty_name, co.course_code, c.college_name, NULL AS proposed_room_code
+             FROM schedule_change_requests scr
+             INNER JOIN schedules s ON s.id = scr.schedule_id
+             INNER JOIN users u ON u.id = scr.faculty_user_id
+             INNER JOIN faculty f ON f.user_id = scr.faculty_user_id
+             INNER JOIN courses co ON co.id = s.course_id
+             INNER JOIN colleges c ON c.id = s.college_id
+             WHERE scr.status="pending" AND u.role="dean"';
     }
+    $changeRequests = db()->query($sql . ' ORDER BY scr.created_at DESC')->fetchAll();
+} elseif ($role === 'dean' && $collegeId) {
+    $st = db()->prepare(
+        'SELECT cr.*, c.college_name
+         FROM conflict_requests cr
+         INNER JOIN colleges c ON c.id = cr.college_id
+         WHERE cr.college_id=?
+         ORDER BY cr.created_at DESC'
+    );
+    $st->execute([$collegeId]);
+    $myRequests = $st->fetchAll();
+
+    $stOwnScr = db()->prepare('SELECT * FROM schedule_change_requests WHERE faculty_user_id=? ORDER BY created_at DESC');
+    $stOwnScr->execute([$userId]);
+    $myRequests = array_merge($stOwnScr->fetchAll(PDO::FETCH_ASSOC), $myRequests);
 
     if ($hasMakeupSupport) {
         $sql = 'SELECT scr.*, f.full_name AS faculty_name, co.course_code, r.room_code AS proposed_room_code
@@ -295,24 +355,20 @@ if ($role === 'admin') {
              INNER JOIN schedules s ON s.id = scr.schedule_id
              INNER JOIN faculty f ON f.user_id = scr.faculty_user_id
              INNER JOIN courses co ON co.id = s.course_id
+             INNER JOIN users u ON u.id = scr.faculty_user_id
              LEFT JOIN rooms r ON r.id = scr.proposed_room_id
-             WHERE s.college_id=? AND scr.status="pending"';
+             WHERE s.college_id=? AND scr.status="pending" AND u.role <> "dean"';
     } else {
         $sql = 'SELECT scr.*, f.full_name AS faculty_name, co.course_code, NULL AS proposed_room_code
              FROM schedule_change_requests scr
              INNER JOIN schedules s ON s.id = scr.schedule_id
              INNER JOIN faculty f ON f.user_id = scr.faculty_user_id
              INNER JOIN courses co ON co.id = s.course_id
-             WHERE s.college_id=? AND scr.status="pending"';
+             INNER JOIN users u ON u.id = scr.faculty_user_id
+             WHERE s.college_id=? AND scr.status="pending" AND u.role <> "dean"';
     }
-    $params = [$collegeId];
-    if ($programScope !== null) {
-        $sql .= ' AND co.department=?';
-        $params[] = $programScope;
-    }
-    $sql .= ' ORDER BY scr.created_at DESC';
-    $st = db()->prepare($sql);
-    $st->execute($params);
+    $st = db()->prepare($sql . ' ORDER BY scr.created_at DESC');
+    $st->execute([$collegeId]);
     $changeRequests = $st->fetchAll();
 } elseif ($role === 'faculty') {
     $st = db()->prepare('SELECT * FROM schedule_change_requests WHERE faculty_user_id=? ORDER BY created_at DESC');
@@ -361,15 +417,15 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 <?php endif; ?>
 
-<?php if ($role === 'dean' || $role === 'program_chair'): ?>
+<?php if ($role === 'dean' || $role === 'admin'): ?>
     <div class="card shadow-sm mb-4">
-        <div class="card-header bg-white"><strong>Faculty Schedule Change / Makeup Requests</strong></div>
+        <div class="card-header bg-white"><strong><?= $role === 'admin' ? 'Dean Schedule Change / Makeup Requests' : 'Faculty Schedule Change / Makeup Requests' ?></strong></div>
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table mb-0">
-                    <thead class="table-light"><tr><th>Faculty</th><th>Course</th><th>Type</th><th>Details</th><th>Action</th></tr></thead>
+                    <thead class="table-light"><tr><?php if ($role === 'admin'): ?><th>College</th><?php endif; ?><th>Faculty</th><th>Course</th><th>Type</th><th>Details</th><th>Action</th></tr></thead>
                     <tbody>
-                    <?php if (!$changeRequests): ?><tr><td colspan="5" class="p-3 text-muted">No pending change requests.</td></tr><?php endif; ?>
+                    <?php if (!$changeRequests): ?><tr><td colspan="<?= $role === 'admin' ? 6 : 5 ?>" class="p-3 text-muted">No pending change requests.</td></tr><?php endif; ?>
                     <?php foreach ($changeRequests as $r): ?>
                         <?php
                         $rtype = $hasMakeupSupport ? (string) ($r['request_type'] ?? 'change') : 'change';
@@ -411,6 +467,9 @@ require_once __DIR__ . '/includes/header.php';
                             : '';
                         ?>
                         <tr<?= $makeupConflictMsgs !== [] ? ' class="table-warning"' : '' ?>>
+                            <?php if ($role === 'admin'): ?>
+                                <td><?= htmlspecialchars((string) ($r['college_name'] ?? '')) ?></td>
+                            <?php endif; ?>
                             <td><?= htmlspecialchars((string) $r['faculty_name']) ?></td>
                             <td><?= htmlspecialchars((string) $r['course_code']) ?></td>
                             <td>

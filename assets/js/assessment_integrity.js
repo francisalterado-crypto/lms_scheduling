@@ -309,6 +309,9 @@
         });
 
         modal.addEventListener('shown.bs.modal', function () {
+            if (modal.getAttribute('data-clear-timer') === '1') {
+                clearStart(key);
+            }
             if (timed && limitMinutes >= 1) {
                 var startedAt = readStart(key);
                 if (startedAt) {

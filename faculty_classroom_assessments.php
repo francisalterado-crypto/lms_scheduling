@@ -3,8 +3,11 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/assessment_retake_helpers.php';
 
 require_role(['faculty', 'program_chair', 'dean', 'gened']);
+
+assessment_retake_ensure_table();
 
 $facultyId = isset($_SESSION['faculty_id']) ? (int) $_SESSION['faculty_id'] : 0;
 $userId = (int) ($_SESSION['user_id'] ?? 0);
@@ -35,6 +38,7 @@ if (db_table_exists('classroom_assessments') && !db_column_exists('classroom_ass
 }
 $hasCreditedWeek = db_column_exists('classroom_assessments', 'credited_week');
 $hasTimeLimit = db_column_exists('classroom_assessments', 'time_limit_minutes');
+$hasIntegrityLocked = db_column_exists('classroom_submissions', 'integrity_locked');
 $requiredTables = [
     'online_classrooms',
     'classroom_students',
@@ -542,6 +546,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             }
 
             $_SESSION['flash'] = 'Saved grade for student.';
+        } elseif ($action === 'approve_retake_request') {
+            $requestId = (int) ($_POST['request_id'] ?? 0);
+            if ($requestId < 1) {
+                throw new RuntimeException('Invalid retake request.');
+            }
+            approve_assessment_retake_request($requestId, $classroomId, $userId);
+            $_SESSION['flash'] = 'Retake approved. The student may take the assessment again.';
+        } elseif ($action === 'reject_retake_request') {
+            $requestId = (int) ($_POST['request_id'] ?? 0);
+            $remarks = trim((string) ($_POST['faculty_remarks'] ?? ''));
+            if ($requestId < 1) {
+                throw new RuntimeException('Invalid retake request.');
+            }
+            reject_assessment_retake_request($requestId, $classroomId, $userId, $remarks);
+            $_SESSION['flash'] = 'Retake request denied.';
         } elseif ($action === 'upload_banner' || $action === 'delete_banner') {
             $bannerFlash = faculty_classroom_process_banner_post($classroomId, $facultyId, $classroom);
             if ($bannerFlash !== null) {
@@ -573,6 +592,7 @@ $assessments = [];
 $scoreMap = [];
 $submissionMap = [];
 $questionMap = [];
+$pendingRetakeRequests = [];
 
 if ($missingTables === [] && $classroom) {
     $st = db()->prepare(
@@ -631,7 +651,8 @@ if ($missingTables === [] && $classroom) {
     }
 
     $st = db()->prepare(
-        'SELECT sub.assessment_id, sub.student_id, sub.answer_text, sub.status, sub.submitted_at
+        'SELECT sub.assessment_id, sub.student_id, sub.answer_text, sub.status, sub.submitted_at'
+        . ($hasIntegrityLocked ? ', sub.integrity_locked' : '') . '
          FROM classroom_submissions sub
          INNER JOIN classroom_assessments ca ON ca.id = sub.assessment_id
          WHERE ca.classroom_id = ?'
@@ -642,7 +663,12 @@ if ($missingTables === [] && $classroom) {
             'answer_text' => $row['answer_text'],
             'status' => $row['status'],
             'submitted_at' => $row['submitted_at'],
+            'integrity_locked' => $hasIntegrityLocked ? (int) ($row['integrity_locked'] ?? 0) : 0,
         ];
+    }
+
+    if (assessment_retake_table_ready()) {
+        $pendingRetakeRequests = pending_assessment_retake_requests_for_classroom($classroomId);
     }
 }
 
@@ -1202,6 +1228,57 @@ require_once __DIR__ . '/includes/header.php';
 
             <?php if ($flash !== ''): ?><?php render_information_popup((string) $flash); ?><?php endif; ?>
 
+            <?php if ($pendingRetakeRequests !== []): ?>
+            <div class="fac-dash-card">
+                <div class="section-title">
+                    <i class="fa-solid fa-rotate-left"></i> Retake requests
+                    <span class="badge bg-warning text-dark ms-1"><?= count($pendingRetakeRequests) ?> pending</span>
+                </div>
+                <p class="text-muted small mb-3">Students with locked assessments may request another attempt. Review their explanation and approve or deny.</p>
+                <?php foreach ($pendingRetakeRequests as $retakeReq): ?>
+                    <?php $reqId = (int) ($retakeReq['id'] ?? 0); ?>
+                    <div class="border rounded p-3 mb-3">
+                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                            <div>
+                                <strong><?= htmlspecialchars((string) ($retakeReq['student_name'] ?? '')) ?></strong>
+                                <?php if ((string) ($retakeReq['student_number'] ?? '') !== ''): ?>
+                                    <span class="text-muted small">(<?= htmlspecialchars((string) $retakeReq['student_number']) ?>)</span>
+                                <?php endif; ?>
+                                <div class="small text-muted mt-1">
+                                    <i class="fa-solid fa-file-pen me-1"></i><?= htmlspecialchars((string) ($retakeReq['assessment_title'] ?? '')) ?>
+                                    &bull; Requested <?= htmlspecialchars((string) ($retakeReq['created_at'] ?? '')) ?>
+                                </div>
+                            </div>
+                            <span class="badge bg-danger">Integrity violation</span>
+                        </div>
+                        <div class="small mb-3 p-2 bg-light rounded">
+                            <strong>Student explanation:</strong><br>
+                            <?= nl2br(htmlspecialchars((string) ($retakeReq['reason'] ?? ''))) ?>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 align-items-start">
+                            <form method="post" class="d-inline" onsubmit="return confirm('Approve this retake? The student\'s locked submission and score will be cleared so they can try again.');">
+                                <input type="hidden" name="action" value="approve_retake_request">
+                                <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
+                                <input type="hidden" name="request_id" value="<?= $reqId ?>">
+                                <button type="submit" class="btn btn-success btn-sm">
+                                    <i class="fa-solid fa-check me-1"></i>Approve retake
+                                </button>
+                            </form>
+                            <form method="post" class="d-flex flex-wrap gap-2 align-items-start flex-grow-1">
+                                <input type="hidden" name="action" value="reject_retake_request">
+                                <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
+                                <input type="hidden" name="request_id" value="<?= $reqId ?>">
+                                <input type="text" name="faculty_remarks" class="form-control form-control-sm" placeholder="Optional note to student" maxlength="500" style="max-width:280px;">
+                                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                    <i class="fa-solid fa-xmark me-1"></i>Deny
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+
             <div class="fac-dash-card">
                 <div class="section-title">
                     <i class="fa-solid fa-clipboard-list"></i> Assessment manager
@@ -1390,7 +1467,9 @@ require_once __DIR__ . '/includes/header.php';
                                     <?php
                                     $studentId = (int) $student['student_id'];
                                     $saved = $scoreMap[$panelId][$studentId] ?? ['score' => '', 'feedback' => ''];
-                                    $submission = $submissionMap[$panelId][$studentId] ?? ['answer_text' => '', 'status' => '', 'submitted_at' => ''];
+                                    $submission = $submissionMap[$panelId][$studentId] ?? ['answer_text' => '', 'status' => '', 'submitted_at' => '', 'integrity_locked' => 0];
+                                    $integrityLocked = (int) ($submission['integrity_locked'] ?? 0) === 1
+                                        || stripos((string) ($saved['feedback'] ?? ''), 'left or minimized the assessment window') !== false;
                                     $status = faculty_submission_grading_status($submission, $saved);
                                     $fbVal = (string) ($saved['feedback'] ?? '');
                                     $scoreVal = $saved['score'] !== null && $saved['score'] !== '' ? (string) $saved['score'] : '';
@@ -1418,6 +1497,9 @@ require_once __DIR__ . '/includes/header.php';
                                                     <i class="fa-solid fa-user-graduate" style="color:#2c7da0;"></i>
                                                     <?= htmlspecialchars((string) $student['full_name']) ?>
                                                     <span class="status <?= htmlspecialchars($statusClass) ?>"><?= htmlspecialchars($statusText) ?></span>
+                                                    <?php if ($integrityLocked): ?>
+                                                        <span class="badge bg-danger ms-1">Locked (violation)</span>
+                                                    <?php endif; ?>
                                                 </div>
                                                 <div class="submission-meta">
                                                     <span><i class="fa-regular fa-clock"></i>

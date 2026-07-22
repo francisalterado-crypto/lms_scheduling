@@ -56,6 +56,17 @@ function ensure_makeup_schedule_support(): bool
     return $ready;
 }
 
+/** Dean teaching-role requests are reviewed by institution admin, not the college dean. */
+function schedule_change_needs_admin_review(?string $submitterRole = null): bool
+{
+    return ($submitterRole ?? (string) ($_SESSION['role'] ?? '')) === 'dean';
+}
+
+function schedule_change_reviewer_label(?string $submitterRole = null): string
+{
+    return schedule_change_needs_admin_review($submitterRole) ? 'Administration' : 'your dean';
+}
+
 /**
  * Faculty/room conflict messages for a proposed makeup slot.
  *
