@@ -32,7 +32,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $redirectUrl .= '?program=' . rawurlencode($redirectProgram);
     }
     try {
-        if ($action === 'approve' && $requestId > 0) {
+        if ($action === 'approve_all') {
+            $bulk = approve_all_pending_student_registrations(
+                (int) $_SESSION['user_id'],
+                $collegeId,
+                $programScope
+            );
+            if (($bulk['approved'] ?? 0) > 0) {
+                $scopeLabel = $programScope !== null ? $programScope : 'all programs';
+                log_dean_activity(
+                    'student_registration_approve_all',
+                    'Bulk approved ' . (int) $bulk['approved'] . ' student registration(s) for ' . $scopeLabel
+                );
+            }
+            $_SESSION['flash'] = bulk_student_registration_approval_flash_message($bulk);
+        } elseif ($action === 'approve' && $requestId > 0) {
             $approval = approve_student_registration_request(
                 $requestId,
                 (int) $_SESSION['user_id'],
@@ -98,6 +112,16 @@ require_once __DIR__ . '/includes/header.php';
                 <?php endif; ?>
             </p>
         </div>
+        <?php if ($pending !== []): ?>
+            <form method="post" class="d-inline">
+                <input type="hidden" name="action" value="approve_all">
+                <input type="hidden" name="program_filter" value="<?= htmlspecialchars($programFilter) ?>">
+                <button type="submit" class="btn btn-success"
+                        onclick="return confirm('Approve all <?= (int) count($pending) ?> pending registration(s)? Each student will receive an email with a temporary password when an email address is on file.');">
+                    <i class="fa-solid fa-check-double me-1"></i> Approve all (<?= (int) count($pending) ?>)
+                </button>
+            </form>
+        <?php endif; ?>
     </div>
 
     <?php if ($programs !== []): ?>

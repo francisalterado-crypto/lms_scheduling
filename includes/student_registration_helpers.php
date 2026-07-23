@@ -507,3 +507,104 @@ function count_pending_registrations_for_program(int $collegeId, string $program
 {
     return count_pending_registrations_for_college($collegeId, $programScope);
 }
+
+/**
+ * Approve every pending registration in scope. Individual failures do not stop the batch.
+ *
+ * @return array{approved: int, already_approved: int, mail_sent: int, failed: int, errors: list<string>}
+ */
+function approve_all_pending_student_registrations(int $reviewerUserId, int $collegeId, ?string $programScope): array
+{
+    $result = [
+        'approved' => 0,
+        'already_approved' => 0,
+        'mail_sent' => 0,
+        'failed' => 0,
+        'errors' => [],
+    ];
+
+    $pending = $programScope !== null
+        ? pending_registrations_for_program($collegeId, $programScope)
+        : pending_registrations_for_college($collegeId, null);
+
+    foreach ($pending as $row) {
+        $requestId = (int) ($row['id'] ?? 0);
+        if ($requestId < 1) {
+            continue;
+        }
+
+        try {
+            $approval = approve_student_registration_request(
+                $requestId,
+                $reviewerUserId,
+                $collegeId,
+                $programScope
+            );
+            if (!empty($approval['already_approved'])) {
+                $result['already_approved']++;
+                continue;
+            }
+            $result['approved']++;
+            if (!empty($approval['mail_sent'])) {
+                $result['mail_sent']++;
+            }
+        } catch (Throwable $e) {
+            $result['failed']++;
+            $label = trim((string) ($row['full_name'] ?? ''));
+            if ($label === '') {
+                $label = (string) ($row['username'] ?? 'request #' . $requestId);
+            }
+            $result['errors'][] = $label . ': ' . $e->getMessage();
+        }
+    }
+
+    return $result;
+}
+
+function bulk_student_registration_approval_flash_message(array $result): string
+{
+    $approved = (int) ($result['approved'] ?? 0);
+    $alreadyApproved = (int) ($result['already_approved'] ?? 0);
+    $mailSent = (int) ($result['mail_sent'] ?? 0);
+    $failed = (int) ($result['failed'] ?? 0);
+    $errors = $result['errors'] ?? [];
+
+    if ($approved === 0 && $alreadyApproved === 0 && $failed === 0) {
+        return 'No pending student registrations to approve.';
+    }
+
+    $parts = [];
+    if ($approved > 0) {
+        $parts[] = $approved === 1
+            ? '1 registration approved'
+            : $approved . ' registrations approved';
+        if ($mailSent > 0) {
+            $parts[] = $mailSent === 1
+                ? 'credentials emailed to 1 student'
+                : 'credentials emailed to ' . $mailSent . ' students';
+        } elseif ($approved > 0) {
+            $parts[] = 'share credentials manually where no email was on file';
+        }
+    }
+    if ($alreadyApproved > 0) {
+        $parts[] = $alreadyApproved === 1
+            ? '1 was already approved'
+            : $alreadyApproved . ' were already approved';
+    }
+    if ($failed > 0) {
+        $parts[] = $failed === 1
+            ? '1 could not be approved'
+            : $failed . ' could not be approved';
+    }
+
+    $message = ucfirst(implode('; ', $parts)) . '.';
+    if ($failed > 0 && is_array($errors) && $errors !== []) {
+        $shown = array_slice($errors, 0, 3);
+        $message .= ' ' . implode(' ', $shown);
+        if (count($errors) > 3) {
+            $message .= ' (+' . (count($errors) - 3) . ' more)';
+        }
+    }
+
+    return $message;
+}

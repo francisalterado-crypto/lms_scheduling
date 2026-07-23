@@ -374,6 +374,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
             'Academic' => [
                 ['file' => 'faculty.php', 'href' => 'faculty.php', 'icon' => 'fa-chalkboard-user', 'label' => 'Faculty'],
                 ['file' => 'program_chair_students.php', 'href' => 'program_chair_students.php', 'icon' => 'fa-user-graduate', 'label' => 'Students'],
+                [
+                    'file' => 'program_chair_student_registrations.php',
+                    'href' => 'program_chair_student_registrations.php',
+                    'icon' => 'fa-user-check',
+                    'label' => 'Registration approvals',
+                    'tooltip' => 'Review and approve student self-registration requests for your program.',
+                ],
                 ['file' => 'courses.php', 'href' => 'courses.php', 'icon' => 'fa-book', 'label' => 'Courses'],
                 [
                     'file' => 'faculty_classrooms.php',
