@@ -188,21 +188,6 @@ $formatTime12h = static function (?string $time): string {
     return $dt ? $dt->format('g:i A') : $raw;
 };
 
-/** Faculty clicked “Go live” and class is still within its scheduled day/time window. */
-$scheduleShowsLive = static function (array $scheduleRow, ?string $liveAt): bool {
-    if ($liveAt === null || $liveAt === '') {
-        return false;
-    }
-    $t = strtotime($liveAt);
-    if ($t === false) {
-        return false;
-    }
-    if ((time() - $t) > 2 * 3600) {
-        return false;
-    }
-    return !empty(classroom_attendance_login_allowed($scheduleRow)['allowed']);
-};
-
 $byDay = [];
 foreach (schedule_days_list() as $d) {
     $byDay[$d] = [];
@@ -622,9 +607,22 @@ require_once __DIR__ . '/includes/header.php';
                                         $roomLabel = $roomName;
                                     }
                                     ?>
+                                    <?php
+                                    $liveDisplayMode = weekly_schedule_online_live_mode($role, $s, $collegeFilter, $dept);
+                                    $onlineUrl = $hasOnlineUrlCol ? trim((string) ($s['online_class_url'] ?? '')) : '';
+                                    $liveAtStr = $hasLiveAtCol ? ($s['online_live_at'] ?? null) : null;
+                                    $liveAtStr = $liveAtStr !== null && $liveAtStr !== '' ? (string) $liveAtStr : null;
+                                    $isLive = $hasLiveAtCol && schedule_display_is_faculty_live($s);
+                                    $showLiveIndicator = $isLive && $liveDisplayMode !== 'hidden';
+                                    ?>
                                     <?php if (!$startsHere): ?>
                                         <div class="schedule-block schedule-block--continued <?= $c ?>">
-                                            <div class="small fw-semibold"><?= htmlspecialchars($s['course_code']) ?> <span class="text-muted fw-normal">(continues)</span></div>
+                                            <div class="small fw-semibold">
+                                                <?= htmlspecialchars($s['course_code']) ?> <span class="text-muted fw-normal">(continues)</span>
+                                                <?php if ($showLiveIndicator): ?>
+                                                    <span class="badge bg-danger live-pulse-badge rounded-pill ms-1" style="font-size:0.65rem"><i class="fa-solid fa-circle me-1" style="font-size:0.5rem;vertical-align:middle;"></i>LIVE</span>
+                                                <?php endif; ?>
+                                            </div>
                                             <div class="small text-muted"><?= htmlspecialchars($formatTime12h((string) $s['start_time'])) ?> – <?= htmlspecialchars($formatTime12h((string) $s['end_time'])) ?></div>
                                             <?php if ($roomLabel !== ''): ?>
                                                 <div class="small"><i class="fa-solid fa-door-open me-1"></i><?= htmlspecialchars($roomLabel) ?></div>
@@ -641,13 +639,6 @@ require_once __DIR__ . '/includes/header.php';
                                             <?php if ($roomLabel !== ''): ?>
                                                 <div class="small"><i class="fa-solid fa-door-open me-1"></i><?= htmlspecialchars($roomLabel) ?></div>
                                             <?php endif; ?>
-                                            <?php
-                                            $liveDisplayMode = weekly_schedule_online_live_mode($role, $s, $collegeFilter, $dept);
-                                            $onlineUrl = $hasOnlineUrlCol ? trim((string) ($s['online_class_url'] ?? '')) : '';
-                                            $liveAtStr = $hasLiveAtCol ? ($s['online_live_at'] ?? null) : null;
-                                            $liveAtStr = $liveAtStr !== null && $liveAtStr !== '' ? (string) $liveAtStr : null;
-                                            $isLive = $hasLiveAtCol && $scheduleShowsLive($s, $liveAtStr);
-                                            ?>
                                             <?php if ($hasOnlineUrlCol && $onlineUrl !== '' && $liveDisplayMode !== 'hidden'): ?>
                                                 <div class="mt-1 pt-1 border-top border-secondary-subtle small">
                                                     <?php if ($liveDisplayMode === 'unauthorized' && $hasLiveAtCol && $isLive): ?>
@@ -704,5 +695,16 @@ require_once __DIR__ . '/includes/header.php';
         </tbody>
     </table>
 </div>
+
+<script>
+(function () {
+    if (!document.querySelector('.live-pulse-badge')) {
+        return;
+    }
+    window.setInterval(function () {
+        window.location.reload();
+    }, 45000);
+})();
+</script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

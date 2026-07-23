@@ -108,6 +108,18 @@ if ($missingTables === [] && !$classroom) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom) {
     $action = (string) ($_POST['action'] ?? '');
 
+    if ($action === 'open_meet') {
+        try {
+            faculty_open_meet_and_go_live($classroomId, $facultyId);
+            header('Location: faculty_meet_live.php?classroom_id=' . $classroomId);
+            exit;
+        } catch (Throwable $e) {
+            $_SESSION['flash'] = 'Error: ' . $e->getMessage();
+            header('Location: faculty_classroom.php?id=' . $classroomId);
+            exit;
+        }
+    }
+
     try {
         if ($action === 'update_classroom') {
             $title = trim((string) ($_POST['title'] ?? ''));
@@ -540,7 +552,11 @@ $statusIsActive = $classroom && (string) $classroom['status'] === 'active';
         <a href="faculty_classroom_attendance.php?id=<?= (int) $classroomId ?>" class="btn btn-outline-secondary btn-sm rounded-pill"<?= app_tooltip_attr('Opens attendance records and auto-check for this class.') ?>><i class="fa-solid fa-user-check me-1"></i>Attendance</a>
         <a href="faculty_classroom_assessments.php?id=<?= (int) $classroomId ?>" class="btn btn-outline-primary btn-sm rounded-pill"<?= app_tooltip_attr('Manage quizzes, assignments, and student submissions for this class.') ?>><i class="fa-solid fa-clipboard-list me-1"></i>Grading &amp; submissions</a>
         <?php if ($meetHref !== ''): ?>
-            <a href="<?= htmlspecialchars($meetHref) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm rounded-pill"<?= app_tooltip_attr('Opens your Meet link in a new tab for live class sessions.') ?>><i class="fa-solid fa-video me-1"></i>Join Meet</a>
+            <form method="post" action="faculty_classroom.php?id=<?= (int) $classroomId ?>" target="_blank" rel="noopener noreferrer" class="d-inline">
+                <input type="hidden" name="action" value="open_meet">
+                <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
+                <button type="submit" class="btn btn-success btn-sm rounded-pill"<?= app_tooltip_attr('Opens Google Meet in a new tab and marks this class as live so students can join.') ?>><i class="fa-solid fa-video me-1"></i>Join Meet</button>
+            </form>
         <?php endif; ?>
     </div>
 
@@ -590,6 +606,10 @@ $statusIsActive = $classroom && (string) $classroom['status'] === 'active';
         Classroom/student features are not installed yet. Run <a href="upgrade_roles.php">upgrade_roles.php</a> once, then reload this page.
     </div>
 <?php else: ?>
+    <form method="post" action="faculty_classroom.php?id=<?= (int) $classroomId ?>" target="_blank" rel="noopener noreferrer" class="d-none" id="fc-open-meet-form">
+        <input type="hidden" name="action" value="open_meet">
+        <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
+    </form>
     <form method="post" class="card fc-section-card mb-4">
         <input type="hidden" name="action" value="update_classroom">
         <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
@@ -627,7 +647,7 @@ $statusIsActive = $classroom && (string) $classroom['status'] === 'active';
                         <span class="badge rounded-pill bg-secondary-subtle text-secondary border"><i class="fa-solid fa-box-archive me-1"></i>Archived</span>
                     <?php endif; ?>
                     <?php if ($meetHref !== ''): ?>
-                        <a class="btn btn-sm btn-outline-primary rounded-pill" href="<?= htmlspecialchars($meetHref) ?>" target="_blank" rel="noopener noreferrer"<?= app_tooltip_attr('Tests the Meet URL you saved for this class.') ?>><i class="fa-solid fa-video me-1"></i>Open Meet</a>
+                        <button type="submit" form="fc-open-meet-form" class="btn btn-sm btn-outline-primary rounded-pill"<?= app_tooltip_attr('Opens Google Meet in a new tab and marks this class as live so students can join.') ?>><i class="fa-solid fa-video me-1"></i>Open Meet</button>
                     <?php else: ?>
                         <span class="fc-placeholder-hint"><i class="fa-regular fa-circle-question me-1"></i>No Meet link yet — add one above.</span>
                     <?php endif; ?>

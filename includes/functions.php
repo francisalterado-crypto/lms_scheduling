@@ -1417,6 +1417,178 @@ function classroom_attendance_login_allowed(array $scheduleRow, ?int $timestamp 
 }
 
 /**
+ * Whether faculty marked a section live (within two hours, and still within today's class window when schedule is known).
+ *
+ * @param array{day_of_week?: string|null, start_time?: string|null, end_time?: string|null}|null $scheduleRow
+ */
+function schedule_is_faculty_live(?string $liveAt, ?int $timestamp = null, ?array $scheduleRow = null): bool
+{
+    if ($liveAt === null || $liveAt === '') {
+        return false;
+    }
+    $timestamp = $timestamp ?? time();
+    $t = strtotime($liveAt);
+    if ($t === false) {
+        return false;
+    }
+    if (($timestamp - $t) > 2 * 3600) {
+        return false;
+    }
+    if ($scheduleRow !== null) {
+        $window = classroom_attendance_login_allowed($scheduleRow, $timestamp);
+        if (!empty($window['is_scheduled_day']) && empty($window['is_within_window'])) {
+            $sessionEndTs = strtotime($window['session_end']);
+            if ($sessionEndTs !== false && $timestamp > $sessionEndTs) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+/**
+ * LIVE badge helper: resolves display state and clears stale DB flags when class time or the two-hour window has passed.
+ *
+ * @param array{id?: int|string, faculty_id?: int|string, online_live_at?: string|null, day_of_week?: string|null, start_time?: string|null, end_time?: string|null} $scheduleRow
+ */
+function schedule_display_is_faculty_live(array $scheduleRow): bool
+{
+    $liveAt = isset($scheduleRow['online_live_at']) ? (string) $scheduleRow['online_live_at'] : '';
+    if ($liveAt === '') {
+        return false;
+    }
+    if (schedule_is_faculty_live($liveAt, null, $scheduleRow)) {
+        return true;
+    }
+
+    $scheduleId = (int) ($scheduleRow['id'] ?? 0);
+    $facultyId = (int) ($scheduleRow['faculty_id'] ?? 0);
+    if ($scheduleId > 0 && $facultyId > 0) {
+        faculty_end_live_for_schedule($scheduleId, $facultyId);
+    }
+
+    return false;
+}
+
+/** Clears online_live_at and closes any open classroom_live_sessions row for one faculty schedule. */
+function faculty_end_live_for_schedule(int $scheduleId, int $facultyId): bool
+{
+    if ($scheduleId < 1 || $facultyId < 1 || !db_column_exists('schedules', 'online_live_at')) {
+        return false;
+    }
+
+    $facultyCollegeId = faculty_college_id($facultyId);
+    $scheduleCollegeClause = $facultyCollegeId !== null ? ' AND college_id=?' : '';
+    $scheduleCollegeParam = $facultyCollegeId !== null ? [$facultyCollegeId] : [];
+
+    $chk = db()->prepare(
+        'SELECT online_live_at FROM schedules WHERE id=? AND faculty_id=?' . $scheduleCollegeClause . ' LIMIT 1'
+    );
+    $chk->execute(array_merge([$scheduleId, $facultyId], $scheduleCollegeParam));
+    $liveAt = $chk->fetchColumn();
+    if ($liveAt === false || $liveAt === null || $liveAt === '') {
+        return false;
+    }
+
+    db()->prepare('UPDATE schedules SET online_live_at = NULL WHERE id=? AND faculty_id=?' . $scheduleCollegeClause)
+        ->execute(array_merge([$scheduleId, $facultyId], $scheduleCollegeParam));
+
+    if (db_table_exists('classroom_live_sessions')) {
+        $st = db()->prepare('SELECT id FROM online_classrooms WHERE schedule_id = ? AND faculty_id = ? LIMIT 1');
+        $st->execute([$scheduleId, $facultyId]);
+        $classroomId = (int) ($st->fetchColumn() ?: 0);
+        if ($classroomId > 0) {
+            db()->prepare(
+                'UPDATE classroom_live_sessions
+                 SET ended_at = NOW()
+                 WHERE classroom_id = ? AND schedule_id = ? AND faculty_id = ? AND ended_at IS NULL'
+            )->execute([$classroomId, $scheduleId, $facultyId]);
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Sync schedule URL, mark live during class window, and return the Meet URL for a faculty classroom.
+ *
+ * @throws RuntimeException
+ */
+function faculty_open_meet_and_go_live(int $classroomId, int $facultyId): string
+{
+    if ($classroomId < 1) {
+        throw new RuntimeException('Classroom not found.');
+    }
+
+    $st = db()->prepare(
+        'SELECT oc.id, oc.meet_link, oc.schedule_id, s.day_of_week, s.start_time, s.end_time, s.online_class_url
+         FROM online_classrooms oc
+         INNER JOIN schedules s ON s.id = oc.schedule_id
+         WHERE oc.id = ? AND oc.faculty_id = ? AND s.faculty_id = ?
+         LIMIT 1'
+    );
+    $st->execute([$classroomId, $facultyId, $facultyId]);
+    $classroomRow = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$classroomRow) {
+        throw new RuntimeException('Classroom not found or you do not have access to it.');
+    }
+
+    $rawMeet = trim((string) ($classroomRow['meet_link'] ?? ''));
+    if ($rawMeet === '') {
+        throw new RuntimeException('This classroom does not have a Meet link yet.');
+    }
+
+    $meetLink = filter_var($rawMeet, FILTER_VALIDATE_URL);
+    if ($meetLink === false) {
+        throw new RuntimeException('Please enter a valid Meet URL.');
+    }
+
+    $scheme = strtolower((string) (parse_url($meetLink, PHP_URL_SCHEME) ?? ''));
+    if (!in_array($scheme, ['http', 'https'], true)) {
+        throw new RuntimeException('Only http and https meeting links are allowed.');
+    }
+
+    $scheduleId = (int) $classroomRow['schedule_id'];
+    $hasOnlineUrl = db_column_exists('schedules', 'online_class_url');
+    $hasLiveAt = db_column_exists('schedules', 'online_live_at');
+    $hasLiveSessions = db_table_exists('classroom_live_sessions');
+
+    if ($hasOnlineUrl) {
+        db()->prepare('UPDATE schedules SET online_class_url = ? WHERE id = ? AND faculty_id = ?')
+            ->execute([$meetLink, $scheduleId, $facultyId]);
+    }
+
+    if ($hasLiveAt && $hasOnlineUrl) {
+        $facultyCollegeId = faculty_college_id($facultyId);
+        $scheduleCollegeClause = $facultyCollegeId !== null ? ' AND college_id=?' : '';
+        $scheduleCollegeParam = $facultyCollegeId !== null ? [$facultyCollegeId] : [];
+
+        db()->prepare('UPDATE schedules SET online_live_at = NOW() WHERE id=? AND faculty_id=?' . $scheduleCollegeClause)
+            ->execute(array_merge([$scheduleId, $facultyId], $scheduleCollegeParam));
+
+        if ($hasLiveSessions) {
+            $st = db()->prepare(
+                'SELECT id
+                 FROM classroom_live_sessions
+                 WHERE classroom_id = ? AND schedule_id = ? AND faculty_id = ? AND ended_at IS NULL
+                 ORDER BY id DESC
+                 LIMIT 1'
+            );
+            $st->execute([$classroomId, $scheduleId, $facultyId]);
+            if ((int) ($st->fetchColumn() ?: 0) < 1) {
+                db()->prepare(
+                    'INSERT INTO classroom_live_sessions (classroom_id, schedule_id, faculty_id, started_at)
+                     VALUES (?,?,?,NOW())'
+                )->execute([$classroomId, $scheduleId, $facultyId]);
+            }
+        }
+    }
+
+    return $meetLink;
+}
+
+/**
  * Convert array of days to MySQL SET string.
  */
 function days_to_set(array $days): string

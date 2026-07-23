@@ -137,6 +137,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasClassrooms) {
         header('Location: faculty_classrooms.php');
         exit;
     }
+
+    if ($action === 'open_meet') {
+        $classroomId = (int) ($_POST['classroom_id'] ?? 0);
+
+        try {
+            faculty_open_meet_and_go_live($classroomId, $facultyId);
+            header('Location: faculty_meet_live.php?classroom_id=' . $classroomId);
+            exit;
+        } catch (Throwable $e) {
+            $_SESSION['flash'] = 'Error: ' . $e->getMessage();
+            header('Location: faculty_classrooms.php');
+            exit;
+        }
+    }
 }
 
 $assignedSchedules = [];
@@ -611,7 +625,11 @@ require_once __DIR__ . '/includes/header.php';
                                                 <a href="faculty_classroom.php?id=<?= (int) $row['id'] ?>" title="Manage classroom"><i class="fa-solid fa-gear"></i></a>
                                                 <a href="faculty_classroom_assessments.php?id=<?= (int) $row['id'] ?>" title="Manage assessments"><i class="fa-solid fa-clipboard-list"></i></a>
                                                 <?php if (trim((string) $row['meet_link']) !== ''): ?>
-                                                    <a href="<?= htmlspecialchars((string) $row['meet_link']) ?>" target="_blank" rel="noopener noreferrer" title="Open Meet"><i class="fa-solid fa-video"></i></a>
+                                                    <form method="post" action="faculty_classrooms.php" target="_blank" rel="noopener noreferrer" class="d-inline">
+                                                        <input type="hidden" name="action" value="open_meet">
+                                                        <input type="hidden" name="classroom_id" value="<?= (int) $row['id'] ?>">
+                                                        <button type="submit" title="Open Meet and go live"<?= app_tooltip_attr('Opens Google Meet in a new tab and marks this class as live so students can join.') ?>><i class="fa-solid fa-video"></i></button>
+                                                    </form>
                                                 <?php endif; ?>
                                             </div>
                                         </td>

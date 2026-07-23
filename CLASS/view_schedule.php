@@ -97,21 +97,6 @@ $formatTime12h = static function (?string $time): string {
     return $dt ? $dt->format('g:i A') : $raw;
 };
 
-/** Faculty clicked “Go live” and class is still within its scheduled day/time window. */
-$scheduleShowsLive = static function (array $scheduleRow, ?string $liveAt): bool {
-    if ($liveAt === null || $liveAt === '') {
-        return false;
-    }
-    $t = strtotime($liveAt);
-    if ($t === false) {
-        return false;
-    }
-    if ((time() - $t) > 2 * 3600) {
-        return false;
-    }
-    return !empty(classroom_attendance_login_allowed($scheduleRow)['allowed']);
-};
-
 $byDay = [];
 foreach (schedule_days_list() as $d) {
     $byDay[$d] = [];
@@ -263,7 +248,7 @@ require_once __DIR__ . '/includes/header.php';
                                 $onlineUrl = $hasOnlineUrlCol ? trim((string) ($s['online_class_url'] ?? '')) : '';
                                 $liveAtStr = $hasLiveAtCol ? ($s['online_live_at'] ?? null) : null;
                                 $liveAtStr = $liveAtStr !== null && $liveAtStr !== '' ? (string) $liveAtStr : null;
-                                $isLive = $hasLiveAtCol && $scheduleShowsLive($s, $liveAtStr);
+                                $isLive = $hasLiveAtCol && schedule_is_faculty_live($liveAtStr);
                                 ?>
                                 <?php if ($hasOnlineUrlCol && $onlineUrl !== ''): ?>
                                     <div class="mt-1 pt-1 border-top border-secondary-subtle small">

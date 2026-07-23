@@ -166,20 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $_SESSION['flash'] = 'You are now marked as live for this class.';
             } else {
-                db()->prepare('UPDATE schedules SET online_live_at = NULL WHERE id=? AND faculty_id=?' . $scheduleCollegeClause)
-                    ->execute(array_merge([$scheduleId, $facultyId], $scheduleCollegeParam));
-                if ($hasLiveSessions) {
-                    $st = db()->prepare('SELECT id FROM online_classrooms WHERE schedule_id = ? AND faculty_id = ? LIMIT 1');
-                    $st->execute([$scheduleId, $facultyId]);
-                    $classroomId = (int) ($st->fetchColumn() ?: 0);
-                    if ($classroomId > 0) {
-                        db()->prepare(
-                            'UPDATE classroom_live_sessions
-                             SET ended_at = NOW()
-                             WHERE classroom_id = ? AND schedule_id = ? AND faculty_id = ? AND ended_at IS NULL'
-                        )->execute([$classroomId, $scheduleId, $facultyId]);
-                    }
-                }
+                faculty_end_live_for_schedule($scheduleId, $facultyId);
                 $_SESSION['flash'] = 'Live session ended.';
             }
         } catch (Throwable $e) {
@@ -377,11 +364,10 @@ require_once __DIR__ . '/includes/header.php';
                             <?php if ($hasLiveAt && $link !== ''): ?>
                                 <?php
                                 $liveAtRaw = $r['online_live_at'] ?? null;
-                                $liveTs = $liveAtRaw ? strtotime((string) $liveAtRaw) : false;
                                 $liveWindow = classroom_attendance_login_allowed($r);
                                 $isWithinClassTime = !empty($liveWindow['allowed']);
-                                $wasMarkedLive = $liveTs !== false && (time() - $liveTs) <= 2 * 3600;
-                                $isLiveNow = $wasMarkedLive && $isWithinClassTime;
+                                $wasMarkedLive = $liveAtRaw !== null && $liveAtRaw !== '';
+                                $isLiveNow = $wasMarkedLive && schedule_is_faculty_live((string) $liveAtRaw, null, $r);
                                 $goLiveDisabledReason = (string) ($liveWindow['reason'] ?? '');
                                 if ($goLiveDisabledReason === '') {
                                     $goLiveDisabledReason = 'Go live is only available during the scheduled class time.';
