@@ -3,8 +3,9 @@ declare(strict_types=1);
 
 /**
  * Super Admin: weekly teaching contact hours by program (faculty.department),
- * flagged under load (<18 hrs/week) or overload (>27). Uses the same weekly
- * hour rules as faculty_teaching_load (session length × meeting days; lab if lab room or ~3-hour block).
+ * flagged under load (<18 hrs/week) or overload (>27). Lecture hours use catalog
+ * lecture units (×1); laboratory hours use the scheduled lab block when the course
+ * has lab units; otherwise session length × meeting days.
  */
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
@@ -102,7 +103,17 @@ $sessionHoursBetween = static function (string $start, string $end) use ($normal
     return round($mins / 60, 2);
 };
 
-$weeklyContactFromGroup = static function (array $group) use ($sessionHoursBetween, $normalizeScheduleTime): array {
+$weeklyContactFromGroup = static function (array $group) use (
+    $sessionHoursBetween,
+    $normalizeScheduleTime,
+    $hasLectureUnits,
+    $hasLaboratoryUnits
+): array {
+    $r0 = $group[0];
+    $lecU = (float) ($r0['lecture_units'] ?? 0);
+    $labU = (float) ($r0['laboratory_units'] ?? 0);
+    $noLabComponent = $hasLaboratoryUnits && $labU <= 0;
+
     $lec = 0.0;
     $lab = 0.0;
     foreach ($group as $r) {
@@ -114,18 +125,26 @@ $weeklyContactFromGroup = static function (array $group) use ($sessionHoursBetwe
             $dayCount = 1;
         }
         $weeklyH = $h * $dayCount;
-        if (schedule_session_is_laboratory(
+        $isLabSlot = !$noLabComponent && schedule_session_is_laboratory(
             $start,
             $end,
             (string) ($r['room_type'] ?? ''),
             isset($r['session_kind']) ? (string) $r['session_kind'] : null,
             array_key_exists('is_laboratory', $r) ? ((int) ($r['is_laboratory'] ?? 0) === 1) : null
-        )) {
+        );
+        if ($isLabSlot) {
             $lab += $weeklyH;
         } else {
             $lec += $weeklyH;
         }
     }
+
+    // Match faculty_teaching_load: catalog lecture units ×1; lab from timetable when course has lab units.
+    if ($hasLectureUnits && $hasLaboratoryUnits && ($lecU > 0 || $labU > 0)) {
+        $lec = $lecU;
+        $lab = $labU > 0 ? $lab : 0.0;
+    }
+
     return [
         'lec' => round($lec, 2),
         'lab' => round($lab, 2),
