@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/assessment_retake_helpers.php';
+require_once __DIR__ . '/includes/wellness_ai.php';
 
 require_role(['faculty', 'program_chair', 'dean', 'gened']);
 
@@ -696,6 +697,8 @@ $submissionsPickId = (int) ($_GET['submissions'] ?? 0);
 if ($submissionsPickId < 1 && $assessments !== []) {
     $submissionsPickId = (int) $assessments[0]['id'];
 }
+
+$assessmentAiAvailable = wellness_ai_is_enabled();
 
 $pageTitle = $classroom ? 'Classroom Assessments' : 'Assessments';
 require_once __DIR__ . '/includes/header.php';
@@ -1667,10 +1670,63 @@ require_once __DIR__ . '/includes/header.php';
                         <?php endif; ?>
                         <div class="col-12">
                             <label class="form-label small fw-semibold">Questions</label>
+                            <div class="border rounded-3 p-3 mb-2 bg-light-subtle" id="addAutoGeneratePanel"
+                                 data-classroom-id="<?= (int) $classroomId ?>"
+                                 data-api="<?= htmlspecialchars('api/faculty_assessment_generate_questions.php', ENT_QUOTES, 'UTF-8') ?>"
+                                 data-ai-available="<?= $assessmentAiAvailable ? '1' : '0' ?>">
+                                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                                    <span class="small fw-semibold"><i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i>Auto-generate questions</span>
+                                    <?php if ($assessmentAiAvailable): ?>
+                                        <span class="badge text-bg-primary-subtle border text-primary-emphasis">AI-assisted</span>
+                                    <?php else: ?>
+                                        <span class="badge text-bg-secondary-subtle border">Template-based</span>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-sm-3">
+                                        <label class="form-label small mb-0" for="add_auto_count">Count</label>
+                                        <input type="number" class="form-control form-control-sm" id="add_auto_count" min="1" max="20" value="5">
+                                    </div>
+                                    <div class="col-sm-5">
+                                        <label class="form-label small mb-0" for="add_auto_topic">Topic (optional)</label>
+                                        <input type="text" class="form-control form-control-sm" id="add_auto_topic" maxlength="200" placeholder="Uses assessment title if blank">
+                                    </div>
+                                    <?php if ($hasCreditedWeek): ?>
+                                    <div class="col-sm-4">
+                                        <label class="form-label small mb-0" for="add_auto_week">From week materials</label>
+                                        <select class="form-select form-select-sm" id="add_auto_week">
+                                            <option value="">Assessment title / description only</option>
+                                            <?php for ($wn = 1; $wn <= 18; $wn++): ?>
+                                                <option value="Week <?= $wn ?>">Week <?= $wn ?></option>
+                                            <?php endfor; ?>
+                                        </select>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php if ($hasCreditedWeek): ?>
+                                    <div class="col-12">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="1" id="add_auto_use_materials" checked>
+                                            <label class="form-check-label small" for="add_auto_use_materials">Include posted course materials for the selected week</label>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+                                    <div class="col-12 d-flex flex-wrap gap-2">
+                                        <button type="button" class="btn btn-primary btn-sm" id="addAutoGenerateBtn"<?= app_tooltip_attr('Creates questions with answer keys based on your title, description, and optional week materials.') ?>>
+                                            <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Generate questions
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm d-none" id="addAutoGenerateMoreBtn"<?= app_tooltip_attr('Adds more questions without removing existing ones.') ?>>
+                                            <i class="fa-solid fa-plus me-1"></i>Generate more
+                                        </button>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="small text-muted d-none" id="addAutoGenerateStatus"></div>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="small text-muted mb-1">Total items: <span id="addTotalItems">0</span></div>
                             <div class="border rounded-3 p-2" id="addQuestionBuilder"></div>
                             <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="addQuestionRowBtn">+ Add question</button>
-                            <div class="form-text small">Mix multiple choice, true/false, essay, and problem-solving in one assessment. Points are auto-totaled.</div>
+                            <div class="form-text small">Choose a type above, then auto-generate or add questions manually. Answer keys are filled for auto-graded types.</div>
                         </div>
                         <div class="col-12">
                             <label class="form-label small" for="add-assessment-description">Description</label>
@@ -2116,6 +2172,18 @@ require_once __DIR__ . '/includes/header.php';
                     collect();
                 }
             },
+            appendRows: function (rows) {
+                var existing = collect();
+                var merged = existing.concat(rows || []);
+                builder.innerHTML = '';
+                merged.forEach(function (r, idx) {
+                    var row = buildQuestionRow(r, idx);
+                    builder.appendChild(row);
+                    attachRowEvents(row);
+                });
+                renumber();
+                collect();
+            },
             collect: collect
         };
     }
@@ -2125,6 +2193,147 @@ require_once __DIR__ . '/includes/header.php';
     if (addBuilderApi) {
         addBuilderApi.setRows([]);
     }
+
+    function bindAutoGenerate(panelId, generateBtnId, moreBtnId, statusId, builderApi, formId, countId, topicId, weekId, useMaterialsId) {
+        var panel = document.getElementById(panelId);
+        var generateBtn = document.getElementById(generateBtnId);
+        var moreBtn = document.getElementById(moreBtnId);
+        var statusEl = document.getElementById(statusId);
+        var form = document.getElementById(formId);
+        if (!panel || !generateBtn || !builderApi || !form) {
+            return;
+        }
+
+        function setStatus(text, isError) {
+            if (!statusEl) return;
+            statusEl.textContent = text;
+            statusEl.classList.toggle('text-danger', !!isError);
+            statusEl.classList.toggle('text-muted', !isError);
+            statusEl.classList.toggle('d-none', !text);
+        }
+
+        function readDescription(formEl) {
+            var ta = formEl.querySelector('textarea[name="description"]');
+            if (!ta) return '';
+            var shell = ta.closest('.wordpad-shell');
+            var ed = shell && shell.querySelector('.wordpad-editor');
+            if (ed && !ed.classList.contains('d-none')) {
+                return (ed.innerText || ed.textContent || '').trim();
+            }
+            return (ta.value || '').trim();
+        }
+
+        async function requestQuestions(append) {
+            var classroomId = parseInt(panel.dataset.classroomId || '0', 10);
+            var api = panel.dataset.api || '';
+            if (!classroomId || !api) {
+                setStatus('Missing classroom context.', true);
+                return;
+            }
+
+            var typeSelect = form.querySelector('select[name="assessment_type"]');
+            var titleInput = form.querySelector('input[name="title"]');
+            var countInput = document.getElementById(countId);
+            var topicInput = document.getElementById(topicId);
+            var weekSelect = weekId ? document.getElementById(weekId) : null;
+            var useMaterialsInput = document.getElementById(useMaterialsId);
+
+            var assessmentType = typeSelect ? typeSelect.value : 'essay';
+            var title = titleInput ? (titleInput.value || '').trim() : '';
+            var description = readDescription(form);
+            var count = countInput ? parseInt(countInput.value || '5', 10) : 5;
+            if (count < 1) count = 1;
+            if (count > 20) count = 20;
+            var topic = topicInput ? (topicInput.value || '').trim() : '';
+            var week = weekSelect ? (weekSelect.value || '').trim() : '';
+            var useMaterials = useMaterialsInput ? (useMaterialsInput.checked && week !== '') : false;
+
+            var existing = append ? builderApi.collect() : [];
+            var exclude = existing.map(function (q) { return q.question_text || ''; });
+
+            generateBtn.disabled = true;
+            if (moreBtn) moreBtn.disabled = true;
+            setStatus(append ? 'Generating more questions…' : 'Generating questions…', false);
+
+            try {
+                var res = await fetch(api, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        classroom_id: classroomId,
+                        assessment_type: assessmentType,
+                        title: title,
+                        description: description,
+                        count: count,
+                        topic: topic,
+                        credited_week: week,
+                        use_materials: useMaterials,
+                        exclude: exclude
+                    })
+                });
+                var data = await res.json();
+                if (!res.ok || !data.ok) {
+                    throw new Error(data.error || 'Could not generate questions.');
+                }
+
+                var incoming = Array.isArray(data.questions) ? data.questions : [];
+                if (!incoming.length) {
+                    throw new Error('No questions were generated. Try adding a title or selecting a week with materials.');
+                }
+
+                var mapped = incoming.map(function (q) {
+                    return {
+                        question_type: q.question_type || assessmentType,
+                        question_text: q.question_text || '',
+                        points: q.points || 1,
+                        options: Array.isArray(q.options) ? q.options : [],
+                        answer_key: q.answer_key || '',
+                        word_limit: q.word_limit,
+                        char_limit: q.char_limit,
+                        allow_steps: q.allow_steps ? 1 : 0
+                    };
+                });
+
+                if (append && existing.length) {
+                    builderApi.appendRows(mapped);
+                } else {
+                    builderApi.setRows(mapped);
+                }
+
+                if (moreBtn) {
+                    moreBtn.classList.remove('d-none');
+                }
+
+                var sourceNote = data.source === 'ai' ? 'AI-assisted' : 'template-based';
+                setStatus('Added ' + mapped.length + ' question(s) (' + sourceNote + '). Review and edit before saving.', false);
+                showToast('Generated ' + mapped.length + ' question(s).');
+            } catch (err) {
+                setStatus(err.message || 'Something went wrong.', true);
+            } finally {
+                generateBtn.disabled = false;
+                if (moreBtn) moreBtn.disabled = false;
+            }
+        }
+
+        generateBtn.addEventListener('click', function () { requestQuestions(false); });
+        if (moreBtn) {
+            moreBtn.addEventListener('click', function () { requestQuestions(true); });
+        }
+    }
+
+    bindAutoGenerate(
+        'addAutoGeneratePanel',
+        'addAutoGenerateBtn',
+        'addAutoGenerateMoreBtn',
+        'addAutoGenerateStatus',
+        addBuilderApi,
+        'formAddAssessment',
+        'add_auto_count',
+        'add_auto_topic',
+        'add_auto_week',
+        'add_auto_use_materials'
+    );
 
     function formatTimerPreview(hours, minutes) {
         var h = Math.max(0, parseInt(hours, 10) || 0);

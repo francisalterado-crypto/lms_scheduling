@@ -789,6 +789,24 @@ $statusIsActive = $classroom && (string) $classroom['status'] === 'active';
                                                 <option value="<h3>">Heading</option>
                                                 <option value="<blockquote>">Quote</option>
                                             </select>
+                                            <select class="form-select form-select-sm wordpad-select wordpad-select--font" data-wordpad-font-family aria-label="Font"<?= app_tooltip_attr('Apply a standard font to the selected text.') ?>>
+                                                <option value="">Font</option>
+                                                <option value="Arial, Helvetica, sans-serif">Arial</option>
+                                                <option value="'Times New Roman', Times, serif">Times New Roman</option>
+                                                <option value="Georgia, serif">Georgia</option>
+                                                <option value="'Courier New', Courier, monospace">Courier New</option>
+                                                <option value="Verdana, sans-serif">Verdana</option>
+                                                <option value="Tahoma, sans-serif">Tahoma</option>
+                                            </select>
+                                            <select class="form-select form-select-sm wordpad-select wordpad-select--size" data-wordpad-font-size aria-label="Font size"<?= app_tooltip_attr('Change the font size of the selected text.') ?>>
+                                                <option value="">Size</option>
+                                                <option value="12px">Small (12)</option>
+                                                <option value="14px">Normal (14)</option>
+                                                <option value="16px">Medium (16)</option>
+                                                <option value="18px">Large (18)</option>
+                                                <option value="24px">Extra large (24)</option>
+                                                <option value="32px">Title (32)</option>
+                                            </select>
                                             <button type="button" class="btn btn-outline-secondary btn-sm" data-command="bold" title="Bold"<?= app_tooltip_attr('Makes selected text bold in the rich description area.') ?>><i class="fa-solid fa-bold"></i></button>
                                             <button type="button" class="btn btn-outline-secondary btn-sm" data-command="italic" title="Italic"<?= app_tooltip_attr('Italicizes selected text for emphasis in the description.') ?>><i class="fa-solid fa-italic"></i></button>
                                             <button type="button" class="btn btn-outline-secondary btn-sm" data-command="underline" title="Underline"<?= app_tooltip_attr('Underlines selected text in the description.') ?>><i class="fa-solid fa-underline"></i></button>
@@ -799,12 +817,13 @@ $statusIsActive = $classroom && (string) $classroom['status'] === 'active';
                                             <button type="button" class="btn btn-outline-secondary btn-sm" data-command="justifyRight" title="Align right"<?= app_tooltip_attr('Aligns paragraph text to the right.') ?>><i class="fa-solid fa-align-right"></i></button>
                                             <button type="button" class="btn btn-outline-secondary btn-sm" data-command="createLink" title="Insert link"<?= app_tooltip_attr('Turns the selection into a hyperlink. Use for readings or external resources.') ?>><i class="fa-solid fa-link"></i></button>
                                             <button type="button" class="btn btn-outline-secondary btn-sm" data-command="unlink" title="Remove link"<?= app_tooltip_attr('Removes the link from the selected text without deleting the text.') ?>><i class="fa-solid fa-link-slash"></i></button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" data-command="insertImage" title="Insert image"<?= app_tooltip_attr('Insert a JPEG, PNG, GIF, or WebP image into the notes. You can also paste an image from the clipboard.') ?>><i class="fa-solid fa-image"></i></button>
                                             <button type="button" class="btn btn-outline-secondary btn-sm" data-command="removeFormat" title="Clear formatting"<?= app_tooltip_attr('Strips bold, italics, and other formatting from the selection.') ?>><i class="fa-solid fa-eraser"></i></button>
                                         </div>
                                         <div class="wordpad-editor form-control d-none" contenteditable="true" data-placeholder="Add instructions, context, or a short message for students…"></div>
                                         <textarea id="fc-body-textarea" name="body" class="form-control" rows="5" placeholder="Plain text if the rich editor is unavailable"></textarea>
                                     </div>
-                                    <div class="form-text">Optional formatting for longer notes (bold, lists, links).</div>
+                                    <div class="form-text">Optional formatting for longer notes (bold, lists, links, images). Paste or insert images — they are saved with the post.</div>
                                 </div>
                             </div>
                         </div>
@@ -936,6 +955,50 @@ document.querySelectorAll('[data-wordpad]').forEach((shell) => {
         syncEditor();
     };
 
+    const insertImageFromFile = (file) => {
+        if (!file || !/^image\/(jpeg|png|gif|webp)$/i.test(file.type || '')) {
+            window.alert('Please choose a JPEG, PNG, GIF, or WebP image.');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            window.alert('Image is too large (max 5 MB).');
+            return;
+        }
+        const fd = new FormData();
+        fd.append('image', file, file.name || 'image.jpg');
+        fetch('api/classroom_inline_image_upload.php', {
+            method: 'POST',
+            body: fd,
+            credentials: 'same-origin'
+        })
+            .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+            .then((result) => {
+                if (!result.ok || !result.data || !result.data.src) {
+                    throw new Error((result.data && result.data.error) || 'Image upload failed.');
+                }
+                editor.focus();
+                const safeSrc = String(result.data.src).replace(/"/g, '&quot;');
+                document.execCommand('insertHTML', false, '<p><img src="' + safeSrc + '" alt=""></p>');
+                syncEditor();
+            })
+            .catch((err) => {
+                window.alert(err && err.message ? err.message : 'Image upload failed.');
+            });
+    };
+
+    const imageInput = document.createElement('input');
+    imageInput.type = 'file';
+    imageInput.accept = 'image/jpeg,image/png,image/gif,image/webp,.jpg,.jpeg,.png,.gif,.webp';
+    imageInput.className = 'd-none';
+    shell.appendChild(imageInput);
+    imageInput.addEventListener('change', () => {
+        const file = imageInput.files && imageInput.files[0];
+        if (file) {
+            insertImageFromFile(file);
+        }
+        imageInput.value = '';
+    });
+
     toolbar.addEventListener('click', (event) => {
         const button = event.target.closest('button[data-command]');
         if (!button) {
@@ -948,8 +1011,13 @@ document.querySelectorAll('[data-wordpad]').forEach((shell) => {
         if (command === 'createLink') {
             const url = window.prompt('Enter link URL', 'https://');
             if (url) {
-                runCommand(command, url);
+                runCommand('createLink', url);
             }
+            return;
+        }
+
+        if (command === 'insertImage') {
+            imageInput.click();
             return;
         }
 
@@ -959,6 +1027,69 @@ document.querySelectorAll('[data-wordpad]').forEach((shell) => {
     blockSelect?.addEventListener('change', (event) => {
         const value = event.target.value || '<p>';
         runCommand('formatBlock', value);
+    });
+
+    const fontSizeSelect = shell.querySelector('[data-wordpad-font-size]');
+    const fontFamilySelect = shell.querySelector('[data-wordpad-font-family]');
+
+    const applyWordpadStyle = (styleProp, styleValue) => {
+        editor.focus();
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) {
+            window.alert('Select some text first.');
+            return false;
+        }
+        const range = sel.getRangeAt(0);
+        if (range.collapsed) {
+            window.alert('Select some text first.');
+            return false;
+        }
+        const span = document.createElement('span');
+        span.style[styleProp] = styleValue;
+        try {
+            range.surroundContents(span);
+        } catch (err) {
+            const fragment = range.extractContents();
+            span.appendChild(fragment);
+            range.insertNode(span);
+        }
+        sel.removeAllRanges();
+        syncEditor();
+        return true;
+    };
+
+    fontSizeSelect?.addEventListener('change', (event) => {
+        const value = event.target.value || '';
+        if (value !== '') {
+            applyWordpadStyle('fontSize', value);
+        }
+        event.target.value = '';
+    });
+
+    fontFamilySelect?.addEventListener('change', (event) => {
+        const value = event.target.value || '';
+        if (value !== '') {
+            applyWordpadStyle('fontFamily', value);
+        }
+        event.target.value = '';
+    });
+
+    editor.addEventListener('paste', (event) => {
+        const items = event.clipboardData && event.clipboardData.items;
+        if (!items) {
+            return;
+        }
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item && item.kind === 'file' && /^image\//i.test(item.type || '')) {
+                event.preventDefault();
+                const file = item.getAsFile();
+                if (file) {
+                    insertImageFromFile(file);
+                }
+                return;
+            }
+        }
     });
 
     editor.addEventListener('input', syncEditor);

@@ -196,11 +196,29 @@ $studentWeekSyllabusReady = $classroom && $hasSyllabusCols && trim((string) ($cl
                         <?php if (trim((string) ($item['resource_url'] ?? '')) !== ''): ?>
                             <?php $resourceUrl = trim((string) $item['resource_url']); ?>
                             <?php if (classroom_content_is_attachment($resourceUrl)): ?>
-                                <div class="small mt-2">
-                                    <a href="<?= htmlspecialchars(classroom_content_resource_href((int) $item['id'], $resourceUrl)) ?>"<?= student_tooltip_attr('Downloads or opens a file linked to this week’s topic. Use this for readings, slides, or worksheets your instructor posted.') ?>>
-                                        <i class="fa-solid fa-paperclip me-1"></i><?= htmlspecialchars(classroom_content_attachment_name($resourceUrl)) ?>
-                                    </a>
-                                </div>
+                                <?php
+                                $legacyName = classroom_content_attachment_name($resourceUrl);
+                                $legacyHref = classroom_content_resource_href((int) $item['id'], $resourceUrl);
+                                $legacyIsImage = classroom_content_is_image_filename($legacyName);
+                                ?>
+                                <?php if ($legacyIsImage): ?>
+                                    <div class="mt-2 classroom-content-attachment-image">
+                                        <a href="<?= htmlspecialchars($legacyHref) ?>" target="_blank" rel="noopener noreferrer"<?= student_tooltip_attr('Opens the image your instructor attached for this week’s topic.') ?>>
+                                            <img src="<?= htmlspecialchars($legacyHref . (str_contains($legacyHref, '?') ? '&' : '?') . 'inline=1') ?>" alt="<?= htmlspecialchars($legacyName) ?>" loading="lazy" decoding="async">
+                                        </a>
+                                        <div class="small mt-1">
+                                            <a href="<?= htmlspecialchars($legacyHref) ?>"<?= student_tooltip_attr('Downloads or opens a file linked to this week’s topic.') ?>>
+                                                <i class="fa-solid fa-paperclip me-1"></i><?= htmlspecialchars($legacyName) ?>
+                                            </a>
+                                        </div>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="small mt-2">
+                                        <a href="<?= htmlspecialchars($legacyHref) ?>"<?= student_tooltip_attr('Downloads or opens a file linked to this week’s topic. Use this for readings, slides, or worksheets your instructor posted.') ?>>
+                                            <i class="fa-solid fa-paperclip me-1"></i><?= htmlspecialchars($legacyName) ?>
+                                        </a>
+                                    </div>
+                                <?php endif; ?>
                             <?php else: ?>
                                 <div class="small mt-2">
                                     <a href="<?= htmlspecialchars(classroom_content_resource_href((int) $item['id'], $resourceUrl)) ?>" target="_blank" rel="noopener noreferrer"<?= student_tooltip_attr('Opens the linked resource in a new tab. Use this for external sites or documents your instructor linked for this week.') ?>>Open resource</a>
@@ -209,11 +227,29 @@ $studentWeekSyllabusReady = $classroom && $hasSyllabusCols && trim((string) ($cl
                         <?php endif; ?>
 
                         <?php foreach ($contentAttachmentMap[(int) $item['id']] ?? [] as $attachment): ?>
-                            <div class="small mt-2">
-                                <a href="<?= htmlspecialchars(classroom_content_attachment_href((int) $attachment['id'])) ?>"<?= student_tooltip_attr('Downloads or opens an extra attachment for this week’s item. Use this when there are multiple files for the same topic.') ?>>
-                                    <i class="fa-solid fa-paperclip me-1"></i><?= htmlspecialchars(classroom_content_attachment_download_name((string) $attachment['original_name'], (string) $attachment['stored_name'])) ?>
-                                </a>
-                            </div>
+                            <?php
+                            $attachName = classroom_content_attachment_download_name((string) $attachment['original_name'], (string) $attachment['stored_name']);
+                            $attachHref = classroom_content_attachment_href((int) $attachment['id']);
+                            $attachInlineHref = classroom_content_attachment_href((int) $attachment['id'], true);
+                            ?>
+                            <?php if (classroom_content_attachment_is_image($attachment)): ?>
+                                <div class="mt-2 classroom-content-attachment-image">
+                                    <a href="<?= htmlspecialchars($attachHref) ?>" target="_blank" rel="noopener noreferrer"<?= student_tooltip_attr('Opens the image your instructor attached for this week’s topic.') ?>>
+                                        <img src="<?= htmlspecialchars($attachInlineHref) ?>" alt="<?= htmlspecialchars($attachName) ?>" loading="lazy" decoding="async">
+                                    </a>
+                                    <div class="small mt-1">
+                                        <a href="<?= htmlspecialchars($attachHref) ?>"<?= student_tooltip_attr('Downloads or opens an extra attachment for this week’s item.') ?>>
+                                            <i class="fa-solid fa-paperclip me-1"></i><?= htmlspecialchars($attachName) ?>
+                                        </a>
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                <div class="small mt-2">
+                                    <a href="<?= htmlspecialchars($attachHref) ?>"<?= student_tooltip_attr('Downloads or opens an extra attachment for this week’s item. Use this when there are multiple files for the same topic.') ?>>
+                                        <i class="fa-solid fa-paperclip me-1"></i><?= htmlspecialchars($attachName) ?>
+                                    </a>
+                                </div>
+                            <?php endif; ?>
                         <?php endforeach; ?>
                     </div>
                 <?php endforeach; ?>

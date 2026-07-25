@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-require_role(['faculty', 'student']);
+require_role(['faculty', 'student', 'program_chair', 'dean', 'gened', 'admin', 'super_admin']);
 
 $attachmentId = (int) ($_GET['attachment_id'] ?? 0);
 $contentId = (int) ($_GET['id'] ?? 0);
@@ -20,7 +20,27 @@ $storedName = '';
 $originalName = '';
 $mime = '';
 
-if ($role === 'faculty') {
+if (in_array($role, ['admin', 'super_admin'], true)) {
+    if ($attachmentId > 0 && $hasContentAttachments) {
+        $st = db()->prepare(
+            'SELECT stored_name, original_name, mime
+             FROM classroom_content_attachments
+             WHERE id = ?
+             LIMIT 1'
+        );
+        $st->execute([$attachmentId]);
+        $attachment = $st->fetch() ?: null;
+        if (is_array($attachment)) {
+            $storedName = (string) ($attachment['stored_name'] ?? '');
+            $originalName = (string) ($attachment['original_name'] ?? '');
+            $mime = (string) ($attachment['mime'] ?? '');
+        }
+    } elseif ($contentId > 0) {
+        $st = db()->prepare('SELECT resource_url FROM classroom_content WHERE id = ? LIMIT 1');
+        $st->execute([$contentId]);
+        $resourceUrl = (string) ($st->fetchColumn() ?: '');
+    }
+} elseif (in_array($role, ['faculty', 'program_chair', 'dean', 'gened'], true)) {
     $facultyId = isset($_SESSION['faculty_id']) ? (int) $_SESSION['faculty_id'] : 0;
     if ($facultyId < 1) {
         $facultyId = resolve_faculty_id_for_user((int) ($_SESSION['user_id'] ?? 0)) ?? 0;
@@ -127,8 +147,12 @@ if ($storedName !== '') {
 }
 $mime = trim($mime) !== '' ? $mime : 'application/octet-stream';
 
+$wantInline = (string) ($_GET['inline'] ?? '') === '1' || classroom_content_is_image_mime($mime);
+$disposition = $wantInline && classroom_content_is_image_mime($mime) ? 'inline' : 'attachment';
+
 header('Content-Type: ' . $mime);
 header('Content-Length: ' . (string) filesize($path));
-header('Content-Disposition: attachment; filename="' . addcslashes($downloadName, '"\\') . '"');
+header('Content-Disposition: ' . $disposition . '; filename="' . addcslashes($downloadName, '"\\') . '"');
+header('X-Content-Type-Options: nosniff');
 readfile($path);
 exit;

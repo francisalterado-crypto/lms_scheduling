@@ -630,9 +630,154 @@ function classroom_content_resource_href(int $contentId, string $resourceUrl): s
     return $resourceUrl;
 }
 
-function classroom_content_attachment_href(int $attachmentId): string
+function classroom_content_attachment_href(int $attachmentId, bool $inline = false): string
 {
-    return 'classroom_content_attachment.php?attachment_id=' . $attachmentId;
+    $href = 'classroom_content_attachment.php?attachment_id=' . $attachmentId;
+    if ($inline) {
+        $href .= '&inline=1';
+    }
+
+    return $href;
+}
+
+function classroom_content_is_image_filename(string $name): bool
+{
+    $ext = strtolower(pathinfo(trim($name), PATHINFO_EXTENSION));
+
+    return in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
+}
+
+function classroom_content_is_image_mime(string $mime): bool
+{
+    $mime = strtolower(trim($mime));
+
+    return $mime !== '' && str_starts_with($mime, 'image/');
+}
+
+/**
+ * Whether a content attachment row should be previewed as an inline image.
+ *
+ * @param array<string,mixed> $attachment
+ */
+function classroom_content_attachment_is_image(array $attachment): bool
+{
+    if (classroom_content_is_image_mime((string) ($attachment['mime'] ?? ''))) {
+        return true;
+    }
+
+    return classroom_content_is_image_filename((string) ($attachment['original_name'] ?? ''))
+        || classroom_content_is_image_filename((string) ($attachment['stored_name'] ?? ''));
+}
+
+function classroom_content_inline_image_href(string $storedName): string
+{
+    return 'classroom_content_inline.php?n=' . rawurlencode(basename($storedName));
+}
+
+/**
+ * Persist a pasted/editor data-URI image and return a safe relative img src.
+ *
+ * @throws RuntimeException
+ */
+function classroom_content_store_data_uri_image(string $dataUri): string
+{
+    if (preg_match('#^data:image/(jpeg|jpg|png|gif|webp);base64,([A-Za-z0-9+/=\s]+)$#i', trim($dataUri), $matches) !== 1) {
+        throw new RuntimeException('Unsupported inline image format.');
+    }
+
+    $kind = strtolower((string) $matches[1]);
+    $ext = match ($kind) {
+        'jpeg', 'jpg' => 'jpg',
+        'png' => 'png',
+        'gif' => 'gif',
+        'webp' => 'webp',
+        default => '',
+    };
+    if ($ext === '') {
+        throw new RuntimeException('Unsupported inline image format.');
+    }
+
+    $binary = base64_decode(preg_replace('/\s+/', '', (string) $matches[2]) ?? '', true);
+    if ($binary === false || $binary === '') {
+        throw new RuntimeException('Could not decode the pasted image.');
+    }
+    if (strlen($binary) > 5 * 1024 * 1024) {
+        throw new RuntimeException('Inline image is too large (max 5 MB).');
+    }
+
+    $imageInfo = @getimagesizefromstring($binary);
+    if ($imageInfo === false) {
+        throw new RuntimeException('Pasted file is not a valid image.');
+    }
+    $detectedMime = strtolower((string) ($imageInfo['mime'] ?? ''));
+    $allowedMime = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/gif' => 'gif',
+        'image/webp' => 'webp',
+    ];
+    if (!isset($allowedMime[$detectedMime])) {
+        throw new RuntimeException('Only JPEG, PNG, GIF, and WebP images can be pasted.');
+    }
+    $ext = $allowedMime[$detectedMime];
+
+    $dir = classroom_content_attachment_dir();
+    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+        throw new RuntimeException('Unable to create attachment directory.');
+    }
+
+    $storedName = 'inline_' . bin2hex(random_bytes(16)) . '.' . $ext;
+    $destination = classroom_content_attachment_storage_path($storedName);
+    if (file_put_contents($destination, $binary) === false) {
+        throw new RuntimeException('Failed to save pasted image.');
+    }
+
+    return classroom_content_inline_image_href($storedName);
+}
+
+/**
+ * Normalize and validate an <img src> value for classroom HTML bodies.
+ */
+function classroom_content_sanitize_img_src(string $src): ?string
+{
+    $src = trim(html_entity_decode($src, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    if ($src === '') {
+        return null;
+    }
+
+    if (str_starts_with(strtolower($src), 'data:image/')) {
+        try {
+            return classroom_content_store_data_uri_image($src);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    if (preg_match('#^(?:(?:\./)?classroom_content_inline\.php\?n=)([A-Za-z0-9._-]+)$#', $src, $matches) === 1) {
+        $stored = basename((string) $matches[1]);
+        if ($stored === '' || !is_file(classroom_content_attachment_storage_path($stored))) {
+            return null;
+        }
+
+        return classroom_content_inline_image_href($stored);
+    }
+
+    if (preg_match('#^(?:(?:\./)?classroom_content_attachment\.php\?(?:attachment_id|id)=)(\d+)(?:&inline=1)?$#', $src, $matches) === 1) {
+        $id = (int) $matches[1];
+
+        return $id > 0 ? 'classroom_content_attachment.php?attachment_id=' . $id . '&inline=1' : null;
+    }
+
+    $validated = filter_var($src, FILTER_VALIDATE_URL);
+    if ($validated === false) {
+        return null;
+    }
+    $scheme = strtolower((string) (parse_url($validated, PHP_URL_SCHEME) ?? ''));
+    if (!in_array($scheme, ['http', 'https'], true)) {
+        return null;
+    }
+
+    return $validated;
 }
 
 /** Open syllabus for a classroom (auth enforced in classroom_syllabus.php). */
@@ -1098,6 +1243,94 @@ function classroom_content_extract_alignment(string $style): string
     return strtolower((string) ($matches[1] ?? ''));
 }
 
+function classroom_content_extract_font_size(string $style): string
+{
+    if (preg_match('/font-size\s*:\s*(\d+(?:\.\d+)?(?:px|pt|rem|em))/i', $style, $matches) !== 1) {
+        return '';
+    }
+
+    $size = strtolower((string) ($matches[1] ?? ''));
+    if (preg_match('/^(\d+(?:\.\d+)?)(px|pt|rem|em)$/', $size, $parts) !== 1) {
+        return '';
+    }
+
+    $num = (float) $parts[1];
+    $unit = (string) $parts[2];
+    if ($unit === 'px' && ($num < 8 || $num > 72)) {
+        return '';
+    }
+    if ($unit === 'pt' && ($num < 6 || $num > 54)) {
+        return '';
+    }
+    if ($unit === 'rem' && ($num < 0.5 || $num > 4)) {
+        return '';
+    }
+    if ($unit === 'em' && ($num < 0.5 || $num > 4)) {
+        return '';
+    }
+
+    return $num . $unit;
+}
+
+function classroom_content_extract_font_family(string $style): string
+{
+    if (preg_match('/font-family\s*:\s*([^;]+)/i', $style, $matches) !== 1) {
+        return '';
+    }
+
+    $family = trim((string) ($matches[1] ?? ''));
+    if ($family === '') {
+        return '';
+    }
+
+    $allowed = [
+        'arial, helvetica, sans-serif',
+        "'times new roman', times, serif",
+        'georgia, serif',
+        "'courier new', courier, monospace",
+        'verdana, sans-serif',
+        'tahoma, sans-serif',
+    ];
+    $normalized = strtolower(str_replace('"', "'", $family));
+    foreach ($allowed as $allowedFamily) {
+        if ($normalized === $allowedFamily) {
+            return $family;
+        }
+    }
+
+    return '';
+}
+
+function classroom_content_build_text_style(string $alignment, string $fontSize, string $fontFamily): string
+{
+    $parts = [];
+    if ($alignment !== '') {
+        $parts[] = 'text-align:' . $alignment;
+    }
+    if ($fontSize !== '') {
+        $parts[] = 'font-size:' . $fontSize;
+    }
+    if ($fontFamily !== '') {
+        $parts[] = 'font-family:' . $fontFamily;
+    }
+
+    return $parts !== [] ? implode(';', $parts) . ';' : '';
+}
+
+function classroom_content_font_size_from_legacy(int $size): string
+{
+    return match ($size) {
+        1 => '10px',
+        2 => '12px',
+        3 => '14px',
+        4 => '16px',
+        5 => '18px',
+        6 => '24px',
+        7 => '32px',
+        default => '',
+    };
+}
+
 function classroom_content_sanitize_html_node(DOMNode $node, DOMDocument $doc): ?DOMNode
 {
     if ($node instanceof DOMText) {
@@ -1126,6 +1359,9 @@ function classroom_content_sanitize_html_node(DOMNode $node, DOMDocument $doc): 
         'a' => true,
         'h2' => true,
         'h3' => true,
+        'img' => true,
+        'span' => true,
+        'font' => true,
     ];
 
     if (!isset($allowedTags[$tag])) {
@@ -1140,7 +1376,49 @@ function classroom_content_sanitize_html_node(DOMNode $node, DOMDocument $doc): 
         return $fragment;
     }
 
-    $clean = $doc->createElement($tag);
+    if ($tag === 'font') {
+        $styleAttr = (string) $node->getAttribute('style');
+        $fontSize = classroom_content_extract_font_size($styleAttr);
+        $fontFamily = classroom_content_extract_font_family($styleAttr);
+        if ($fontFamily === '') {
+            $face = trim((string) $node->getAttribute('face'));
+            if ($face !== '') {
+                $fontFamily = classroom_content_extract_font_family('font-family:' . $face);
+            }
+        }
+        if ($fontSize === '') {
+            $legacySize = (int) $node->getAttribute('size');
+            if ($legacySize > 0) {
+                $fontSize = classroom_content_font_size_from_legacy($legacySize);
+            }
+        }
+
+        $style = classroom_content_build_text_style('', $fontSize, $fontFamily);
+        if ($style === '') {
+            $fragment = $doc->createDocumentFragment();
+            foreach ($node->childNodes as $child) {
+                $cleanChild = classroom_content_sanitize_html_node($child, $doc);
+                if ($cleanChild !== null) {
+                    $fragment->appendChild($cleanChild);
+                }
+            }
+
+            return $fragment;
+        }
+
+        $clean = $doc->createElement('span');
+        $clean->setAttribute('style', $style);
+        foreach ($node->childNodes as $child) {
+            $cleanChild = classroom_content_sanitize_html_node($child, $doc);
+            if ($cleanChild !== null) {
+                $clean->appendChild($cleanChild);
+            }
+        }
+
+        return $clean;
+    }
+
+    $clean = $doc->createElement($tag === 'span' ? 'span' : $tag);
 
     if ($tag === 'a') {
         $href = trim((string) $node->getAttribute('href'));
@@ -1153,13 +1431,67 @@ function classroom_content_sanitize_html_node(DOMNode $node, DOMDocument $doc): 
         }
     }
 
+    if ($tag === 'img') {
+        $safeSrc = classroom_content_sanitize_img_src((string) $node->getAttribute('src'));
+        if ($safeSrc === null) {
+            return null;
+        }
+        $clean->setAttribute('src', $safeSrc);
+        $alt = trim((string) $node->getAttribute('alt'));
+        if ($alt !== '') {
+            if (function_exists('mb_substr')) {
+                $alt = mb_substr($alt, 0, 200);
+            } else {
+                $alt = substr($alt, 0, 200);
+            }
+            $clean->setAttribute('alt', $alt);
+        } else {
+            $clean->setAttribute('alt', '');
+        }
+        $clean->setAttribute('loading', 'lazy');
+        $clean->setAttribute('decoding', 'async');
+        $clean->setAttribute('style', 'max-width:100%;height:auto;');
+
+        return $clean;
+    }
+
+    if ($tag === 'span') {
+        $fontSize = classroom_content_extract_font_size((string) $node->getAttribute('style'));
+        $fontFamily = classroom_content_extract_font_family((string) $node->getAttribute('style'));
+        $style = classroom_content_build_text_style('', $fontSize, $fontFamily);
+        if ($style === '') {
+            $fragment = $doc->createDocumentFragment();
+            foreach ($node->childNodes as $child) {
+                $cleanChild = classroom_content_sanitize_html_node($child, $doc);
+                if ($cleanChild !== null) {
+                    $fragment->appendChild($cleanChild);
+                }
+            }
+
+            return $fragment;
+        }
+        $clean->setAttribute('style', $style);
+        foreach ($node->childNodes as $child) {
+            $cleanChild = classroom_content_sanitize_html_node($child, $doc);
+            if ($cleanChild !== null) {
+                $clean->appendChild($cleanChild);
+            }
+        }
+
+        return $clean;
+    }
+
     if (in_array($tag, ['p', 'div', 'li', 'blockquote', 'h2', 'h3'], true)) {
-        $alignment = classroom_content_extract_alignment((string) $node->getAttribute('style'));
+        $styleAttr = (string) $node->getAttribute('style');
+        $alignment = classroom_content_extract_alignment($styleAttr);
         if ($alignment === '') {
             $alignment = classroom_content_extract_alignment('text-align:' . (string) $node->getAttribute('align'));
         }
-        if ($alignment !== '') {
-            $clean->setAttribute('style', 'text-align:' . $alignment . ';');
+        $fontSize = classroom_content_extract_font_size($styleAttr);
+        $fontFamily = classroom_content_extract_font_family($styleAttr);
+        $style = classroom_content_build_text_style($alignment, $fontSize, $fontFamily);
+        if ($style !== '') {
+            $clean->setAttribute('style', $style);
         }
     }
 
@@ -1228,14 +1560,19 @@ function classroom_content_prepare_body(?string $body): ?string
     }
 
     $sanitized = classroom_content_sanitize_html($raw);
+    if ($sanitized === '') {
+        return null;
+    }
+
     $plain = html_entity_decode(
         strip_tags(str_replace('&nbsp;', ' ', $sanitized)),
         ENT_QUOTES | ENT_HTML5,
         'UTF-8'
     );
     $plain = preg_replace('/\s+/u', ' ', $plain ?? '') ?? '';
+    $hasImage = preg_match('/<img\b/i', $sanitized) === 1;
 
-    return trim($plain) === '' ? null : $sanitized;
+    return trim($plain) === '' && !$hasImage ? null : $sanitized;
 }
 
 function classroom_content_render_body(?string $body): string
