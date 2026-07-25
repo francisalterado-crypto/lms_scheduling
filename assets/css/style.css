@@ -798,6 +798,20 @@ html[data-bs-theme="dark"] .schedule-block.c5 {
   color: inherit;
 }
 
+body.page-fc-week-edit-popup .admin-sidebar,
+body.page-fc-week-edit-popup .admin-topbar,
+body.page-fc-week-edit-popup .visually-hidden-focusable {
+  display: none !important;
+}
+
+body.page-fc-week-edit-popup .admin-layout {
+  min-height: auto;
+}
+
+body.page-fc-week-edit-popup #main-content {
+  max-width: 100%;
+}
+
 /* —— App shell: sidebar, grouped nav, top bar (admin + all roles) —— */
 body.app-shell-sidebar,
 body.app-admin-shell {

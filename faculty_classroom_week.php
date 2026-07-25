@@ -38,29 +38,6 @@ $hasContentWeeks = db_column_exists('classroom_content', 'weeks');
 $hasContentDaysPerTopic = db_column_exists('classroom_content', 'days_per_topic');
 $hasContentTopicSchedule = $hasContentWeeks && $hasContentDaysPerTopic;
 
-/**
- * @throws RuntimeException
- */
-function faculty_week_manage_url(string $raw): string
-{
-    $raw = trim($raw);
-    if ($raw === '') {
-        return '';
-    }
-
-    $url = filter_var($raw, FILTER_VALIDATE_URL);
-    if ($url === false) {
-        throw new RuntimeException('Please enter a valid URL.');
-    }
-
-    $scheme = strtolower((string) (parse_url($url, PHP_URL_SCHEME) ?? ''));
-    if (!in_array($scheme, ['http', 'https'], true)) {
-        throw new RuntimeException('Only http and https URLs are allowed.');
-    }
-
-    return $url;
-}
-
 $classroom = null;
 if ($classroomId > 0 && $missingTables === []) {
     $st = db()->prepare(
@@ -132,88 +109,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             }
 
             $_SESSION['flash'] = 'Content removed.';
-        } elseif ($action === 'update_content') {
-            $contentId = (int) ($_POST['content_id'] ?? 0);
-            $contentType = (string) ($_POST['content_type'] ?? 'material');
-            $title = trim((string) ($_POST['title'] ?? ''));
-            $body = classroom_content_prepare_body((string) ($_POST['body'] ?? ''));
-            $weeks = trim((string) ($_POST['weeks'] ?? ''));
-            $daysPerTopic = trim((string) ($_POST['days_per_topic'] ?? ''));
-            $resourceUrlRaw = trim((string) ($_POST['resource_url'] ?? ''));
-
-            if (!in_array($contentType, ['material', 'link', 'announcement'], true)) {
-                $contentType = 'material';
-            }
-            if ($title === '') {
-                throw new RuntimeException('Content title is required.');
-            }
-
-            $st = db()->prepare(
-                'SELECT id, resource_url
-                 FROM classroom_content
-                 WHERE id = ? AND classroom_id = ? AND faculty_id = ?
-                 LIMIT 1'
-            );
-            $st->execute([$contentId, $classroomId, $facultyId]);
-            $existing = $st->fetch();
-            if (!$existing) {
-                throw new RuntimeException('Content item not found.');
-            }
-            $existingResourceUrl = trim((string) ($existing['resource_url'] ?? ''));
-            $resourceUrl = $resourceUrlRaw !== '' ? faculty_week_manage_url($resourceUrlRaw) : '';
-            if ($resourceUrlRaw === '' && classroom_content_is_attachment($existingResourceUrl)) {
-                // Keep legacy attachment token if URL input is left blank.
-                $resourceUrl = $existingResourceUrl;
-            }
-
-            $hasAttachmentRows = false;
-            if ($hasContentAttachments) {
-                $st = db()->prepare('SELECT COUNT(*) FROM classroom_content_attachments WHERE content_id = ?');
-                $st->execute([$contentId]);
-                $hasAttachmentRows = (int) $st->fetchColumn() > 0;
-            }
-
-            if ($body === null && $resourceUrl === '' && !$hasAttachmentRows) {
-                throw new RuntimeException('Add a short description, a resource URL, or at least one attachment.');
-            }
-
-            if ($hasContentTopicSchedule) {
-                db()->prepare(
-                    'UPDATE classroom_content
-                     SET content_type = ?, title = ?, body = ?, weeks = ?, days_per_topic = ?, resource_url = ?
-                     WHERE id = ? AND classroom_id = ? AND faculty_id = ?'
-                )->execute([
-                    $contentType,
-                    $title,
-                    $body !== '' ? $body : null,
-                    $weeks,
-                    $daysPerTopic,
-                    $resourceUrl,
-                    $contentId,
-                    $classroomId,
-                    $facultyId,
-                ]);
-            } else {
-                db()->prepare(
-                    'UPDATE classroom_content
-                     SET content_type = ?, title = ?, body = ?, resource_url = ?
-                     WHERE id = ? AND classroom_id = ? AND faculty_id = ?'
-                )->execute([
-                    $contentType,
-                    $title,
-                    $body !== '' ? $body : null,
-                    $resourceUrl,
-                    $contentId,
-                    $classroomId,
-                    $facultyId,
-                ]);
-            }
-
-            $_SESSION['flash'] = 'Content updated.';
-            // Follow the item if its week label changed.
-            if ($hasContentTopicSchedule) {
-                $requestedWeek = classroom_content_week_label($weeks);
-            }
         } elseif ($action === 'upload_banner' || $action === 'delete_banner') {
             $bannerFlash = faculty_classroom_process_banner_post($classroomId, $facultyId, $classroom);
             if ($bannerFlash !== null) {
@@ -225,14 +120,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
     }
 
     $redirectWeek = trim((string) ($_POST['current_week'] ?? $requestedWeek));
-    $flashMsg = (string) ($_SESSION['flash'] ?? '');
-    if (
-        $action === 'update_content'
-        && $hasContentTopicSchedule
-        && !str_starts_with($flashMsg, 'Error:')
-    ) {
-        $redirectWeek = classroom_content_week_label(trim((string) ($_POST['weeks'] ?? '')));
-    }
     $redirectQuery = 'id=' . $classroomId;
     if ($redirectWeek !== '') {
         $redirectQuery .= '&week=' . rawurlencode($redirectWeek);
@@ -339,9 +226,14 @@ require_once __DIR__ . '/includes/header.php';
                                         <div class="small text-muted text-capitalize"><i class="fa-solid fa-tag me-1 opacity-75"></i><?= htmlspecialchars((string) $item['content_type']) ?></div>
                                     </div>
                                     <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                                        <button class="btn btn-sm btn-outline-primary rounded-pill" type="button" aria-expanded="false" aria-controls="editContent<?= (int) $item['id'] ?>" title="Edit content" data-fc-edit-toggle="#editContent<?= (int) $item['id'] ?>"<?= app_tooltip_attr('Expands the editor to change this item’s title, body, or links for this week.') ?>>
+                                        <?php
+                                        $editHref = 'faculty_classroom_week_edit.php?id=' . (int) $classroomId
+                                            . '&content_id=' . (int) $item['id']
+                                            . '&week=' . rawurlencode($requestedWeek);
+                                        ?>
+                                        <a href="<?= htmlspecialchars($editHref) ?>" class="btn btn-sm btn-outline-primary rounded-pill fc-edit-popup-link" data-content-id="<?= (int) $item['id'] ?>" title="Edit content"<?= app_tooltip_attr('Opens a separate window to change this item’s title, body, or links for this week.') ?>>
                                             <i class="fa-solid fa-pen-to-square me-1"></i>Edit
-                                        </button>
+                                        </a>
                                         <form method="post" class="d-inline" onsubmit="return confirm('Delete this content item?');">
                                             <input type="hidden" name="action" value="delete_content">
                                             <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
@@ -418,93 +310,6 @@ require_once __DIR__ . '/includes/header.php';
                                         </div>
                                     <?php endif; ?>
                                 <?php endforeach; ?>
-                                <div class="collapse mt-3" id="editContent<?= (int) $item['id'] ?>">
-                                    <div class="fc-inner-panel">
-                                        <div class="fc-subsection-label mb-3"><i class="fa-solid fa-pen" aria-hidden="true"></i>Edit this item</div>
-                                        <form method="post" class="row g-3">
-                                            <input type="hidden" name="action" value="update_content">
-                                            <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
-                                            <input type="hidden" name="content_id" value="<?= (int) $item['id'] ?>">
-                                            <input type="hidden" name="current_week" value="<?= htmlspecialchars($requestedWeek) ?>">
-                                            <div class="col-md-4">
-                                                <label class="form-label fw-semibold small">Content type</label>
-                                                <select name="content_type" class="form-select form-select-sm">
-                                                    <option value="material" <?= (string) ($item['content_type'] ?? '') === 'material' ? 'selected' : '' ?>>Material</option>
-                                                    <option value="link" <?= (string) ($item['content_type'] ?? '') === 'link' ? 'selected' : '' ?>>Link</option>
-                                                    <option value="announcement" <?= (string) ($item['content_type'] ?? '') === 'announcement' ? 'selected' : '' ?>>Announcement</option>
-                                                </select>
-                                            </div>
-                                            <div class="col-md-8">
-                                                <label class="form-label fw-semibold small">Title</label>
-                                                <input type="text" name="title" class="form-control form-control-sm" maxlength="150" required value="<?= htmlspecialchars((string) ($item['title'] ?? '')) ?>" placeholder="Short title shown to students">
-                                            </div>
-                                            <?php if ($hasContentTopicSchedule): ?>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-semibold small">Week label</label>
-                                                    <input type="text" name="weeks" class="form-control form-control-sm" maxlength="100" value="<?= htmlspecialchars((string) ($item['weeks'] ?? '')) ?>" placeholder="e.g. Week 3">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-semibold small">Days per topic</label>
-                                                    <input type="text" name="days_per_topic" class="form-control form-control-sm" maxlength="100" value="<?= htmlspecialchars((string) ($item['days_per_topic'] ?? '')) ?>" placeholder="e.g. 2 class days">
-                                                </div>
-                                            <?php endif; ?>
-                                            <div class="col-12">
-                                                <label class="form-label fw-semibold small">Description &amp; notes</label>
-                                                <div class="wordpad-shell" data-wordpad data-wordpad-name="body">
-                                                    <div class="wordpad-toolbar d-none" role="toolbar" aria-label="Formatting toolbar">
-                                                        <select class="form-select form-select-sm wordpad-select" data-wordpad-block aria-label="Text style">
-                                                            <option value="<p>">Normal text</option>
-                                                            <option value="<h3>">Heading</option>
-                                                            <option value="<blockquote>">Quote</option>
-                                                        </select>
-                                                        <select class="form-select form-select-sm wordpad-select wordpad-select--font" data-wordpad-font-family aria-label="Font">
-                                                            <option value="">Font</option>
-                                                            <option value="Arial, Helvetica, sans-serif">Arial</option>
-                                                            <option value="'Times New Roman', Times, serif">Times New Roman</option>
-                                                            <option value="Georgia, serif">Georgia</option>
-                                                            <option value="'Courier New', Courier, monospace">Courier New</option>
-                                                            <option value="Verdana, sans-serif">Verdana</option>
-                                                            <option value="Tahoma, sans-serif">Tahoma</option>
-                                                        </select>
-                                                        <select class="form-select form-select-sm wordpad-select wordpad-select--size" data-wordpad-font-size aria-label="Font size">
-                                                            <option value="">Size</option>
-                                                            <option value="12px">Small (12)</option>
-                                                            <option value="14px">Normal (14)</option>
-                                                            <option value="16px">Medium (16)</option>
-                                                            <option value="18px">Large (18)</option>
-                                                            <option value="24px">Extra large (24)</option>
-                                                            <option value="32px">Title (32)</option>
-                                                        </select>
-                                                        <button type="button" class="btn btn-outline-secondary btn-sm" data-command="bold" title="Bold"><i class="fa-solid fa-bold"></i></button>
-                                                        <button type="button" class="btn btn-outline-secondary btn-sm" data-command="italic" title="Italic"><i class="fa-solid fa-italic"></i></button>
-                                                        <button type="button" class="btn btn-outline-secondary btn-sm" data-command="underline" title="Underline"><i class="fa-solid fa-underline"></i></button>
-                                                        <button type="button" class="btn btn-outline-secondary btn-sm" data-command="insertUnorderedList" title="Bulleted list"><i class="fa-solid fa-list-ul"></i></button>
-                                                        <button type="button" class="btn btn-outline-secondary btn-sm" data-command="insertOrderedList" title="Numbered list"><i class="fa-solid fa-list-ol"></i></button>
-                                                        <button type="button" class="btn btn-outline-secondary btn-sm" data-command="createLink" title="Insert link"><i class="fa-solid fa-link"></i></button>
-                                                        <button type="button" class="btn btn-outline-secondary btn-sm" data-command="insertImage" title="Insert image"><i class="fa-solid fa-image"></i></button>
-                                                        <button type="button" class="btn btn-outline-secondary btn-sm" data-command="removeFormat" title="Clear formatting"><i class="fa-solid fa-eraser"></i></button>
-                                                    </div>
-                                                    <div class="wordpad-editor form-control d-none" contenteditable="true" data-placeholder="Instructions, context, or notes (paste images OK)"></div>
-                                                    <textarea name="body" class="form-control form-control-sm" rows="4" placeholder="Instructions, context, or notes (optional if you have a link or attachment)"><?= htmlspecialchars((string) ($item['body'] ?? '')) ?></textarea>
-                                                </div>
-                                                <div class="form-text">You can paste or insert images here; they are saved with the lesson.</div>
-                                            </div>
-                                            <div class="col-12">
-                                                <label class="form-label fw-semibold small">Resource URL</label>
-                                                <?php $editResourceUrl = trim((string) ($item['resource_url'] ?? '')); ?>
-                                                <input type="url" name="resource_url" class="form-control form-control-sm" placeholder="https://… (optional)" value="<?= classroom_content_is_attachment($editResourceUrl) ? '' : htmlspecialchars($editResourceUrl) ?>" autocomplete="url">
-                                                <?php if (classroom_content_is_attachment($editResourceUrl)): ?>
-                                                    <div class="form-text">This item uses a legacy uploaded attachment. Leave URL blank to keep that file link.</div>
-                                                <?php endif; ?>
-                                            </div>
-                                            <div class="col-12 pt-1">
-                                                <button type="submit" class="btn btn-primary fc-btn-primary-lg"<?= app_tooltip_attr('Saves your edits to this content item for the selected week.') ?>>
-                                                    <i class="fa-solid fa-floppy-disk me-2"></i>Save changes
-                                                </button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
                             </div>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -517,264 +322,16 @@ require_once __DIR__ . '/includes/header.php';
 
 <script>
 (function () {
-    function initWordpad(shell) {
-        if (!shell || shell.getAttribute('data-wordpad-ready') === '1') {
-            return;
-        }
-
-        var fieldName = shell.getAttribute('data-wordpad-name') || 'body';
-        var textarea = shell.querySelector('textarea[name="' + fieldName + '"]');
-        var editor = shell.querySelector('.wordpad-editor');
-        var toolbar = shell.querySelector('.wordpad-toolbar');
-        var blockSelect = shell.querySelector('[data-wordpad-block]');
-        var form = shell.closest('form');
-
-        if (!textarea || !editor || !toolbar || !form) {
-            return;
-        }
-
-        toolbar.classList.remove('d-none');
-        editor.classList.remove('d-none');
-        editor.innerHTML = textarea.value;
-        textarea.classList.add('d-none');
-        shell.setAttribute('data-wordpad-ready', '1');
-
-        var syncEditor = function () {
-            if (shell.getAttribute('data-wordpad-ready') !== '1') {
-                return;
-            }
-            var html = editor.innerHTML
-                .replace(/<div><br><\/div>/gi, '')
-                .replace(/&nbsp;/gi, ' ')
-                .trim();
-            // Never wipe existing saved HTML if the editor failed to load it.
-            if (html === '' && textarea.defaultValue.trim() !== '' && editor.childNodes.length === 0) {
-                return;
-            }
-            textarea.value = html;
-        };
-
-        var runCommand = function (command, value) {
-            editor.focus();
-            document.execCommand('styleWithCSS', false, false);
-            document.execCommand(command, false, value == null ? null : value);
-            syncEditor();
-        };
-
-        var insertImageFromFile = function (file) {
-            if (!file || !/^image\/(jpeg|png|gif|webp)$/i.test(file.type || '')) {
-                window.alert('Please choose a JPEG, PNG, GIF, or WebP image.');
-                return;
-            }
-            if (file.size > 5 * 1024 * 1024) {
-                window.alert('Image is too large (max 5 MB).');
-                return;
-            }
-
-            var fd = new FormData();
-            fd.append('image', file, file.name || 'image.jpg');
-
-            fetch('api/classroom_inline_image_upload.php', {
-                method: 'POST',
-                body: fd,
-                credentials: 'same-origin'
-            })
-                .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
-                .then(function (result) {
-                    if (!result.ok || !result.data || !result.data.src) {
-                        throw new Error((result.data && result.data.error) || 'Image upload failed.');
-                    }
-                    editor.focus();
-                    var safeSrc = String(result.data.src).replace(/"/g, '&quot;');
-                    document.execCommand('insertHTML', false, '<p><img src="' + safeSrc + '" alt=""></p>');
-                    syncEditor();
-                })
-                .catch(function (err) {
-                    window.alert(err && err.message ? err.message : 'Image upload failed.');
-                });
-        };
-
-        var imageInput = document.createElement('input');
-        imageInput.type = 'file';
-        imageInput.accept = 'image/jpeg,image/png,image/gif,image/webp,.jpg,.jpeg,.png,.gif,.webp';
-        imageInput.className = 'd-none';
-        shell.appendChild(imageInput);
-        imageInput.addEventListener('change', function () {
-            var file = imageInput.files && imageInput.files[0];
-            if (file) {
-                insertImageFromFile(file);
-            }
-            imageInput.value = '';
-        });
-
-        toolbar.addEventListener('click', function (event) {
-            var button = event.target.closest('button[data-command]');
-            if (!button) {
-                return;
-            }
+    document.querySelectorAll('.fc-edit-popup-link').forEach(function (link) {
+        link.addEventListener('click', function (event) {
             event.preventDefault();
-            var command = button.getAttribute('data-command') || '';
-            if (command === 'createLink') {
-                var url = window.prompt('Enter link URL', 'https://');
-                if (url) {
-                    runCommand('createLink', url);
-                }
-                return;
-            }
-            if (command === 'insertImage') {
-                imageInput.click();
-                return;
-            }
-            runCommand(command);
-        });
-
-        if (blockSelect) {
-            blockSelect.addEventListener('change', function (event) {
-                runCommand('formatBlock', event.target.value || '<p>');
-            });
-        }
-
-        var fontSizeSelect = shell.querySelector('[data-wordpad-font-size]');
-        var fontFamilySelect = shell.querySelector('[data-wordpad-font-family]');
-
-        var applyWordpadStyle = function (styleProp, styleValue) {
-            editor.focus();
-            var sel = window.getSelection();
-            if (!sel || sel.rangeCount === 0) {
-                window.alert('Select some text first.');
-                return false;
-            }
-            var range = sel.getRangeAt(0);
-            if (range.collapsed) {
-                window.alert('Select some text first.');
-                return false;
-            }
-            var span = document.createElement('span');
-            span.style[styleProp] = styleValue;
-            try {
-                range.surroundContents(span);
-            } catch (err) {
-                var fragment = range.extractContents();
-                span.appendChild(fragment);
-                range.insertNode(span);
-            }
-            sel.removeAllRanges();
-            syncEditor();
-            return true;
-        };
-
-        if (fontSizeSelect) {
-            fontSizeSelect.addEventListener('change', function (event) {
-                var value = event.target.value || '';
-                if (value !== '') {
-                    applyWordpadStyle('fontSize', value);
-                }
-                event.target.value = '';
-            });
-        }
-
-        if (fontFamilySelect) {
-            fontFamilySelect.addEventListener('change', function (event) {
-                var value = event.target.value || '';
-                if (value !== '') {
-                    applyWordpadStyle('fontFamily', value);
-                }
-                event.target.value = '';
-            });
-        }
-
-        editor.addEventListener('paste', function (event) {
-            var items = event.clipboardData && event.clipboardData.items;
-            if (!items) {
-                return;
-            }
-            for (var i = 0; i < items.length; i++) {
-                var item = items[i];
-                if (item && item.kind === 'file' && /^image\//i.test(item.type || '')) {
-                    event.preventDefault();
-                    var file = item.getAsFile();
-                    if (file) {
-                        insertImageFromFile(file);
-                    }
-                    return;
-                }
-            }
-        });
-
-        editor.addEventListener('input', syncEditor);
-        editor.addEventListener('blur', syncEditor);
-        form.addEventListener('submit', function () {
-            syncEditor();
-        });
-    }
-
-    function initWordpadsIn(root) {
-        (root || document).querySelectorAll('[data-wordpad]').forEach(initWordpad);
-    }
-
-    function setEditExpanded(btn, expanded) {
-        btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-    }
-
-    document.querySelectorAll('[data-fc-edit-toggle]').forEach(function (btn) {
-        btn.addEventListener('click', function (event) {
-            event.preventDefault();
-            var selector = btn.getAttribute('data-fc-edit-toggle') || '';
-            var panel = selector ? document.querySelector(selector) : null;
-            if (!panel) {
-                return;
-            }
-            if (window.bootstrap && bootstrap.Collapse) {
-                var instance = bootstrap.Collapse.getOrCreateInstance(panel, { toggle: false });
-                panel.addEventListener('shown.bs.collapse', function onShown() {
-                    setEditExpanded(btn, true);
-                    initWordpadsIn(panel);
-                    panel.removeEventListener('shown.bs.collapse', onShown);
-                });
-                panel.addEventListener('hidden.bs.collapse', function onHidden() {
-                    setEditExpanded(btn, false);
-                    panel.removeEventListener('hidden.bs.collapse', onHidden);
-                });
-                instance.toggle();
-                return;
-            }
-            var willShow = !panel.classList.contains('show');
-            panel.classList.toggle('show', willShow);
-            setEditExpanded(btn, willShow);
-            if (willShow) {
-                initWordpadsIn(panel);
-            }
-        });
-    });
-
-    document.querySelectorAll('.collapse').forEach(function (panel) {
-        panel.addEventListener('shown.bs.collapse', function () {
-            initWordpadsIn(panel);
-        });
-        // If a panel is already open (e.g. browser restore), init immediately.
-        if (panel.classList.contains('show')) {
-            initWordpadsIn(panel);
-        }
-    });
-
-    // Forms still submit correctly even if the rich editor never opened.
-    document.querySelectorAll('form').forEach(function (form) {
-        form.addEventListener('submit', function () {
-            form.querySelectorAll('[data-wordpad][data-wordpad-ready="1"]').forEach(function (shell) {
-                var fieldName = shell.getAttribute('data-wordpad-name') || 'body';
-                var textarea = shell.querySelector('textarea[name="' + fieldName + '"]');
-                var editor = shell.querySelector('.wordpad-editor');
-                if (!textarea || !editor) {
-                    return;
-                }
-                var html = editor.innerHTML
-                    .replace(/<div><br><\/div>/gi, '')
-                    .replace(/&nbsp;/gi, ' ')
-                    .trim();
-                if (!(html === '' && textarea.defaultValue.trim() !== '' && editor.childNodes.length === 0)) {
-                    textarea.value = html;
-                }
-            });
+            var w = 920;
+            var h = 780;
+            var l = Math.max(0, Math.round((window.screen.width - w) / 2));
+            var t = Math.max(0, Math.round((window.screen.height - h) / 2));
+            var contentId = link.getAttribute('data-content-id') || '0';
+            var features = 'width=' + w + ',height=' + h + ',left=' + l + ',top=' + t + ',scrollbars=yes,resizable=yes';
+            window.open(link.href, 'fcWeekEdit' + contentId, features);
         });
     });
 })();
