@@ -85,8 +85,9 @@ if ($method === 'GET') {
     fagq_emit_json(200, [
         'ok' => true,
         'service' => 'faculty-assessment-generate-questions',
-        'version' => '1.0.0',
+        'version' => '1.1.0',
         'ai_available' => wellness_ai_is_enabled(),
+        'description' => 'Generates assessment questions from week materials (body + attachment text) when use_materials is true.',
         'endpoints' => [
             [
                 'method' => 'POST',
@@ -101,6 +102,10 @@ if ($method === 'GET') {
                     'credited_week' => 'Week 1',
                     'use_materials' => true,
                     'exclude' => [],
+                ],
+                'notes' => [
+                    'When use_materials is true, credited_week is required and questions are built from posted materials and attachments.',
+                    'Supported attachment extraction: txt, csv, docx, pptx, xlsx, pdf (pdftotext when available).',
                 ],
             ],
         ],
@@ -145,6 +150,10 @@ if (isset($payload['exclude']) && is_array($payload['exclude'])) {
 
 if ($classroomId < 1) {
     fagq_emit_json(400, ['ok' => false, 'error' => 'classroom_id is required.']);
+}
+
+if ($useMaterials && $weekLabel === '') {
+    fagq_emit_json(400, ['ok' => false, 'error' => 'Select a week under "From week materials" when including posted course materials.']);
 }
 
 try {

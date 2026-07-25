@@ -93,6 +93,55 @@
     });
   }
 
+  function readClassroomOptions() {
+    var el = document.getElementById('offline-classroom-options');
+    if (!el) {
+      return [];
+    }
+    try {
+      var parsed = JSON.parse(el.textContent || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function classroomOptionLabel(option) {
+    return String(option && option.label ? option.label : 'Classroom');
+  }
+
+  function reassignQueueItem(item, targetClassroomId) {
+    var options = readClassroomOptions();
+    var target = options.find(function (option) {
+      return Number(option.id) === Number(targetClassroomId);
+    });
+    if (!target) {
+      return Promise.reject(new Error('Choose a valid course.'));
+    }
+    if (Number(item.classroom_id) === Number(target.id)) {
+      return Promise.resolve(item);
+    }
+    if (item.status === 'syncing') {
+      return Promise.reject(new Error('Wait until this upload finishes syncing.'));
+    }
+
+    var code = String(target.course_code || '').trim();
+    var name = String(target.course_name || '').trim();
+    var classroomTitle = String(target.classroom_title || 'Classroom').trim();
+    var label = classroomOptionLabel(target);
+
+    item.classroom_id = Number(target.id);
+    item.course_code = code;
+    item.course_name = name;
+    item.classroom_title = classroomTitle;
+    item.classroom_label = label;
+    item.status = 'pending';
+    item.error = '';
+    item.updated_at = new Date().toISOString();
+
+    return idbPut(item);
+  }
+
   function uuid() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
       return window.crypto.randomUUID();
@@ -522,7 +571,8 @@
           return;
         }
 
-        html += '<p class="small text-muted mb-3">Open a course box to see its queued uploads.</p>';
+        html += '<p class="small text-muted mb-3">Open a course box to see its queued uploads. You can assign a queued item to another course you teach before it syncs.</p>';
+        var classroomOptions = readClassroomOptions();
         groupQueueByCourse(items).forEach(function (courseGroup, index) {
           var collapseId = 'offline-queue-course-' + index;
           html += '<div class="card shadow-sm mb-3 offline-course-box">';
@@ -591,9 +641,28 @@
             html += '<span class="badge ' + badgeClass + '">' + escapeHtml(status) + '</span>';
             html += '</div>';
             html +=
-              '<div class="mt-2 d-flex flex-wrap gap-2"><button type="button" class="btn btn-sm btn-outline-danger" data-offline-discard="' +
+              '<div class="mt-2 d-flex flex-wrap gap-2 align-items-center"><button type="button" class="btn btn-sm btn-outline-danger" data-offline-discard="' +
               escapeHtml(item.id) +
-              '">Discard</button></div>';
+              '">Discard</button>';
+            if (classroomOptions.length > 1 && status !== 'syncing') {
+              html +=
+                '<label class="small text-muted mb-0 me-1">Assign to</label><select class="form-select form-select-sm w-auto" data-offline-reassign="' +
+                escapeHtml(item.id) +
+                '">';
+              classroomOptions.forEach(function (option) {
+                var selected = Number(option.id) === Number(item.classroom_id) ? ' selected' : '';
+                html +=
+                  '<option value="' +
+                  escapeHtml(String(option.id)) +
+                  '"' +
+                  selected +
+                  '>' +
+                  escapeHtml(classroomOptionLabel(option)) +
+                  '</option>';
+              });
+              html += '</select>';
+            }
+            html += '</div>';
             html += '</div>';
           });
           html += '</div></div></div>';
@@ -608,6 +677,36 @@
               updatePendingBadges();
               renderQueue(mount);
             });
+          });
+        });
+
+        mount.querySelectorAll('[data-offline-reassign]').forEach(function (selectEl) {
+          selectEl.setAttribute('data-previous-value', selectEl.value || '');
+          selectEl.addEventListener('change', function () {
+            var id = selectEl.getAttribute('data-offline-reassign');
+            var targetId = parseInt(selectEl.value || '0', 10);
+            var previousValue = selectEl.getAttribute('data-previous-value') || '';
+            if (!id || targetId < 1) {
+              return;
+            }
+            listQueue()
+              .then(function (rows) {
+                var item = rows.find(function (row) {
+                  return String(row.id) === String(id);
+                });
+                if (!item) {
+                  throw new Error('Queued upload not found.');
+                }
+                return reassignQueueItem(item, targetId);
+              })
+              .then(function () {
+                updatePendingBadges();
+                renderQueue(mount);
+              })
+              .catch(function (err) {
+                selectEl.value = previousValue;
+                window.alert(err && err.message ? err.message : 'Could not assign queued upload.');
+              });
           });
         });
       })

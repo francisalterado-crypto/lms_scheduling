@@ -66,7 +66,7 @@ function student_materials_reviewer_week_items(int $classroomId, string $weekLab
 {
     foreach (student_materials_reviewer_week_groups($classroomId) as $group) {
         if ((string) $group['label'] === $weekLabel) {
-            return $group['items'];
+            return classroom_content_enrich_week_items($group['items']);
         }
     }
 
@@ -98,6 +98,24 @@ function student_materials_reviewer_build_source_text(array $items, array $class
         if ($body !== '') {
             $lines[] = $body;
         }
+
+        $attachments = is_array($item['attachments'] ?? null) ? $item['attachments'] : [];
+        foreach ($attachments as $attachment) {
+            if (!is_array($attachment)) {
+                continue;
+            }
+            $attachName = trim((string) ($attachment['original_name'] ?? 'Attachment'));
+            $lines[] = 'Attachment: ' . $attachName;
+        }
+
+        $attachmentText = trim((string) ($item['attachment_text'] ?? ''));
+        if ($attachmentText !== '') {
+            if (mb_strlen($attachmentText, 'UTF-8') > 2000) {
+                $attachmentText = mb_substr($attachmentText, 0, 1997, 'UTF-8') . '…';
+            }
+            $lines[] = 'Extract from attachments: ' . $attachmentText;
+        }
+
         $url = trim((string) ($item['resource_url'] ?? ''));
         if ($url !== '' && !classroom_content_is_attachment($url)) {
             $lines[] = 'Resource link: ' . $url;

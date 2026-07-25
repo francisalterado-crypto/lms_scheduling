@@ -1234,6 +1234,378 @@ function classroom_content_attachment_map(array $contentIds): array
     return $map;
 }
 
+function classroom_content_attachment_extension(string $originalName, string $storedName = '', string $mime = ''): string
+{
+    foreach ([$originalName, $storedName] as $name) {
+        $name = trim($name);
+        if ($name === '') {
+            continue;
+        }
+        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        if ($ext !== '') {
+            return $ext;
+        }
+    }
+
+    $mime = strtolower(trim($mime));
+    $mimeMap = [
+        'text/plain' => 'txt',
+        'text/csv' => 'csv',
+        'application/pdf' => 'pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
+        'application/msword' => 'doc',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation' => 'pptx',
+        'application/vnd.ms-powerpoint' => 'ppt',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
+        'application/vnd.ms-excel' => 'xls',
+    ];
+
+    return $mimeMap[$mime] ?? '';
+}
+
+/**
+ * @param array<string,mixed> $item
+ * @param list<array{id:int,content_id:int,original_name:string,stored_name:string,mime:string}> $extraAttachments
+ * @return list<array{original_name:string,stored_name:string,mime:string,extension:string}>
+ */
+function classroom_content_item_attachment_files(array $item, array $extraAttachments = []): array
+{
+    $files = [];
+
+    $resourceUrl = trim((string) ($item['resource_url'] ?? ''));
+    if ($resourceUrl !== '' && classroom_content_is_attachment($resourceUrl)) {
+        $storedName = basename(str_replace('\\', '/', $resourceUrl));
+        $originalName = classroom_content_attachment_name($resourceUrl);
+        $files[] = [
+            'original_name' => $originalName,
+            'stored_name' => $storedName,
+            'mime' => '',
+            'extension' => classroom_content_attachment_extension($originalName, $storedName),
+        ];
+    }
+
+    foreach ($extraAttachments as $attachment) {
+        if (!is_array($attachment)) {
+            continue;
+        }
+        $storedName = trim((string) ($attachment['stored_name'] ?? ''));
+        if ($storedName === '') {
+            continue;
+        }
+        $originalName = classroom_content_attachment_download_name(
+            (string) ($attachment['original_name'] ?? ''),
+            $storedName
+        );
+        $files[] = [
+            'original_name' => $originalName,
+            'stored_name' => $storedName,
+            'mime' => trim((string) ($attachment['mime'] ?? '')),
+            'extension' => classroom_content_attachment_extension(
+                $originalName,
+                $storedName,
+                (string) ($attachment['mime'] ?? '')
+            ),
+        ];
+    }
+
+    $seen = [];
+    $unique = [];
+    foreach ($files as $file) {
+        $key = strtolower((string) ($file['stored_name'] ?? ''));
+        if ($key === '' || isset($seen[$key])) {
+            continue;
+        }
+        $seen[$key] = true;
+        $unique[] = $file;
+    }
+
+    return $unique;
+}
+
+function classroom_content_attachment_extract_plain_text(string $storedName, string $originalName = '', string $mime = '', int $maxChars = 4000): string
+{
+    $storedName = basename(str_replace('\\', '/', trim($storedName)));
+    if ($storedName === '') {
+        return '';
+    }
+
+    $path = classroom_content_attachment_storage_path($storedName);
+    if (!is_file($path) || !is_readable($path)) {
+        return '';
+    }
+
+    $ext = classroom_content_attachment_extension($originalName, $storedName, $mime);
+    $text = match ($ext) {
+        'txt', 'csv', 'md' => classroom_content_attachment_read_text_file($path, $maxChars),
+        'docx' => classroom_content_attachment_extract_docx_text($path, $maxChars),
+        'pptx' => classroom_content_attachment_extract_pptx_text($path, $maxChars),
+        'xlsx' => classroom_content_attachment_extract_xlsx_text($path, $maxChars),
+        'pdf' => classroom_content_attachment_extract_pdf_text($path, $maxChars),
+        default => '',
+    };
+
+    return classroom_content_attachment_normalize_extracted_text($text, $maxChars);
+}
+
+function classroom_content_attachment_read_text_file(string $path, int $maxChars): string
+{
+    $size = filesize($path);
+    if ($size === false || $size < 1 || $size > 5_000_000) {
+        return '';
+    }
+
+    $raw = file_get_contents($path);
+    if ($raw === false || $raw === '') {
+        return '';
+    }
+
+    if (!mb_check_encoding($raw, 'UTF-8')) {
+        $converted = mb_convert_encoding($raw, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
+        $raw = is_string($converted) ? $converted : $raw;
+    }
+
+    return mb_substr(trim($raw), 0, $maxChars, 'UTF-8');
+}
+
+function classroom_content_attachment_extract_docx_text(string $path, int $maxChars): string
+{
+    if (!class_exists('ZipArchive')) {
+        return '';
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($path) !== true) {
+        return '';
+    }
+
+    $xml = $zip->getFromName('word/document.xml');
+    $zip->close();
+    if ($xml === false || $xml === '') {
+        return '';
+    }
+
+    $text = classroom_content_attachment_xml_to_text($xml);
+
+    return mb_substr($text, 0, $maxChars, 'UTF-8');
+}
+
+function classroom_content_attachment_extract_pptx_text(string $path, int $maxChars): string
+{
+    if (!class_exists('ZipArchive')) {
+        return '';
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($path) !== true) {
+        return '';
+    }
+
+    $chunks = [];
+    for ($i = 0; $i < $zip->numFiles; ++$i) {
+        $name = (string) $zip->getNameIndex($i);
+        if (!preg_match('#^ppt/slides/slide\d+\.xml$#', $name)) {
+            continue;
+        }
+        $xml = $zip->getFromIndex($i);
+        if ($xml !== false && $xml !== '') {
+            $chunks[] = classroom_content_attachment_xml_to_text($xml);
+        }
+    }
+    $zip->close();
+
+    $text = trim(implode("\n", array_filter($chunks)));
+
+    return mb_substr($text, 0, $maxChars, 'UTF-8');
+}
+
+function classroom_content_attachment_extract_xlsx_text(string $path, int $maxChars): string
+{
+    if (!class_exists('ZipArchive')) {
+        return '';
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($path) !== true) {
+        return '';
+    }
+
+    $sharedXml = $zip->getFromName('xl/sharedStrings.xml');
+    $zip->close();
+    if ($sharedXml === false || $sharedXml === '') {
+        return '';
+    }
+
+    $text = classroom_content_attachment_xml_to_text($sharedXml);
+
+    return mb_substr($text, 0, $maxChars, 'UTF-8');
+}
+
+function classroom_content_attachment_extract_pdf_text(string $path, int $maxChars): string
+{
+    $pdftotext = classroom_content_find_pdftotext_binary();
+    if ($pdftotext !== null) {
+        $cmd = escapeshellarg($pdftotext) . ' -layout -nopgbrk ' . escapeshellarg($path) . ' - 2>NUL';
+        $output = shell_exec($cmd);
+        if (is_string($output) && trim($output) !== '') {
+            return classroom_content_attachment_normalize_extracted_text($output, $maxChars);
+        }
+    }
+
+    $size = filesize($path);
+    if ($size === false || $size < 1 || $size > 8_000_000) {
+        return '';
+    }
+
+    $raw = file_get_contents($path);
+    if ($raw === false || $raw === '') {
+        return '';
+    }
+
+    $parts = [];
+    if (preg_match_all('/\(([^()\\\\\r\n]{3,200})\)/s', $raw, $matches) === 1 && isset($matches[1])) {
+        foreach ($matches[1] as $part) {
+            $part = str_replace(['\\(', '\\)', '\\n', '\\r', '\\t'], ['(', ')', "\n", '', ' '], (string) $part);
+            $part = trim($part);
+            if ($part !== '' && preg_match('/[\p{L}\p{N}]/u', $part) === 1) {
+                $parts[] = $part;
+            }
+        }
+    }
+
+    return classroom_content_attachment_normalize_extracted_text(implode(' ', $parts), $maxChars);
+}
+
+function classroom_content_find_pdftotext_binary(): ?string
+{
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached !== '' ? $cached : null;
+    }
+
+    $candidates = ['pdftotext'];
+    if (DIRECTORY_SEPARATOR === '\\') {
+        $candidates[] = 'C:\\Program Files\\poppler\\Library\\bin\\pdftotext.exe';
+        $candidates[] = 'C:\\poppler\\Library\\bin\\pdftotext.exe';
+    }
+
+    foreach ($candidates as $candidate) {
+        $cmd = escapeshellarg($candidate) . ' -v 2>NUL';
+        $result = shell_exec($cmd);
+        if (is_string($result) && stripos($result, 'pdftotext') !== false) {
+            $cached = $candidate;
+
+            return $candidate;
+        }
+    }
+
+    $cached = '';
+
+    return null;
+}
+
+function classroom_content_attachment_xml_to_text(string $xml): string
+{
+    $previous = libxml_use_internal_errors(true);
+    $dom = new DOMDocument();
+    $loaded = $dom->loadXML($xml, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+    libxml_clear_errors();
+    libxml_use_internal_errors($previous);
+
+    if (!$loaded) {
+        $text = strip_tags($xml);
+
+        return classroom_content_attachment_normalize_extracted_text($text, 8000);
+    }
+
+    $chunks = [];
+    $nodes = $dom->getElementsByTagName('*');
+    foreach ($nodes as $node) {
+        if (!$node instanceof DOMElement) {
+            continue;
+        }
+        if (!in_array($node->localName, ['t', 'p', 'text'], true)) {
+            continue;
+        }
+        $value = trim($node->textContent ?? '');
+        if ($value !== '') {
+            $chunks[] = $value;
+        }
+    }
+
+    return classroom_content_attachment_normalize_extracted_text(implode("\n", $chunks), 8000);
+}
+
+function classroom_content_attachment_normalize_extracted_text(string $text, int $maxChars): string
+{
+    $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', ' ', $text) ?? $text;
+    $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
+    $text = trim($text);
+    if ($text === '') {
+        return '';
+    }
+
+    return mb_strlen($text, 'UTF-8') > $maxChars
+        ? mb_substr($text, 0, max(0, $maxChars - 1), 'UTF-8') . '…'
+        : $text;
+}
+
+/**
+ * @param list<array{original_name:string,stored_name:string,mime:string,extension:string}> $attachments
+ */
+function classroom_content_attachment_files_extract_text(array $attachments, int $maxCharsPerFile = 2500): string
+{
+    $lines = [];
+    foreach ($attachments as $attachment) {
+        $name = trim((string) ($attachment['original_name'] ?? 'Attachment'));
+        $text = classroom_content_attachment_extract_plain_text(
+            (string) ($attachment['stored_name'] ?? ''),
+            $name,
+            (string) ($attachment['mime'] ?? ''),
+            $maxCharsPerFile
+        );
+        if ($text === '') {
+            continue;
+        }
+        $lines[] = 'Attachment "' . $name . '": ' . $text;
+    }
+
+    return trim(implode("\n", $lines));
+}
+
+/**
+ * @param list<array<string,mixed>> $items
+ * @return list<array<string,mixed>>
+ */
+function classroom_content_enrich_week_items(array $items): array
+{
+    if ($items === []) {
+        return [];
+    }
+
+    $contentIds = [];
+    foreach ($items as $item) {
+        $id = (int) ($item['id'] ?? 0);
+        if ($id > 0) {
+            $contentIds[] = $id;
+        }
+    }
+
+    $attachmentMap = classroom_content_attachment_map($contentIds);
+    $enriched = [];
+
+    foreach ($items as $item) {
+        $contentId = (int) ($item['id'] ?? 0);
+        $attachments = classroom_content_item_attachment_files($item, $attachmentMap[$contentId] ?? []);
+        $item['attachments'] = $attachments;
+        $item['attachment_count'] = count($attachments);
+        $item['attachment_text'] = classroom_content_attachment_files_extract_text($attachments);
+        $enriched[] = $item;
+    }
+
+    return $enriched;
+}
+
 function classroom_content_extract_alignment(string $style): string
 {
     if (preg_match('/text-align\s*:\s*(left|center|right|justify)/i', $style, $matches) !== 1) {
@@ -1617,6 +1989,418 @@ function classroom_content_group_by_week(array $items): array
     }
 
     return array_values($groups);
+}
+
+/**
+ * @return list<array{id:int,title:string,course_code:string,course_name:string,semester:string,school_year:string}>
+ */
+function faculty_owned_classrooms(int $facultyId, ?int $excludeClassroomId = null): array
+{
+    if ($facultyId < 1 || !db_table_exists('online_classrooms')) {
+        return [];
+    }
+
+    $sql = 'SELECT oc.id, oc.title, c.course_code, c.course_name, s.semester, s.school_year
+            FROM online_classrooms oc
+            INNER JOIN schedules s ON s.id = oc.schedule_id
+            INNER JOIN courses c ON c.id = oc.course_id
+            WHERE oc.faculty_id = ? AND s.faculty_id = ?';
+    $params = [$facultyId, $facultyId];
+    if ($excludeClassroomId !== null && $excludeClassroomId > 0) {
+        $sql .= ' AND oc.id <> ?';
+        $params[] = $excludeClassroomId;
+    }
+    $sql .= ' ORDER BY s.school_year DESC, s.semester, c.course_code, oc.title';
+
+    $st = db()->prepare($sql);
+    $st->execute($params);
+
+    return $st->fetchAll() ?: [];
+}
+
+/**
+ * @throws RuntimeException
+ */
+function classroom_content_clone_stored_file(string $storedName): string
+{
+    $storedName = basename(str_replace('\\', '/', trim($storedName)));
+    if ($storedName === '') {
+        throw new RuntimeException('Invalid attachment.');
+    }
+
+    $source = classroom_content_attachment_storage_path($storedName);
+    if (!is_file($source)) {
+        throw new RuntimeException('Attachment file is missing.');
+    }
+
+    $parts = explode('__', $storedName, 2);
+    $downloadPart = $parts[1] ?? 'attachment';
+    $newStored = bin2hex(random_bytes(16)) . '__' . $downloadPart;
+    $dest = classroom_content_attachment_storage_path($newStored);
+    if (!copy($source, $dest)) {
+        throw new RuntimeException('Failed to copy attachment.');
+    }
+
+    return $newStored;
+}
+
+/**
+ * @throws RuntimeException
+ */
+function classroom_content_clone_resource_url(?string $resourceUrl): ?string
+{
+    $resourceUrl = trim((string) $resourceUrl);
+    if ($resourceUrl === '') {
+        return null;
+    }
+
+    if (classroom_content_is_attachment($resourceUrl)) {
+        $stored = basename(str_replace('\\', '/', $resourceUrl));
+        $newStored = classroom_content_clone_stored_file($stored);
+
+        return classroom_content_attachment_relative_dir() . '/' . $newStored;
+    }
+
+    return $resourceUrl;
+}
+
+/**
+ * Copy a classroom content item (material, link, or announcement) into another owned classroom.
+ *
+ * @throws RuntimeException
+ */
+function classroom_content_copy_to_classroom(
+    int $contentId,
+    int $sourceClassroomId,
+    int $targetClassroomId,
+    int $facultyId
+): int {
+    if ($contentId < 1 || $sourceClassroomId < 1 || $targetClassroomId < 1 || $facultyId < 1) {
+        throw new RuntimeException('Invalid content or classroom.');
+    }
+    if ($sourceClassroomId === $targetClassroomId) {
+        throw new RuntimeException('Choose a different course than the current class.');
+    }
+    if (!db_table_exists('classroom_content')) {
+        throw new RuntimeException('Classroom content is not available.');
+    }
+
+    $hasContentAttachments = db_table_exists('classroom_content_attachments');
+    $hasContentWeeks = db_column_exists('classroom_content', 'weeks');
+    $hasContentDaysPerTopic = db_column_exists('classroom_content', 'days_per_topic');
+    $hasContentTopicSchedule = $hasContentWeeks && $hasContentDaysPerTopic;
+    $hasSyllabusCols = db_column_exists('online_classrooms', 'syllabus_stored_name');
+
+    $st = db()->prepare(
+        'SELECT *
+         FROM classroom_content
+         WHERE id = ? AND classroom_id = ? AND faculty_id = ?
+         LIMIT 1'
+    );
+    $st->execute([$contentId, $sourceClassroomId, $facultyId]);
+    $source = $st->fetch();
+    if (!$source) {
+        throw new RuntimeException('Content item not found.');
+    }
+
+    $st = db()->prepare(
+        'SELECT oc.id, oc.title, oc.syllabus_stored_name, c.course_code, c.course_name
+         FROM online_classrooms oc
+         INNER JOIN schedules s ON s.id = oc.schedule_id
+         INNER JOIN courses c ON c.id = oc.course_id
+         WHERE oc.id = ? AND oc.faculty_id = ? AND s.faculty_id = ?
+         LIMIT 1'
+    );
+    $st->execute([$targetClassroomId, $facultyId, $facultyId]);
+    $target = $st->fetch();
+    if (!$target) {
+        throw new RuntimeException('Target classroom not found or you do not have access to it.');
+    }
+
+    if ($hasSyllabusCols && trim((string) ($target['syllabus_stored_name'] ?? '')) === '') {
+        $targetLabel = trim((string) ($target['course_code'] ?? ''));
+        if ($targetLabel === '') {
+            $targetLabel = trim((string) ($target['title'] ?? 'that class'));
+        }
+        throw new RuntimeException(
+            'Upload a syllabus for ' . $targetLabel . ' before assigning content to it.'
+        );
+    }
+
+    $clonedResourceUrl = classroom_content_clone_resource_url((string) ($source['resource_url'] ?? ''));
+
+    $attachmentRows = [];
+    if ($hasContentAttachments) {
+        $st = db()->prepare(
+            'SELECT original_name, stored_name, mime
+             FROM classroom_content_attachments
+             WHERE content_id = ?
+             ORDER BY created_at ASC, id ASC'
+        );
+        $st->execute([$contentId]);
+        $attachmentRows = $st->fetchAll() ?: [];
+    }
+
+    $clonedAttachments = [];
+    foreach ($attachmentRows as $row) {
+        $clonedAttachments[] = [
+            'original_name' => (string) ($row['original_name'] ?? ''),
+            'stored_name' => classroom_content_clone_stored_file((string) ($row['stored_name'] ?? '')),
+            'mime' => trim((string) ($row['mime'] ?? 'application/octet-stream')) ?: 'application/octet-stream',
+        ];
+    }
+
+    db()->beginTransaction();
+    try {
+        if ($hasContentTopicSchedule) {
+            db()->prepare(
+                'INSERT INTO classroom_content (classroom_id, faculty_id, content_type, title, body, weeks, days_per_topic, resource_url)
+                 VALUES (?,?,?,?,?,?,?,?)'
+            )->execute([
+                $targetClassroomId,
+                $facultyId,
+                (string) ($source['content_type'] ?? 'material'),
+                (string) ($source['title'] ?? ''),
+                ($source['body'] ?? null) !== null && (string) $source['body'] !== '' ? (string) $source['body'] : null,
+                (string) ($source['weeks'] ?? ''),
+                (string) ($source['days_per_topic'] ?? ''),
+                $clonedResourceUrl,
+            ]);
+        } else {
+            db()->prepare(
+                'INSERT INTO classroom_content (classroom_id, faculty_id, content_type, title, body, resource_url)
+                 VALUES (?,?,?,?,?,?)'
+            )->execute([
+                $targetClassroomId,
+                $facultyId,
+                (string) ($source['content_type'] ?? 'material'),
+                (string) ($source['title'] ?? ''),
+                ($source['body'] ?? null) !== null && (string) $source['body'] !== '' ? (string) $source['body'] : null,
+                $clonedResourceUrl,
+            ]);
+        }
+
+        $newContentId = (int) db()->lastInsertId();
+        if ($newContentId < 1) {
+            throw new RuntimeException('Failed to assign content.');
+        }
+
+        if ($clonedAttachments !== []) {
+            $insertAttachment = db()->prepare(
+                'INSERT INTO classroom_content_attachments (content_id, original_name, stored_name, mime)
+                 VALUES (?,?,?,?)'
+            );
+            foreach ($clonedAttachments as $attachment) {
+                $insertAttachment->execute([
+                    $newContentId,
+                    $attachment['original_name'],
+                    $attachment['stored_name'],
+                    $attachment['mime'],
+                ]);
+            }
+        }
+
+        db()->commit();
+
+        return $newContentId;
+    } catch (Throwable $e) {
+        if (db()->inTransaction()) {
+            db()->rollBack();
+        }
+
+        if ($clonedResourceUrl !== null && classroom_content_is_attachment($clonedResourceUrl)) {
+            $path = classroom_content_attachment_path($clonedResourceUrl);
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+        foreach ($clonedAttachments as $attachment) {
+            $path = classroom_content_attachment_storage_path((string) ($attachment['stored_name'] ?? ''));
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+
+        throw $e;
+    }
+}
+
+/**
+ * Copy a quiz or assignment (including its questions) into another owned classroom.
+ *
+ * @throws RuntimeException
+ */
+function classroom_assessment_copy_to_classroom(
+    int $assessmentId,
+    int $sourceClassroomId,
+    int $targetClassroomId,
+    int $facultyId
+): int {
+    if ($assessmentId < 1 || $sourceClassroomId < 1 || $targetClassroomId < 1 || $facultyId < 1) {
+        throw new RuntimeException('Invalid assessment or classroom.');
+    }
+    if ($sourceClassroomId === $targetClassroomId) {
+        throw new RuntimeException('Choose a different course than the current class.');
+    }
+    if (!db_table_exists('classroom_assessments') || !db_table_exists('classroom_assessment_questions')) {
+        throw new RuntimeException('Assessments are not available.');
+    }
+
+    $hasCreditedWeek = db_column_exists('classroom_assessments', 'credited_week');
+    $hasTimeLimit = db_column_exists('classroom_assessments', 'time_limit_minutes');
+
+    $st = db()->prepare(
+        'SELECT *
+         FROM classroom_assessments
+         WHERE id = ? AND classroom_id = ? AND faculty_id = ?
+         LIMIT 1'
+    );
+    $st->execute([$assessmentId, $sourceClassroomId, $facultyId]);
+    $source = $st->fetch();
+    if (!$source) {
+        throw new RuntimeException('Assessment not found.');
+    }
+
+    $st = db()->prepare(
+        'SELECT oc.id, oc.title, c.course_code, c.course_name
+         FROM online_classrooms oc
+         INNER JOIN schedules s ON s.id = oc.schedule_id
+         INNER JOIN courses c ON c.id = oc.course_id
+         WHERE oc.id = ? AND oc.faculty_id = ? AND s.faculty_id = ?
+         LIMIT 1'
+    );
+    $st->execute([$targetClassroomId, $facultyId, $facultyId]);
+    $target = $st->fetch();
+    if (!$target) {
+        throw new RuntimeException('Target classroom not found or you do not have access to it.');
+    }
+
+    $st = db()->prepare(
+        'SELECT question_type, question_text, options_json, answer_key, points, position, word_limit, char_limit, allow_steps
+         FROM classroom_assessment_questions
+         WHERE assessment_id = ?
+         ORDER BY position ASC, id ASC'
+    );
+    $st->execute([$assessmentId]);
+    $questions = $st->fetchAll() ?: [];
+
+    $assessmentType = classroom_assessment_normalize_type((string) ($source['assessment_type'] ?? 'essay'));
+    $title = (string) ($source['title'] ?? '');
+    $description = ($source['description'] ?? null) !== null && (string) $source['description'] !== ''
+        ? (string) $source['description']
+        : null;
+    $totalPoints = (float) ($source['total_points'] ?? 0);
+    $dueAt = ($source['due_at'] ?? null) !== null && (string) $source['due_at'] !== ''
+        ? (string) $source['due_at']
+        : null;
+    $timeLimitMinutes = $hasTimeLimit && ($source['time_limit_minutes'] ?? null) !== null
+        ? (int) $source['time_limit_minutes']
+        : null;
+    $creditedWeek = $hasCreditedWeek ? (string) ($source['credited_week'] ?? '') : '';
+
+    db()->beginTransaction();
+    try {
+        if ($hasCreditedWeek && $hasTimeLimit) {
+            db()->prepare(
+                'INSERT INTO classroom_assessments (classroom_id, faculty_id, assessment_type, title, description, total_points, due_at, time_limit_minutes, credited_week)
+                 VALUES (?,?,?,?,?,?,?,?,?)'
+            )->execute([
+                $targetClassroomId,
+                $facultyId,
+                $assessmentType,
+                $title,
+                $description,
+                $totalPoints,
+                $dueAt,
+                $timeLimitMinutes,
+                $creditedWeek,
+            ]);
+        } elseif ($hasTimeLimit) {
+            db()->prepare(
+                'INSERT INTO classroom_assessments (classroom_id, faculty_id, assessment_type, title, description, total_points, due_at, time_limit_minutes)
+                 VALUES (?,?,?,?,?,?,?,?)'
+            )->execute([
+                $targetClassroomId,
+                $facultyId,
+                $assessmentType,
+                $title,
+                $description,
+                $totalPoints,
+                $dueAt,
+                $timeLimitMinutes,
+            ]);
+        } elseif ($hasCreditedWeek) {
+            db()->prepare(
+                'INSERT INTO classroom_assessments (classroom_id, faculty_id, assessment_type, title, description, total_points, due_at, credited_week)
+                 VALUES (?,?,?,?,?,?,?,?)'
+            )->execute([
+                $targetClassroomId,
+                $facultyId,
+                $assessmentType,
+                $title,
+                $description,
+                $totalPoints,
+                $dueAt,
+                $creditedWeek,
+            ]);
+        } else {
+            db()->prepare(
+                'INSERT INTO classroom_assessments (classroom_id, faculty_id, assessment_type, title, description, total_points, due_at)
+                 VALUES (?,?,?,?,?,?,?)'
+            )->execute([
+                $targetClassroomId,
+                $facultyId,
+                $assessmentType,
+                $title,
+                $description,
+                $totalPoints,
+                $dueAt,
+            ]);
+        }
+
+        $newAssessmentId = (int) db()->lastInsertId();
+        if ($newAssessmentId < 1) {
+            throw new RuntimeException('Failed to assign assessment.');
+        }
+
+        if ($questions !== []) {
+            $qStmt = db()->prepare(
+                'INSERT INTO classroom_assessment_questions
+                 (assessment_id, question_type, question_text, options_json, answer_key, points, position, word_limit, char_limit, allow_steps)
+                 VALUES (?,?,?,?,?,?,?,?,?,?)'
+            );
+            foreach ($questions as $question) {
+                $qStmt->execute([
+                    $newAssessmentId,
+                    (string) ($question['question_type'] ?? 'essay'),
+                    (string) ($question['question_text'] ?? ''),
+                    ($question['options_json'] ?? null) !== null ? (string) $question['options_json'] : null,
+                    ($question['answer_key'] ?? null) !== null && (string) $question['answer_key'] !== ''
+                        ? (string) $question['answer_key']
+                        : null,
+                    (float) ($question['points'] ?? 0),
+                    (int) ($question['position'] ?? 1),
+                    ($question['word_limit'] ?? null) !== null && (string) $question['word_limit'] !== ''
+                        ? (int) $question['word_limit']
+                        : null,
+                    ($question['char_limit'] ?? null) !== null && (string) $question['char_limit'] !== ''
+                        ? (int) $question['char_limit']
+                        : null,
+                    !empty($question['allow_steps']) ? 1 : 0,
+                ]);
+            }
+        }
+
+        db()->commit();
+
+        return $newAssessmentId;
+    } catch (Throwable $e) {
+        if (db()->inTransaction()) {
+            db()->rollBack();
+        }
+
+        throw $e;
+    }
 }
 
 /**

@@ -109,6 +109,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
             }
 
             $_SESSION['flash'] = 'Content removed.';
+        } elseif ($action === 'assign_content') {
+            $contentId = (int) ($_POST['content_id'] ?? 0);
+            $targetClassroomId = (int) ($_POST['target_classroom_id'] ?? 0);
+            classroom_content_copy_to_classroom($contentId, $classroomId, $targetClassroomId, $facultyId);
+            $st = db()->prepare(
+                'SELECT c.course_code, oc.title
+                 FROM online_classrooms oc
+                 INNER JOIN courses c ON c.id = oc.course_id
+                 WHERE oc.id = ?
+                 LIMIT 1'
+            );
+            $st->execute([$targetClassroomId]);
+            $targetMeta = $st->fetch() ?: [];
+            $targetLabel = trim((string) ($targetMeta['course_code'] ?? ''));
+            if ($targetLabel === '') {
+                $targetLabel = trim((string) ($targetMeta['title'] ?? 'the selected course'));
+            }
+            $_SESSION['flash'] = 'Content assigned to ' . $targetLabel . '. The original post stays in this class.';
         } elseif ($action === 'upload_banner' || $action === 'delete_banner') {
             $bannerFlash = faculty_classroom_process_banner_post($classroomId, $facultyId, $classroom);
             if ($bannerFlash !== null) {
@@ -132,6 +150,7 @@ $allItems = [];
 $weekItems = [];
 $weekGroups = [];
 $contentAttachmentMap = [];
+$otherClassrooms = [];
 if ($missingTables === [] && $classroom) {
     $st = db()->prepare(
         'SELECT *
@@ -161,6 +180,8 @@ if ($missingTables === [] && $classroom) {
     if ($hasContentAttachments) {
         $contentAttachmentMap = classroom_content_attachment_map(array_column($weekItems, 'id'));
     }
+
+    $otherClassrooms = faculty_owned_classrooms($facultyId, $classroomId);
 }
 
 $pageTitle = $requestedWeek !== '' ? 'Week Content - ' . $requestedWeek : 'Week Content';
@@ -234,6 +255,17 @@ require_once __DIR__ . '/includes/header.php';
                                         <a href="<?= htmlspecialchars($editHref) ?>" class="btn btn-sm btn-outline-primary rounded-pill fc-edit-popup-link" data-content-id="<?= (int) $item['id'] ?>" title="Edit content"<?= app_tooltip_attr('Opens a separate window to change this item’s title, body, or links for this week.') ?>>
                                             <i class="fa-solid fa-pen-to-square me-1"></i>Edit
                                         </a>
+                                        <?php if ($otherClassrooms !== []): ?>
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-secondary rounded-pill"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#assignContentModal"
+                                                    data-content-id="<?= (int) $item['id'] ?>"
+                                                    data-content-title="<?= htmlspecialchars((string) $item['title'], ENT_QUOTES) ?>"
+                                                    title="Assign to another course"<?= app_tooltip_attr('Copies this material or announcement into another class you teach. The original stays here.') ?>>
+                                                <i class="fa-solid fa-share-from-square me-1"></i>Assign
+                                            </button>
+                                        <?php endif; ?>
                                         <form method="post" class="d-inline" onsubmit="return confirm('Delete this content item?');">
                                             <input type="hidden" name="action" value="delete_content">
                                             <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
@@ -320,6 +352,54 @@ require_once __DIR__ . '/includes/header.php';
 <?php endif; ?>
 </div>
 
+<?php if ($otherClassrooms !== []): ?>
+<div class="modal fade" id="assignContentModal" tabindex="-1" aria-labelledby="assignContentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post">
+                <input type="hidden" name="action" value="assign_content">
+                <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
+                <input type="hidden" name="content_id" id="assign-content-id" value="">
+                <input type="hidden" name="current_week" value="<?= htmlspecialchars($requestedWeek) ?>">
+                <div class="modal-header">
+                    <h2 class="modal-title h5" id="assignContentModalLabel">Assign to another course</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">Copy <strong id="assign-content-title">this item</strong> into another class you teach. The original post stays in this course.</p>
+                    <label class="form-label fw-semibold" for="assign-target-classroom">Target course</label>
+                    <select id="assign-target-classroom" name="target_classroom_id" class="form-select" required>
+                        <option value="">Select a course</option>
+                        <?php foreach ($otherClassrooms as $other): ?>
+                            <?php
+                            $optionLabel = trim((string) ($other['course_code'] ?? ''));
+                            if ($optionLabel !== '' && trim((string) ($other['course_name'] ?? '')) !== '') {
+                                $optionLabel .= ' — ' . trim((string) $other['course_name']);
+                            } elseif (trim((string) ($other['course_name'] ?? '')) !== '') {
+                                $optionLabel = trim((string) $other['course_name']);
+                            } else {
+                                $optionLabel = trim((string) ($other['title'] ?? 'Classroom'));
+                            }
+                            $termLabel = trim((string) ($other['semester'] ?? '') . ' ' . (string) ($other['school_year'] ?? ''));
+                            if ($termLabel !== '') {
+                                $optionLabel .= ' (' . $termLabel . ')';
+                            }
+                            ?>
+                            <option value="<?= (int) $other['id'] ?>"><?= htmlspecialchars($optionLabel) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text mt-2">The target class must already have a syllabus uploaded before content can be assigned.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Assign copy</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>
 (function () {
     document.querySelectorAll('.fc-edit-popup-link').forEach(function (link) {
@@ -334,6 +414,30 @@ require_once __DIR__ . '/includes/header.php';
             window.open(link.href, 'fcWeekEdit' + contentId, features);
         });
     });
+
+    var assignModal = document.getElementById('assignContentModal');
+    if (assignModal) {
+        assignModal.addEventListener('show.bs.modal', function (event) {
+            var trigger = event.relatedTarget;
+            if (!trigger) {
+                return;
+            }
+            var contentId = trigger.getAttribute('data-content-id') || '';
+            var contentTitle = trigger.getAttribute('data-content-title') || 'this item';
+            var idField = document.getElementById('assign-content-id');
+            var titleEl = document.getElementById('assign-content-title');
+            var selectEl = document.getElementById('assign-target-classroom');
+            if (idField) {
+                idField.value = contentId;
+            }
+            if (titleEl) {
+                titleEl.textContent = contentTitle;
+            }
+            if (selectEl) {
+                selectEl.selectedIndex = 0;
+            }
+        });
+    }
 })();
 </script>
 

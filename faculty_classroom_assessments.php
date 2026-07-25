@@ -457,6 +457,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $missingTables === [] && $classroom
                 'DELETE FROM classroom_assessments WHERE id = ? AND classroom_id = ? AND faculty_id = ?'
             )->execute([$assessmentId, $classroomId, $facultyId]);
             $_SESSION['flash'] = 'Assessment deleted.';
+        } elseif ($action === 'assign_assessment') {
+            $assessmentId = (int) ($_POST['assessment_id'] ?? 0);
+            $targetClassroomId = (int) ($_POST['target_classroom_id'] ?? 0);
+            classroom_assessment_copy_to_classroom($assessmentId, $classroomId, $targetClassroomId, $facultyId);
+            $st = db()->prepare(
+                'SELECT c.course_code, oc.title
+                 FROM online_classrooms oc
+                 INNER JOIN courses c ON c.id = oc.course_id
+                 WHERE oc.id = ?
+                 LIMIT 1'
+            );
+            $st->execute([$targetClassroomId]);
+            $targetMeta = $st->fetch() ?: [];
+            $targetLabel = trim((string) ($targetMeta['course_code'] ?? ''));
+            if ($targetLabel === '') {
+                $targetLabel = trim((string) ($targetMeta['title'] ?? 'the selected course'));
+            }
+            $_SESSION['flash'] = 'Assessment assigned to ' . $targetLabel . '. The original stays in this class.';
         } elseif ($action === 'save_scores') {
             $assessmentId = (int) ($_POST['assessment_id'] ?? 0);
 
@@ -594,6 +612,7 @@ $scoreMap = [];
 $submissionMap = [];
 $questionMap = [];
 $pendingRetakeRequests = [];
+$otherClassrooms = [];
 
 if ($missingTables === [] && $classroom) {
     $st = db()->prepare(
@@ -671,6 +690,8 @@ if ($missingTables === [] && $classroom) {
     if (assessment_retake_table_ready()) {
         $pendingRetakeRequests = pending_assessment_retake_requests_for_classroom($classroomId);
     }
+
+    $otherClassrooms = faculty_owned_classrooms($facultyId, $classroomId);
 }
 
 $facultyUser = current_user();
@@ -1323,7 +1344,7 @@ require_once __DIR__ . '/includes/header.php';
                                     <th class="sortable" data-sort="points" data-type="number">Points</th>
                                     <th class="d-none d-md-table-cell">Description</th>
                                     <th class="sortable d-none d-lg-table-cell" data-sort="due" data-type="string">Due</th>
-                                    <th style="width: 72px;"></th>
+                                    <th style="width: 108px;"></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1415,6 +1436,17 @@ require_once __DIR__ . '/includes/header.php';
                                                     data-questions="<?= htmlspecialchars((string) json_encode($serializedQuestions, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>">
                                                     <i class="fa-solid fa-pen-to-square"></i>
                                                 </button>
+                                                <?php if ($otherClassrooms !== []): ?>
+                                                    <button type="button"
+                                                            class="fac-icon-btn"
+                                                            title="Assign to another course"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#assignAssessmentModal"
+                                                            data-assessment-id="<?= $aid ?>"
+                                                            data-assessment-title="<?= htmlspecialchars((string) $row['title'], ENT_QUOTES) ?>"<?= app_tooltip_attr('Copies this quiz or assignment into another class you teach. Grades and submissions are not copied.') ?>>
+                                                        <i class="fa-solid fa-share-from-square"></i>
+                                                    </button>
+                                                <?php endif; ?>
                                                 <form method="post" class="d-inline" onsubmit="return confirm('Delete this assessment and all related grades and submissions?');">
                                                     <input type="hidden" name="action" value="delete_assessment">
                                                     <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
@@ -1675,13 +1707,14 @@ require_once __DIR__ . '/includes/header.php';
                                  data-api="<?= htmlspecialchars('api/faculty_assessment_generate_questions.php', ENT_QUOTES, 'UTF-8') ?>"
                                  data-ai-available="<?= $assessmentAiAvailable ? '1' : '0' ?>">
                                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                                    <span class="small fw-semibold"><i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i>Auto-generate questions</span>
+                                    <span class="small fw-semibold"><i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i>Auto-generate from week materials</span>
                                     <?php if ($assessmentAiAvailable): ?>
-                                        <span class="badge text-bg-primary-subtle border text-primary-emphasis">AI-assisted</span>
+                                        <span class="badge text-bg-primary-subtle border text-primary-emphasis">AI + attachments</span>
                                     <?php else: ?>
-                                        <span class="badge text-bg-secondary-subtle border">Template-based</span>
+                                        <span class="badge text-bg-secondary-subtle border">Materials-based</span>
                                     <?php endif; ?>
                                 </div>
+                                <p class="small text-muted mb-2">Select a week to build questions from posted materials and file attachments (PDF, DOCX, slides, text).</p>
                                 <div class="row g-2 align-items-end">
                                     <div class="col-sm-3">
                                         <label class="form-label small mb-0" for="add_auto_count">Count</label>
@@ -1695,7 +1728,7 @@ require_once __DIR__ . '/includes/header.php';
                                     <div class="col-sm-4">
                                         <label class="form-label small mb-0" for="add_auto_week">From week materials</label>
                                         <select class="form-select form-select-sm" id="add_auto_week">
-                                            <option value="">Assessment title / description only</option>
+                                            <option value="">Select week…</option>
                                             <?php for ($wn = 1; $wn <= 18; $wn++): ?>
                                                 <option value="Week <?= $wn ?>">Week <?= $wn ?></option>
                                             <?php endfor; ?>
@@ -1706,12 +1739,13 @@ require_once __DIR__ . '/includes/header.php';
                                     <div class="col-12">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" value="1" id="add_auto_use_materials" checked>
-                                            <label class="form-check-label small" for="add_auto_use_materials">Include posted course materials for the selected week</label>
+                                            <label class="form-check-label small" for="add_auto_use_materials">Include posted materials and attachments for the selected week</label>
                                         </div>
+                                        <div class="small text-muted mt-1 d-none" id="add_auto_week_preview"></div>
                                     </div>
                                     <?php endif; ?>
                                     <div class="col-12 d-flex flex-wrap gap-2">
-                                        <button type="button" class="btn btn-primary btn-sm" id="addAutoGenerateBtn"<?= app_tooltip_attr('Creates questions with answer keys based on your title, description, and optional week materials.') ?>>
+                                        <button type="button" class="btn btn-primary btn-sm" id="addAutoGenerateBtn"<?= app_tooltip_attr('Creates questions from the selected week materials and attachments.') ?>>
                                             <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Generate questions
                                         </button>
                                         <button type="button" class="btn btn-outline-primary btn-sm d-none" id="addAutoGenerateMoreBtn"<?= app_tooltip_attr('Adds more questions without removing existing ones.') ?>>
@@ -1726,7 +1760,7 @@ require_once __DIR__ . '/includes/header.php';
                             <div class="small text-muted mb-1">Total items: <span id="addTotalItems">0</span></div>
                             <div class="border rounded-3 p-2" id="addQuestionBuilder"></div>
                             <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="addQuestionRowBtn">+ Add question</button>
-                            <div class="form-text small">Choose a type above, then auto-generate or add questions manually. Answer keys are filled for auto-graded types.</div>
+                            <div class="form-text small">Choose a type above, select a week, then auto-generate or add questions manually. Answer keys are filled for auto-graded types.</div>
                         </div>
                         <div class="col-12">
                             <label class="form-label small" for="add-assessment-description">Description</label>
@@ -1764,6 +1798,52 @@ require_once __DIR__ . '/includes/header.php';
         </div>
     </div>
 </div>
+
+<?php if ($otherClassrooms !== []): ?>
+<div class="modal fade" id="assignAssessmentModal" tabindex="-1" aria-labelledby="assignAssessmentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <form method="post">
+                <input type="hidden" name="action" value="assign_assessment">
+                <input type="hidden" name="classroom_id" value="<?= (int) $classroomId ?>">
+                <input type="hidden" name="assessment_id" id="assign-assessment-id" value="">
+                <div class="modal-header border-0 pb-0">
+                    <h2 class="modal-title h5 fw-semibold" id="assignAssessmentModalLabel">Assign to another course</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body pt-2">
+                    <p class="small text-muted mb-3">Copy <strong id="assign-assessment-title">this assessment</strong> into another class you teach. Questions and settings are copied; grades and student submissions stay in this class.</p>
+                    <label class="form-label small fw-semibold" for="assign-target-assessment-classroom">Target course</label>
+                    <select id="assign-target-assessment-classroom" name="target_classroom_id" class="form-select" required>
+                        <option value="">Select a course</option>
+                        <?php foreach ($otherClassrooms as $other): ?>
+                            <?php
+                            $optionLabel = trim((string) ($other['course_code'] ?? ''));
+                            if ($optionLabel !== '' && trim((string) ($other['course_name'] ?? '')) !== '') {
+                                $optionLabel .= ' — ' . trim((string) $other['course_name']);
+                            } elseif (trim((string) ($other['course_name'] ?? '')) !== '') {
+                                $optionLabel = trim((string) $other['course_name']);
+                            } else {
+                                $optionLabel = trim((string) ($other['title'] ?? 'Classroom'));
+                            }
+                            $termLabel = trim((string) ($other['semester'] ?? '') . ' ' . (string) ($other['school_year'] ?? ''));
+                            if ($termLabel !== '') {
+                                $optionLabel .= ' (' . $termLabel . ')';
+                            }
+                            ?>
+                            <option value="<?= (int) $other['id'] ?>"><?= htmlspecialchars($optionLabel) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4">Assign copy</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="modal fade" id="modalEditAssessment" tabindex="-1" aria-labelledby="modalEditAssessmentLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg fac-assess-modal">
@@ -2248,6 +2328,11 @@ require_once __DIR__ . '/includes/header.php';
             var week = weekSelect ? (weekSelect.value || '').trim() : '';
             var useMaterials = useMaterialsInput ? (useMaterialsInput.checked && week !== '') : false;
 
+            if (useMaterialsInput && useMaterialsInput.checked && week === '') {
+                setStatus('Select a week to generate questions from posted materials and attachments.', true);
+                return;
+            }
+
             var existing = append ? builderApi.collect() : [];
             var exclude = existing.map(function (q) { return q.question_text || ''; });
 
@@ -2305,8 +2390,18 @@ require_once __DIR__ . '/includes/header.php';
                     moreBtn.classList.remove('d-none');
                 }
 
-                var sourceNote = data.source === 'ai' ? 'AI-assisted' : 'template-based';
-                setStatus('Added ' + mapped.length + ' question(s) (' + sourceNote + '). Review and edit before saving.', false);
+                var sourceNote = data.source === 'ai'
+                    ? 'AI-assisted from week materials'
+                    : (data.source === 'materials' ? 'Built from week materials' : 'template-based');
+                var materialNote = '';
+                if (data.from_week_materials) {
+                    materialNote = ' (' + (data.material_count || 0) + ' material(s)';
+                    if ((data.attachment_count || 0) > 0) {
+                        materialNote += ', ' + data.attachment_count + ' attachment(s)';
+                    }
+                    materialNote += ')';
+                }
+                setStatus('Added ' + mapped.length + ' question(s) (' + sourceNote + materialNote + '). Review and edit before saving.', false);
                 showToast('Generated ' + mapped.length + ' question(s).');
             } catch (err) {
                 setStatus(err.message || 'Something went wrong.', true);
@@ -2334,6 +2429,34 @@ require_once __DIR__ . '/includes/header.php';
         'add_auto_week',
         'add_auto_use_materials'
     );
+
+    (function bindWeekMaterialsPreview() {
+        var panel = document.getElementById('addAutoGeneratePanel');
+        var weekSelect = document.getElementById('add_auto_week');
+        var useMaterialsInput = document.getElementById('add_auto_use_materials');
+        var previewEl = document.getElementById('add_auto_week_preview');
+        if (!panel || !weekSelect || !previewEl) {
+            return;
+        }
+
+        function syncPreview() {
+            var week = (weekSelect.value || '').trim();
+            var useMaterials = useMaterialsInput ? useMaterialsInput.checked : true;
+            if (!useMaterials || week === '') {
+                previewEl.classList.add('d-none');
+                previewEl.textContent = '';
+                return;
+            }
+            previewEl.textContent = 'Questions will be generated from materials and attachments posted for ' + week + '.';
+            previewEl.classList.remove('d-none');
+        }
+
+        weekSelect.addEventListener('change', syncPreview);
+        if (useMaterialsInput) {
+            useMaterialsInput.addEventListener('change', syncPreview);
+        }
+        syncPreview();
+    })();
 
     function formatTimerPreview(hours, minutes) {
         var h = Math.max(0, parseInt(hours, 10) || 0);
@@ -2375,6 +2498,29 @@ require_once __DIR__ . '/includes/header.php';
     bindTimerSettings('edit_timer_enabled', 'editTimerFields', 'edit_timer_hours', 'edit_timer_minutes', 'editTimerPreview');
 
     var editModal = document.getElementById('modalEditAssessment');
+    var assignAssessmentModal = document.getElementById('assignAssessmentModal');
+    if (assignAssessmentModal) {
+        assignAssessmentModal.addEventListener('show.bs.modal', function (event) {
+            var trigger = event.relatedTarget;
+            if (!trigger) {
+                return;
+            }
+            var assessmentId = trigger.getAttribute('data-assessment-id') || '';
+            var assessmentTitle = trigger.getAttribute('data-assessment-title') || 'this assessment';
+            var idField = document.getElementById('assign-assessment-id');
+            var titleEl = document.getElementById('assign-assessment-title');
+            var selectEl = document.getElementById('assign-target-assessment-classroom');
+            if (idField) {
+                idField.value = assessmentId;
+            }
+            if (titleEl) {
+                titleEl.textContent = assessmentTitle;
+            }
+            if (selectEl) {
+                selectEl.selectedIndex = 0;
+            }
+        });
+    }
     if (editModal) {
         editModal.addEventListener('show.bs.modal', function (ev) {
             var btn = ev.relatedTarget;

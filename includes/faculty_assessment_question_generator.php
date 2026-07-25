@@ -65,6 +65,35 @@ function faculty_assessment_generator_material_items(int $classroomId, string $w
     return student_materials_reviewer_week_items($classroomId, $weekLabel);
 }
 
+function faculty_assessment_generator_material_snippet(array $item, int $maxChars = 320): string
+{
+    $attachmentText = trim((string) ($item['attachment_text'] ?? ''));
+    if ($attachmentText !== '') {
+        return mb_strlen($attachmentText, 'UTF-8') > $maxChars
+            ? mb_substr($attachmentText, 0, max(0, $maxChars - 1), 'UTF-8') . '…'
+            : $attachmentText;
+    }
+
+    $body = student_materials_reviewer_plain_text((string) ($item['body'] ?? ''));
+    if ($body === '') {
+        return '';
+    }
+
+    return mb_strlen($body, 'UTF-8') > $maxChars
+        ? mb_substr($body, 0, max(0, $maxChars - 1), 'UTF-8') . '…'
+        : $body;
+}
+
+function faculty_assessment_generator_count_attachments(array $items): int
+{
+    $count = 0;
+    foreach ($items as $item) {
+        $count += max(0, (int) ($item['attachment_count'] ?? 0));
+    }
+
+    return $count;
+}
+
 function faculty_assessment_generator_build_context(
     array $classroom,
     string $title,
@@ -88,6 +117,7 @@ function faculty_assessment_generator_build_context(
         $items = faculty_assessment_generator_material_items((int) ($classroom['id'] ?? 0), $weekLabel);
         if ($items !== []) {
             $lines[] = '';
+            $lines[] = '=== Week materials (including attachment content) ===';
             $lines[] = student_materials_reviewer_build_source_text($items, $classroom, $weekLabel);
         }
     }
@@ -98,6 +128,169 @@ function faculty_assessment_generator_build_context(
     }
 
     return $text;
+}
+
+/**
+ * @param list<array<string, mixed>> $items
+ * @param list<string> $exclude
+ * @return list<array<string, mixed>>
+ */
+function faculty_assessment_generator_materials_builtin(
+    string $assessmentType,
+    string $weekLabel,
+    array $items,
+    int $count,
+    array $exclude = []
+): array {
+    $type = classroom_assessment_normalize_type($assessmentType);
+    $count = max(1, min(20, $count));
+    $excludeNorm = student_materials_reviewer_normalize_exclude_list($exclude);
+    $pool = [];
+
+    foreach ($items as $item) {
+        $title = trim((string) ($item['title'] ?? 'Untitled'));
+        if ($title === '') {
+            $title = 'Untitled';
+        }
+        $snippet = faculty_assessment_generator_material_snippet($item);
+        $hasAttachment = ((int) ($item['attachment_count'] ?? 0)) > 0;
+        $sourceLabel = $hasAttachment ? 'the attachment for "' . $title . '"' : '"' . $title . '"';
+
+        if ($type === 'true_false') {
+            if ($snippet !== '') {
+                $pool[] = [
+                    'question_type' => 'true_false',
+                    'question_text' => 'According to ' . $sourceLabel . ' in ' . $weekLabel . ', the posted material covers concepts students must understand for this course.',
+                    'points' => 1.0,
+                    'options' => [],
+                    'answer_key' => 'true',
+                    'word_limit' => null,
+                    'char_limit' => null,
+                    'allow_steps' => 0,
+                ];
+                $pool[] = [
+                    'question_type' => 'true_false',
+                    'question_text' => 'Based on ' . $sourceLabel . ', students can skip reviewing the posted content and still fully understand ' . $weekLabel . '.',
+                    'points' => 1.0,
+                    'options' => [],
+                    'answer_key' => 'false',
+                    'word_limit' => null,
+                    'char_limit' => null,
+                    'allow_steps' => 0,
+                ];
+            } else {
+                $pool[] = [
+                    'question_type' => 'true_false',
+                    'question_text' => 'The instructor posted "' . $title . '" as part of ' . $weekLabel . ' materials.',
+                    'points' => 1.0,
+                    'options' => [],
+                    'answer_key' => 'true',
+                    'word_limit' => null,
+                    'char_limit' => null,
+                    'allow_steps' => 0,
+                ];
+            }
+        } elseif ($type === 'multiple_choice') {
+            if ($snippet !== '') {
+                $shortSnippet = mb_strlen($snippet, 'UTF-8') > 140
+                    ? mb_substr($snippet, 0, 137, 'UTF-8') . '…'
+                    : $snippet;
+                $pool[] = faculty_assessment_generator_mc_row(
+                    'Which statement best reflects the content of ' . $sourceLabel . '?',
+                    [
+                        $shortSnippet,
+                        'The material is unrelated to ' . $weekLabel,
+                        'Students are not expected to read ' . $sourceLabel,
+                        'The attachment contains no course concepts',
+                    ],
+                    0
+                );
+            }
+            $pool[] = faculty_assessment_generator_mc_row(
+                'Which resource should students review for "' . $title . '" in ' . $weekLabel . '?',
+                [
+                    'An unrelated website',
+                    $hasAttachment ? 'The posted attachment: ' . $title : 'The posted material: ' . $title,
+                    'Only the syllabus cover page',
+                    'Materials from a different week',
+                ],
+                1
+            );
+        } elseif ($type === 'problem_solving') {
+            if (preg_match('/\d+(?:\.\d+)?/', $snippet, $m) === 1) {
+                $num = (float) $m[0];
+                $pool[] = [
+                    'question_type' => 'problem_solving',
+                    'question_text' => 'Using a value from ' . $sourceLabel . ', compute: ' . $num . ' × 2.',
+                    'points' => 1.0,
+                    'options' => [],
+                    'answer_key' => (string) ($num * 2),
+                    'word_limit' => null,
+                    'char_limit' => null,
+                    'allow_steps' => 1,
+                ];
+            }
+            $pool[] = [
+                'question_type' => 'problem_solving',
+                'question_text' => 'If a student reviews ' . count($items) . ' posted material(s) for ' . $weekLabel . ', how many materials should they study in 2 review sessions covering the full week?',
+                'points' => 1.0,
+                'options' => [],
+                'answer_key' => (string) count($items),
+                'word_limit' => null,
+                'char_limit' => null,
+                'allow_steps' => 1,
+            ];
+        } else {
+            $pool[] = [
+                'question_type' => 'essay',
+                'question_text' => $snippet !== ''
+                    ? 'Explain the main ideas from ' . $sourceLabel . ' and how they relate to ' . $weekLabel . '.'
+                    : 'Summarize the learning goals of "' . $title . '" for ' . $weekLabel . '.',
+                'points' => 1.0,
+                'options' => [],
+                'answer_key' => null,
+                'word_limit' => 220,
+                'char_limit' => null,
+                'allow_steps' => 0,
+            ];
+            if ($snippet !== '') {
+                $pool[] = [
+                    'question_type' => 'essay',
+                    'question_text' => 'Using ' . $sourceLabel . ', describe one concept students must understand and give an example.',
+                    'points' => 1.0,
+                    'options' => [],
+                    'answer_key' => null,
+                    'word_limit' => 200,
+                    'char_limit' => null,
+                    'allow_steps' => 0,
+                ];
+            }
+        }
+    }
+
+    if ($pool === []) {
+        return faculty_assessment_generator_builtin($type, $weekLabel, $count, ['id' => 0, 'course_name' => 'the course'], $weekLabel, true);
+    }
+
+    $filtered = [];
+    foreach ($pool as $row) {
+        if (student_materials_reviewer_question_excluded((string) ($row['question_text'] ?? ''), $excludeNorm)) {
+            continue;
+        }
+        $filtered[] = $row;
+        $excludeNorm[] = mb_strtolower((string) ($row['question_text'] ?? ''), 'UTF-8');
+    }
+
+    if ($filtered === []) {
+        return faculty_assessment_generator_builtin($type, $weekLabel, $count, ['id' => 0, 'course_name' => 'the course'], $weekLabel, true);
+    }
+
+    $questions = [];
+    for ($i = 0; $i < $count; ++$i) {
+        $questions[] = $filtered[$i % count($filtered)];
+    }
+
+    return $questions;
 }
 
 /**
@@ -494,7 +687,9 @@ function faculty_assessment_generator_ai(
     string $assessmentType,
     string $topic,
     int $count,
-    array $exclude = []
+    array $exclude = [],
+    bool $fromWeekMaterials = false,
+    string $weekLabel = ''
 ): ?array {
     if (!wellness_ai_is_enabled() || trim($sourceText) === '') {
         return null;
@@ -518,6 +713,19 @@ function faculty_assessment_generator_ai(
             . implode("\n- ", array_map(static fn (string $q): string => mb_substr($q, 0, 200, 'UTF-8'), $sample));
     }
 
+    $materialsRules = '';
+    if ($fromWeekMaterials) {
+        $weekFocus = $weekLabel !== '' ? $weekLabel : 'the selected week';
+        $materialsRules = <<<RULES
+
+IMPORTANT — Week materials mode:
+- Base every question ONLY on the posted week materials and extracted attachment text in the context below.
+- Prefer facts, definitions, examples, and concepts found in attachments (PDF, DOCX, slides, text files) over generic course wording.
+- Reference specific material titles when helpful.
+- Do not invent content that is not supported by {$weekFocus} materials.
+RULES;
+    }
+
     $system = <<<PROMPT
 You create assessment questions for a university instructor. All questions must be type "{$type}" ({$typeLabel}).
 
@@ -526,12 +734,12 @@ Topic: {$topic}
 Rules:
 - Generate exactly {$count} questions grounded in the provided context.
 - Every question must include question_type "{$type}" and points (use 1 unless the prompt suggests otherwise).
-- {$shapeHint}
+- {$shapeHint}{$materialsRules}
 - Return ONLY valid JSON (no markdown fences) with this shape:
 {"questions":[{"question_type":"{$type}","question_text":"...","points":1,"options":[],"answer_key":"...","word_limit":null,"char_limit":null,"allow_steps":0}]}
 PROMPT;
 
-    $user = "Assessment context:\n\n" . $sourceText . $excludeBlock;
+    $user = ($fromWeekMaterials ? "Week materials (body + attachments):\n\n" : "Assessment context:\n\n") . $sourceText . $excludeBlock;
     $raw = student_materials_reviewer_ai_call($system, $user, $count > 8);
     if ($raw === null || trim($raw) === '') {
         return null;
@@ -549,6 +757,9 @@ PROMPT;
  *   source: string,
  *   ai_available: bool,
  *   material_count: int,
+ *   attachment_count: int,
+ *   credited_week: string,
+ *   from_week_materials: bool,
  *   questions: list<array<string, mixed>>
  * }
  */
@@ -571,13 +782,27 @@ function faculty_assessment_generator_generate(
 
     $type = classroom_assessment_normalize_type($assessmentType);
     $count = max(1, min(20, $count));
-    $topic = faculty_assessment_generator_topic($title, $description, $topicOverride);
     $weekLabel = trim($weekLabel);
+    $fromWeekMaterials = $useMaterials && $weekLabel !== '';
+    $materialItems = [];
     $materialCount = 0;
+    $attachmentCount = 0;
 
-    if ($useMaterials && $weekLabel !== '') {
-        $materialCount = count(faculty_assessment_generator_material_items($classroomId, $weekLabel));
+    if ($fromWeekMaterials) {
+        $materialItems = faculty_assessment_generator_material_items($classroomId, $weekLabel);
+        $materialCount = count($materialItems);
+        $attachmentCount = faculty_assessment_generator_count_attachments($materialItems);
+
+        if ($materialCount === 0) {
+            throw new RuntimeException(
+                'No materials are posted for ' . $weekLabel . '. Upload week materials first, or generate from the assessment title and description only.'
+            );
+        }
     }
+
+    $topic = $fromWeekMaterials && trim($topicOverride) === ''
+        ? $weekLabel
+        : faculty_assessment_generator_topic($title, $description, $topicOverride);
 
     $sourceText = faculty_assessment_generator_build_context(
         $classroom,
@@ -585,7 +810,7 @@ function faculty_assessment_generator_generate(
         $description,
         $topic,
         $weekLabel,
-        $useMaterials
+        $fromWeekMaterials
     );
 
     $aiAvailable = wellness_ai_is_enabled();
@@ -593,14 +818,27 @@ function faculty_assessment_generator_generate(
     $source = 'builtin';
 
     if ($aiAvailable) {
-        $questions = faculty_assessment_generator_ai($sourceText, $type, $topic, $count, $exclude);
+        $questions = faculty_assessment_generator_ai(
+            $sourceText,
+            $type,
+            $topic,
+            $count,
+            $exclude,
+            $fromWeekMaterials,
+            $weekLabel
+        );
         if ($questions !== null) {
             $source = 'ai';
         }
     }
 
     if ($questions === null) {
-        $questions = faculty_assessment_generator_builtin($type, $topic, $count, $classroom, $weekLabel, $useMaterials);
+        if ($fromWeekMaterials) {
+            $questions = faculty_assessment_generator_materials_builtin($type, $weekLabel, $materialItems, $count, $exclude);
+            $source = 'materials';
+        } else {
+            $questions = faculty_assessment_generator_builtin($type, $topic, $count, $classroom, $weekLabel, $useMaterials);
+        }
     }
 
     return [
@@ -608,6 +846,9 @@ function faculty_assessment_generator_generate(
         'source' => $source,
         'ai_available' => $aiAvailable,
         'material_count' => $materialCount,
+        'attachment_count' => $attachmentCount,
+        'credited_week' => $weekLabel,
+        'from_week_materials' => $fromWeekMaterials,
         'questions' => $questions,
     ];
 }

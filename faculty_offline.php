@@ -22,6 +22,8 @@ if ($facultyId < 1) {
     exit('Faculty profile not linked to this account. Ask your dean to create/link your faculty profile.');
 }
 
+$assignableClassrooms = faculty_owned_classrooms($facultyId);
+
 $pageTitle = 'Offline uploads';
 require_once __DIR__ . '/includes/header.php';
 ?>
@@ -42,6 +44,32 @@ require_once __DIR__ . '/includes/header.php';
 <p class="small mb-3 text-muted" data-offline-pending-label>Checking pending uploads…</p>
 
 <div data-offline-queue></div>
+
+<script type="application/json" id="offline-classroom-options"><?= json_encode(array_map(
+    static function (array $row): array {
+        $label = trim((string) ($row['course_code'] ?? ''));
+        if ($label !== '' && trim((string) ($row['course_name'] ?? '')) !== '') {
+            $label .= ' — ' . trim((string) $row['course_name']);
+        } elseif (trim((string) ($row['course_name'] ?? '')) !== '') {
+            $label = trim((string) $row['course_name']);
+        } else {
+            $label = trim((string) ($row['title'] ?? 'Classroom'));
+        }
+        $term = trim((string) ($row['semester'] ?? '') . ' ' . (string) ($row['school_year'] ?? ''));
+        if ($term !== '') {
+            $label .= ' (' . $term . ')';
+        }
+
+        return [
+            'id' => (int) ($row['id'] ?? 0),
+            'label' => $label,
+            'course_code' => trim((string) ($row['course_code'] ?? '')),
+            'course_name' => trim((string) ($row['course_name'] ?? '')),
+            'classroom_title' => trim((string) ($row['title'] ?? 'Classroom')),
+        ];
+    },
+    $assignableClassrooms
+), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 
 <script src="assets/js/faculty_offline.js" defer></script>
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
