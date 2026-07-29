@@ -100,31 +100,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     if (!$errors) {
-        if ($geProgramScope) {
-            $sql = "SELECT COUNT(*) FROM faculty WHERE id=? AND college_id=? AND status='active'";
-            $params = [$facultyId, $collegeId];
-            if ($effectiveProgramScope !== null) {
-                $sql .= " AND (department=? OR department='')";
-                $params[] = $effectiveProgramScope;
-            }
-            $chk = db()->prepare($sql);
-            $chk->execute($params);
-            if ((int) $chk->fetchColumn() < 1) {
-                $errors[] = 'Selected faculty is not in your college GE program.';
-            }
-        } else {
-            $sql = 'SELECT COUNT(*) FROM faculty WHERE id=? AND college_id=?';
-            $params = [$facultyId, $collegeId];
-            if ($effectiveProgramScope !== null) {
-                $sql .= " AND (department=? OR department='')";
-                $params[] = $effectiveProgramScope;
-            }
-            $chk = db()->prepare($sql);
-            $chk->execute($params);
-            if ((int) $chk->fetchColumn() < 1) {
+        if (!college_schedule_faculty_allowed($facultyId, $collegeId, $effectiveProgramScope)) {
+            if ($geProgramScope) {
+                $errors[] = 'Selected faculty is not in your college GE program or GE Faculty roster.';
+            } else {
                 $errors[] = $effectiveProgramScope !== null
-                    ? 'Selected faculty is outside your assigned program.'
-                    : 'Selected faculty is not in your college.';
+                    ? 'Selected faculty is outside your assigned program or GE Faculty roster.'
+                    : 'Selected faculty is not in your college or GE Faculty roster.';
             }
         }
 

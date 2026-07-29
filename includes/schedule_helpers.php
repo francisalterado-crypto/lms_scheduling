@@ -258,16 +258,7 @@ function render_schedule_form(array $defaults = [], array $options = []): void
         $selLabDays = parse_day_set((string) $defaults['lab_day_of_week']);
     }
     if ($showScopedRole) {
-        $facultySql = "SELECT id, faculty_id, full_name FROM faculty WHERE status='active' AND college_id=?";
-        $facultyParams = [$collegeId];
-        if ($effectiveProgramScope !== null) {
-            $facultySql .= " AND (department=? OR department='')";
-            $facultyParams[] = $effectiveProgramScope;
-        }
-        $facultySql .= " ORDER BY full_name";
-        $st = db()->prepare($facultySql);
-        $st->execute($facultyParams);
-        $faculty = $st->fetchAll();
+        $faculty = college_schedule_faculty_options((int) $collegeId, $effectiveProgramScope);
         $blockCols = $showBlockScope ? ', year_level, section' : '';
         $courses = [];
         if ($geProgramChair && $collegeId && db_column_exists('courses', 'is_gened')) {
@@ -485,11 +476,43 @@ function render_schedule_form(array $defaults = [], array $options = []): void
             <label class="form-label">Faculty</label>
             <select name="faculty_id" class="form-select" required>
                 <option value="">— Select —</option>
-                <?php foreach ($faculty as $f): ?>
-                    <option value="<?= (int) $f['id'] ?>" <?= (int) ($defaults['faculty_id'] ?? 0) === (int) $f['id'] ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($f['full_name'] . ' (' . $f['faculty_id'] . ')') ?>
-                    </option>
-                <?php endforeach; ?>
+                <?php
+                $collegeFacultyOpts = [];
+                $geFacultyOpts = [];
+                foreach ($faculty as $f) {
+                    if ((int) ($f['is_gened'] ?? 0) === 1) {
+                        $geFacultyOpts[] = $f;
+                    } else {
+                        $collegeFacultyOpts[] = $f;
+                    }
+                }
+                ?>
+                <?php if ($showScopedRole && ($collegeFacultyOpts !== [] || $geFacultyOpts !== [])): ?>
+                    <?php if ($collegeFacultyOpts !== []): ?>
+                        <optgroup label="College Faculty">
+                            <?php foreach ($collegeFacultyOpts as $f): ?>
+                                <option value="<?= (int) $f['id'] ?>" <?= (int) ($defaults['faculty_id'] ?? 0) === (int) $f['id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($f['full_name'] . ' (' . $f['faculty_id'] . ')') ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </optgroup>
+                    <?php endif; ?>
+                    <?php if ($geFacultyOpts !== []): ?>
+                        <optgroup label="GE Faculty">
+                            <?php foreach ($geFacultyOpts as $f): ?>
+                                <option value="<?= (int) $f['id'] ?>" <?= (int) ($defaults['faculty_id'] ?? 0) === (int) $f['id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($f['full_name'] . ' (' . $f['faculty_id'] . ')') ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </optgroup>
+                    <?php endif; ?>
+                <?php else: ?>
+                    <?php foreach ($faculty as $f): ?>
+                        <option value="<?= (int) $f['id'] ?>" <?= (int) ($defaults['faculty_id'] ?? 0) === (int) $f['id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($f['full_name'] . ' (' . $f['faculty_id'] . ')') ?>
+                        </option>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </select>
         </div>
         <?php if ($showProgramFilter && $programOptionsList !== []): ?>

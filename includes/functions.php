@@ -1734,6 +1734,16 @@ function classroom_content_sanitize_html_node(DOMNode $node, DOMDocument $doc): 
         'img' => true,
         'span' => true,
         'font' => true,
+        'table' => true,
+        'thead' => true,
+        'tbody' => true,
+        'tfoot' => true,
+        'tr' => true,
+        'th' => true,
+        'td' => true,
+        'caption' => true,
+        'colgroup' => true,
+        'col' => true,
     ];
 
     if (!isset($allowedTags[$tag])) {
@@ -1823,6 +1833,53 @@ function classroom_content_sanitize_html_node(DOMNode $node, DOMDocument $doc): 
         $clean->setAttribute('loading', 'lazy');
         $clean->setAttribute('decoding', 'async');
         $clean->setAttribute('style', 'max-width:100%;height:auto;');
+
+        return $clean;
+    }
+
+    if (in_array($tag, ['th', 'td'], true)) {
+        foreach (['colspan', 'rowspan'] as $spanAttr) {
+            $spanVal = trim((string) $node->getAttribute($spanAttr));
+            if ($spanVal !== '' && ctype_digit($spanVal)) {
+                $spanInt = (int) $spanVal;
+                if ($spanInt > 1 && $spanInt <= 50) {
+                    $clean->setAttribute($spanAttr, (string) $spanInt);
+                }
+            }
+        }
+        $scope = strtolower(trim((string) $node->getAttribute('scope')));
+        if ($tag === 'th' && in_array($scope, ['col', 'row', 'colgroup', 'rowgroup'], true)) {
+            $clean->setAttribute('scope', $scope);
+        }
+        $styleAttr = (string) $node->getAttribute('style');
+        $alignment = classroom_content_extract_alignment($styleAttr);
+        if ($alignment === '') {
+            $alignment = classroom_content_extract_alignment('text-align:' . (string) $node->getAttribute('align'));
+        }
+        $fontSize = classroom_content_extract_font_size($styleAttr);
+        $fontFamily = classroom_content_extract_font_family($styleAttr);
+        $style = classroom_content_build_text_style($alignment, $fontSize, $fontFamily);
+        if ($style !== '') {
+            $clean->setAttribute('style', $style);
+        }
+        foreach ($node->childNodes as $child) {
+            $cleanChild = classroom_content_sanitize_html_node($child, $doc);
+            if ($cleanChild !== null) {
+                $clean->appendChild($cleanChild);
+            }
+        }
+
+        return $clean;
+    }
+
+    if ($tag === 'col') {
+        $spanVal = trim((string) $node->getAttribute('span'));
+        if ($spanVal !== '' && ctype_digit($spanVal)) {
+            $spanInt = (int) $spanVal;
+            if ($spanInt > 1 && $spanInt <= 50) {
+                $clean->setAttribute('span', (string) $spanInt);
+            }
+        }
 
         return $clean;
     }
@@ -1943,8 +2000,9 @@ function classroom_content_prepare_body(?string $body): ?string
     );
     $plain = preg_replace('/\s+/u', ' ', $plain ?? '') ?? '';
     $hasImage = preg_match('/<img\b/i', $sanitized) === 1;
+    $hasTable = preg_match('/<table\b/i', $sanitized) === 1;
 
-    return trim($plain) === '' && !$hasImage ? null : $sanitized;
+    return trim($plain) === '' && !$hasImage && !$hasTable ? null : $sanitized;
 }
 
 function classroom_content_render_body(?string $body): string
@@ -2880,6 +2938,51 @@ function program_chair_schedule_scope_sql(
 }
 
 /**
+ * SQL AND-clause for General Education program chairs on teaching load reports.
+ * Includes all loads taught by GE-designated faculty, plus GE offerings tied to the chair's college.
+ *
+ * @param list<int|string> $params
+ */
+function ge_program_chair_teaching_load_scope_sql(
+    int $collegeId,
+    bool $hasGeTargetsTable,
+    bool $hasIsGenedFaculty,
+    bool $hasIsGenedCourse,
+    array &$params
+): string {
+    if ($collegeId < 1) {
+        return '';
+    }
+
+    $parts = [];
+
+    // Full teaching load of GE Faculty (institution-wide roster; college_id often NULL).
+    if ($hasIsGenedFaculty) {
+        $parts[] = 'COALESCE(f.is_gened, 0) = 1';
+    } else {
+        $parts[] = 'TRIM(COALESCE(f.department, \'\')) = ?';
+        $params[] = ge_program_chair_label();
+    }
+
+    // GE catalog offerings scheduled for / targeting this college (any instructor).
+    if ($hasIsGenedCourse) {
+        $geCollegeParts = ['(COALESCE(c.is_gened, 0) = 1 AND s.college_id = ?)'];
+        $params[] = $collegeId;
+        if ($hasGeTargetsTable) {
+            $geCollegeParts[] = '(COALESCE(c.is_gened, 0) = 1 AND gst.college_id = ?)';
+            $params[] = $collegeId;
+        }
+        $parts[] = '(' . implode(' OR ', $geCollegeParts) . ')';
+    }
+
+    if ($parts === []) {
+        return '';
+    }
+
+    return ' AND (' . implode(' OR ', $parts) . ')';
+}
+
+/**
  * GE catalog courses offered to a college (read-only / scheduling reference).
  *
  * @return list<array<string, mixed>>
@@ -2912,6 +3015,431 @@ function ge_courses_offered_to_college(int $collegeId): array
     $st->execute([$collegeId]);
 
     return $st->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/** Major subject / owning program label on a GE course (`courses.department`). */
+function ge_course_major_subject(int $courseId): string
+{
+    if ($courseId < 1 || !db_column_exists('courses', 'is_gened')) {
+        return '';
+    }
+
+    $st = db()->prepare(
+        'SELECT TRIM(COALESCE(department, \'\')) FROM courses WHERE id = ? AND COALESCE(is_gened, 0) = 1 LIMIT 1'
+    );
+    $st->execute([$courseId]);
+
+    return trim((string) $st->fetchColumn());
+}
+
+/**
+ * Faculty who may teach a GE course at a college: instructors from the course major
+ * program, GE-designated faculty (including institution-wide / null college), or
+ * faculty specialized on the course.
+ *
+ * @return list<array{id:int,faculty_id:string,full_name:string,department:string,is_gened?:int}>
+ */
+function ge_eligible_faculty_for_course(int $collegeId, int $courseId): array
+{
+    if ($collegeId < 1 || $courseId < 1) {
+        return [];
+    }
+
+    $major = ge_course_major_subject($courseId);
+    $hasIsGened = db_column_exists('faculty', 'is_gened');
+    $hasSpec = db_table_exists('faculty_specializations');
+
+    $sql = 'SELECT DISTINCT f.id, f.faculty_id, f.full_name, TRIM(COALESCE(f.department, \'\')) AS department';
+    $sql .= $hasIsGened ? ', COALESCE(f.is_gened, 0) AS is_gened' : ', 0 AS is_gened';
+    $sql .= ' FROM faculty f WHERE f.status = \'active\' AND (';
+
+    $params = [];
+    $parts = [];
+
+    // Institution-wide GE faculty (college_id NULL) may teach any GE section.
+    if ($hasIsGened) {
+        $parts[] = '(COALESCE(f.is_gened, 0) = 1 AND (f.college_id IS NULL OR f.college_id = ?))';
+        $params[] = $collegeId;
+    }
+
+    // Major-program faculty at the target college.
+    if ($major !== '') {
+        $parts[] = '(f.college_id = ? AND LOWER(TRIM(COALESCE(f.department, \'\'))) = LOWER(?))';
+        $params[] = $collegeId;
+        $params[] = $major;
+    }
+
+    // Explicit roster / specialization assignments (any college membership for that faculty).
+    if ($hasSpec) {
+        $parts[] = '(f.id IN (SELECT fs.faculty_id FROM faculty_specializations fs WHERE fs.course_id = ?)
+                    AND (f.college_id IS NULL OR f.college_id = ?))';
+        $params[] = $courseId;
+        $params[] = $collegeId;
+    }
+
+    if ($parts === []) {
+        return [];
+    }
+
+    $sql .= implode(' OR ', $parts) . ') ORDER BY f.full_name';
+    $st = db()->prepare($sql);
+    $st->execute($params);
+
+    return $st->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/** Whether a faculty member may be assigned to teach a GE course at a college. */
+function ge_faculty_can_teach_course(int $facultyId, int $collegeId, int $courseId): bool
+{
+    if ($facultyId < 1 || $collegeId < 1 || $courseId < 1) {
+        return false;
+    }
+
+    foreach (ge_eligible_faculty_for_course($collegeId, $courseId) as $row) {
+        if ((int) ($row['id'] ?? 0) === $facultyId) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Active faculty pools for GE schedule forms.
+ * Keyed by college_id; key 0 holds institution-wide GE faculty (college_id NULL).
+ *
+ * @return array<int, list<array{id:int,faculty_id:string,full_name:string,department:string,is_gened:int}>>
+ */
+function ge_college_faculty_pool_by_college(): array
+{
+    $hasIsGened = db_column_exists('faculty', 'is_gened');
+    $sql = 'SELECT id, college_id, faculty_id, full_name, TRIM(COALESCE(department, \'\')) AS department';
+    $sql .= $hasIsGened ? ', COALESCE(is_gened, 0) AS is_gened' : ', 0 AS is_gened';
+    $sql .= ' FROM faculty WHERE status = \'active\' ORDER BY full_name';
+
+    $byCollege = [];
+    $globalGe = [];
+    foreach (db()->query($sql)->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $cid = (int) ($row['college_id'] ?? 0);
+        $isGened = (int) ($row['is_gened'] ?? 0) === 1;
+        unset($row['college_id']);
+        if ($cid < 1) {
+            if ($isGened) {
+                $globalGe[] = $row;
+            }
+            continue;
+        }
+        if (!isset($byCollege[$cid])) {
+            $byCollege[$cid] = [];
+        }
+        $byCollege[$cid][] = $row;
+    }
+
+    // Merge institution-wide GE faculty into every college pool so gened_schedule filters work.
+    if ($globalGe !== []) {
+        $byCollege[0] = $globalGe;
+        foreach (array_keys($byCollege) as $cid) {
+            if ((int) $cid < 1) {
+                continue;
+            }
+            $seen = [];
+            foreach ($byCollege[$cid] as $existing) {
+                $seen[(int) ($existing['id'] ?? 0)] = true;
+            }
+            foreach ($globalGe as $gf) {
+                $gid = (int) ($gf['id'] ?? 0);
+                if ($gid > 0 && empty($seen[$gid])) {
+                    $byCollege[$cid][] = $gf;
+                    $seen[$gid] = true;
+                }
+            }
+        }
+    }
+
+    return $byCollege;
+}
+
+/**
+ * Faculty IDs specialized per GE course (`faculty_specializations`).
+ *
+ * @return array<int, list<int>>
+ */
+function ge_faculty_specializations_by_course(): array
+{
+    if (!db_table_exists('faculty_specializations')) {
+        return [];
+    }
+
+    $map = [];
+    foreach (db()->query('SELECT faculty_id, course_id FROM faculty_specializations')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $courseId = (int) ($row['course_id'] ?? 0);
+        $facultyId = (int) ($row['faculty_id'] ?? 0);
+        if ($courseId < 1 || $facultyId < 1) {
+            continue;
+        }
+        if (!isset($map[$courseId])) {
+            $map[$courseId] = [];
+        }
+        if (!in_array($facultyId, $map[$courseId], true)) {
+            $map[$courseId][] = $facultyId;
+        }
+    }
+
+    return $map;
+}
+
+/** Whether a GE course is offered to a college via `ge_course_colleges`. */
+function ge_course_offered_to_college(int $courseId, int $collegeId): bool
+{
+    if ($courseId < 1 || $collegeId < 1 || !db_table_exists('ge_course_colleges')) {
+        return false;
+    }
+
+    $st = db()->prepare('SELECT COUNT(*) FROM ge_course_colleges WHERE course_id = ? AND college_id = ?');
+    $st->execute([$courseId, $collegeId]);
+
+    return (int) $st->fetchColumn() > 0;
+}
+
+/**
+ * Faculty automatically eligible for a GE course (major program match or GE-designated).
+ *
+ * @param array<string, mixed> $facultyRow department, is_gened
+ */
+function ge_faculty_auto_eligible_for_course(array $facultyRow, int $courseId): bool
+{
+    if (!empty($facultyRow['is_gened'])) {
+        return true;
+    }
+
+    $major = ge_course_major_subject($courseId);
+    if ($major === '') {
+        return false;
+    }
+
+    $dep = trim((string) ($facultyRow['department'] ?? ''));
+
+    return $dep !== '' && strcasecmp($dep, $major) === 0;
+}
+
+/**
+ * Persist explicit GE roster assignments (`faculty_specializations`) for one course at a college.
+ *
+ * @param list<int> $explicitFacultyIds Faculty explicitly checked on the roster (non-auto-eligible).
+ */
+function ge_save_course_faculty_roster(int $collegeId, int $courseId, array $explicitFacultyIds): void
+{
+    if ($collegeId < 1 || $courseId < 1 || !ge_course_offered_to_college($courseId, $collegeId)) {
+        throw new RuntimeException('Invalid GE course for your college.');
+    }
+    if (!db_table_exists('faculty_specializations')) {
+        throw new RuntimeException('Run upgrade_roles.php first to enable faculty specializations.');
+    }
+
+    $explicitFacultyIds = array_values(array_unique(array_filter(array_map('intval', $explicitFacultyIds), static fn (int $id): bool => $id > 0)));
+
+    $hasIsGened = db_column_exists('faculty', 'is_gened');
+    $stFac = db()->prepare(
+        'SELECT id, TRIM(COALESCE(department, \'\')) AS department'
+        . ($hasIsGened ? ', COALESCE(is_gened, 0) AS is_gened' : ', 0 AS is_gened')
+        . ' FROM faculty WHERE college_id = ? AND status = \'active\''
+    );
+    $stFac->execute([$collegeId]);
+    $collegeFaculty = $stFac->fetchAll(PDO::FETCH_ASSOC);
+    $validIds = [];
+    foreach ($collegeFaculty as $row) {
+        $fid = (int) ($row['id'] ?? 0);
+        if ($fid < 1) {
+            continue;
+        }
+        $validIds[$fid] = true;
+        if (ge_faculty_auto_eligible_for_course($row, $courseId)) {
+            continue;
+        }
+    }
+
+    $toSave = [];
+    foreach ($explicitFacultyIds as $fid) {
+        if (!isset($validIds[$fid])) {
+            throw new RuntimeException('One or more selected faculty are not in your college.');
+        }
+        $row = null;
+        foreach ($collegeFaculty as $fr) {
+            if ((int) ($fr['id'] ?? 0) === $fid) {
+                $row = $fr;
+                break;
+            }
+        }
+        if ($row !== null && !ge_faculty_auto_eligible_for_course($row, $courseId)) {
+            $toSave[] = $fid;
+        }
+    }
+
+    db()->beginTransaction();
+    try {
+        $stDel = db()->prepare(
+            'DELETE fs FROM faculty_specializations fs
+             INNER JOIN faculty f ON f.id = fs.faculty_id
+             WHERE fs.course_id = ? AND f.college_id = ?'
+        );
+        $stDel->execute([$courseId, $collegeId]);
+        if ($toSave !== []) {
+            $ins = db()->prepare('INSERT INTO faculty_specializations (faculty_id, course_id) VALUES (?, ?)');
+            foreach ($toSave as $fid) {
+                $ins->execute([$fid, $courseId]);
+            }
+        }
+        db()->commit();
+    } catch (Throwable $e) {
+        if (db()->inTransaction()) {
+            db()->rollBack();
+        }
+        throw $e;
+    }
+}
+
+/**
+ * Roster rows for one GE course: all active college faculty with eligibility status.
+ *
+ * @return list<array<string, mixed>>
+ */
+function ge_course_faculty_roster_rows(
+    int $collegeId,
+    int $courseId,
+    string $programFilter = '',
+    string $search = ''
+): array {
+    if ($collegeId < 1 || $courseId < 1) {
+        return [];
+    }
+
+    $hasIsGened = db_column_exists('faculty', 'is_gened');
+    $hasSpec = db_table_exists('faculty_specializations');
+    $assignedIds = [];
+    if ($hasSpec) {
+        $st = db()->prepare(
+            'SELECT fs.faculty_id FROM faculty_specializations fs
+             INNER JOIN faculty f ON f.id = fs.faculty_id
+             WHERE fs.course_id = ? AND f.college_id = ?'
+        );
+        $st->execute([$courseId, $collegeId]);
+        $assignedIds = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    $sql = 'SELECT id, faculty_id, full_name, TRIM(COALESCE(department, \'\')) AS department, status';
+    $sql .= $hasIsGened ? ', COALESCE(is_gened, 0) AS is_gened' : ', 0 AS is_gened';
+    // College faculty plus institution-wide GE Faculty (college_id NULL).
+    $sql .= ' FROM faculty WHERE status = \'active\' AND (college_id = ?';
+    $params = [$collegeId];
+    if ($hasIsGened) {
+        $sql .= ' OR (COALESCE(is_gened, 0) = 1 AND college_id IS NULL)';
+    }
+    $sql .= ')';
+
+    if ($programFilter !== '') {
+        $sql .= ' AND department = ?';
+        $params[] = $programFilter;
+    }
+    if ($search !== '') {
+        $sql .= ' AND (full_name LIKE ? OR faculty_id LIKE ?)';
+        $like = '%' . $search . '%';
+        $params[] = $like;
+        $params[] = $like;
+    }
+    $sql .= ' ORDER BY COALESCE(is_gened, 0) DESC, department, full_name';
+
+    $st = db()->prepare($sql);
+    $st->execute($params);
+    $rows = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $fid = (int) ($row['id'] ?? 0);
+        $auto = ge_faculty_auto_eligible_for_course($row, $courseId);
+        $assigned = in_array($fid, $assignedIds, true);
+        $rows[] = [
+            'id' => $fid,
+            'faculty_id' => (string) ($row['faculty_id'] ?? ''),
+            'full_name' => (string) ($row['full_name'] ?? ''),
+            'department' => (string) ($row['department'] ?? ''),
+            'is_gened' => (int) ($row['is_gened'] ?? 0),
+            'auto_eligible' => $auto,
+            'roster_assigned' => $assigned,
+            'eligible' => $auto || $assigned,
+        ];
+    }
+
+    return $rows;
+}
+
+/**
+ * Faculty selectable on dean/program-chair college schedules:
+ * college faculty (optionally limited to program) plus active GE-designated faculty
+ * (institution-wide / null college, or assigned to this college).
+ *
+ * @return list<array{id:int,faculty_id:string,full_name:string,is_gened:int}>
+ */
+function college_schedule_faculty_options(int $collegeId, ?string $programScope = null): array
+{
+    if ($collegeId < 1) {
+        return [];
+    }
+
+    $hasIsGened = db_column_exists('faculty', 'is_gened');
+    $sql = 'SELECT id, faculty_id, full_name';
+    $sql .= $hasIsGened ? ', COALESCE(is_gened, 0) AS is_gened' : ', 0 AS is_gened';
+    $sql .= ' FROM faculty WHERE status = \'active\' AND (';
+
+    $params = [];
+    if ($programScope !== null && $programScope !== '') {
+        $sql .= '(college_id = ? AND (department = ? OR department = \'\'))';
+        $params[] = $collegeId;
+        $params[] = $programScope;
+    } else {
+        $sql .= 'college_id = ?';
+        $params[] = $collegeId;
+    }
+
+    if ($hasIsGened) {
+        $sql .= ' OR (COALESCE(is_gened, 0) = 1 AND (college_id IS NULL OR college_id = ?))';
+        $params[] = $collegeId;
+    }
+
+    $sql .= ') ORDER BY COALESCE(is_gened, 0) ASC, full_name';
+    $st = db()->prepare($sql);
+    $st->execute($params);
+
+    $seen = [];
+    $out = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $id = (int) ($row['id'] ?? 0);
+        if ($id < 1 || isset($seen[$id])) {
+            continue;
+        }
+        $seen[$id] = true;
+        $out[] = [
+            'id' => $id,
+            'faculty_id' => (string) ($row['faculty_id'] ?? ''),
+            'full_name' => (string) ($row['full_name'] ?? ''),
+            'is_gened' => (int) ($row['is_gened'] ?? 0),
+        ];
+    }
+
+    return $out;
+}
+
+/** Whether a faculty member may be assigned on a dean/program-chair college schedule. */
+function college_schedule_faculty_allowed(int $facultyId, int $collegeId, ?string $programScope = null): bool
+{
+    if ($facultyId < 1 || $collegeId < 1) {
+        return false;
+    }
+
+    foreach (college_schedule_faculty_options($collegeId, $programScope) as $row) {
+        if ((int) ($row['id'] ?? 0) === $facultyId) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -3015,6 +3543,48 @@ function minutes_to_time(int $minutes): string
 function intervals_overlap(int $s1, int $e1, int $s2, int $e2): bool
 {
     return $s1 < $e2 && $s2 < $e1;
+}
+
+/**
+ * Default meeting days implied by a schedule type (empty for Custom).
+ *
+ * @return string[]
+ */
+function days_for_schedule_type(string $scheduleType): array
+{
+    switch ($scheduleType) {
+        case 'MW':
+            return ['Monday', 'Wednesday'];
+        case 'TTH':
+            return ['Tuesday', 'Thursday'];
+        case 'MWF':
+            return ['Monday', 'Wednesday', 'Friday'];
+        case 'TTHS':
+            return ['Tuesday', 'Thursday', 'Saturday'];
+        case 'Saturday':
+            return ['Saturday'];
+        case 'Sunday':
+            return ['Sunday'];
+        case 'MW_TTH':
+            return ['Monday', 'Tuesday', 'Wednesday', 'Thursday'];
+        default:
+            return [];
+    }
+}
+
+/**
+ * When no days were posted, fill from schedule type presets (MW, TTH, …).
+ *
+ * @param string[] $days
+ * @return string[]
+ */
+function normalize_schedule_days(string $scheduleType, array $days): array
+{
+    if ($days !== []) {
+        return array_values(array_unique(array_map('strval', $days)));
+    }
+
+    return days_for_schedule_type($scheduleType);
 }
 
 /**

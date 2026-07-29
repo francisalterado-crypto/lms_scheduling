@@ -461,7 +461,23 @@ require_once __DIR__ . '/includes/header.php';
         }
 
         editor.addEventListener('paste', function (event) {
-            var items = event.clipboardData && event.clipboardData.items;
+            var clipboard = event.clipboardData;
+            if (!clipboard) {
+                return;
+            }
+
+            // Prefer rich HTML (tables, formatting) over a bitmap snapshot of the selection.
+            var html = '';
+            try {
+                html = clipboard.getData('text/html') || '';
+            } catch (err) {
+                html = '';
+            }
+            if (html !== '' && /<(table|tr|td|th|p|div|ul|ol|li|h[1-6]|img)\b/i.test(html)) {
+                return;
+            }
+
+            var items = clipboard.items;
             if (!items) {
                 return;
             }

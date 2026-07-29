@@ -5,7 +5,7 @@
   <meta name="generator" content="pandoc 3.10" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <meta name="author" content="CLASS / lms_scheduling" />
-  <meta name="dcterms.date" content="2026-07-01" />
+  <meta name="dcterms.date" content="2026-07-27" />
   <title>WPU SABLAe Portal Source Code Documentation</title>
   <style>
     /* Default styles provided by pandoc.
@@ -101,7 +101,7 @@
 <header id="title-block-header">
 <h1 class="title">WPU SABLAe Portal Source Code Documentation</h1>
 <p class="author">CLASS / lms_scheduling</p>
-<p class="date">2026-07-01</p>
+<p class="date">2026-07-27</p>
 </header>
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -322,6 +322,8 @@ Files</a></li>
 id="toc-identity-resolution-1">Identity Resolution</a></li>
 <li><a href="#faculty_classrooms.php"
 id="toc-faculty_classrooms.php"><code>faculty_classrooms.php</code></a></li>
+<li><a href="#faculty_student_list.php"
+id="toc-faculty_student_list.php"><code>faculty_student_list.php</code></a></li>
 <li><a href="#faculty_classroom.php"
 id="toc-faculty_classroom.php"><code>faculty_classroom.php</code></a></li>
 <li><a href="#faculty_classroom_attendance.php"
@@ -331,7 +333,11 @@ id="toc-faculty_classroom_assessments.php"><code>faculty_classroom_assessments.p
 <li><a href="#faculty_edutools.php"
 id="toc-faculty_edutools.php"><code>faculty_edutools.php</code></a></li>
 <li><a href="#schedule-change-requests"
-id="toc-schedule-change-requests">Schedule Change Requests</a></li>
+id="toc-schedule-change-requests">Schedule Change Requests</a>
+<ul>
+<li><a href="#makeup-classes" id="toc-makeup-classes">Makeup
+classes</a></li>
+</ul></li>
 <li><a href="#navigation-faculty-in-role_nav_sections"
 id="toc-navigation-faculty-in-role_nav_sections">Navigation (faculty in
 <code>role_nav_sections</code>)</a></li>
@@ -2670,6 +2676,10 @@ data:</p>
 <td>List online classrooms for faculty</td>
 </tr>
 <tr>
+<td><code>faculty_student_list.php</code></td>
+<td>Courses with registered students and present/absent totals</td>
+</tr>
+<tr>
 <td><code>faculty_classroom.php</code></td>
 <td>Single classroom hub (content, students, settings)</td>
 </tr>
@@ -2733,6 +2743,17 @@ matches session.</li>
 <li>Each classroom links to a <code>schedules</code> row /
 <code>courses</code> row.</li>
 <li>Shows join code, enrollment count, status.</li>
+</ul>
+<hr />
+<h2
+id="faculty_student_list.php"><code>faculty_student_list.php</code></h2>
+<ul>
+<li>Lists the faculty member’s online classrooms (courses) with
+registered student counts.</li>
+<li>Present/absent totals come from
+<code>classroom_attendance_records</code> across class sessions.</li>
+<li>Detail view (<code>?id={classroom_id}</code>) shows each enrolled
+student and their present/absent mark counts.</li>
 </ul>
 <hr />
 <h2 id="faculty_classroom.php"><code>faculty_classroom.php</code></h2>
@@ -2805,6 +2826,12 @@ etc.).</p>
 <h2 id="schedule-change-requests">Schedule Change Requests</h2>
 <p>Faculty can request schedule changes →
 <code>schedule_change_requests</code> reviewed by dean/chair.</p>
+<h3 id="makeup-classes">Makeup classes</h3>
+<p>Faculty can also request a <strong>makeup class</strong> from
+<strong>My schedule</strong> (day, time, room, reason).<br />
+On approval, dean/chair automatically gets a temporary
+<code>schedules</code> row with <code>is_makeup = 1</code>.<br />
+Delete that makeup row after the class is held.</p>
 <hr />
 <h2 id="navigation-faculty-in-role_nav_sections">Navigation (faculty in
 <code>role_nav_sections</code>)</h2>
@@ -2821,8 +2848,12 @@ etc.).</p>
 <td>Dashboard, Messages, Schedules, Weekly view</td>
 </tr>
 <tr>
-<td>Teaching</td>
-<td>Classrooms, EduTools, Teaching load</td>
+<td>Academic</td>
+<td>Classrooms, Student list, My schedule, EduTools</td>
+</tr>
+<tr>
+<td>Management</td>
+<td>Reports, Teaching load, Conflicts</td>
 </tr>
 <tr>
 <td>Account</td>
@@ -5094,6 +5125,6 @@ class="sourceCode sql"><code class="sourceCode sql"><span id="cb20-1"><a href="#
 <span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a>  <span class="op">..</span>.</span>
 <span id="cb20-23"><a href="#cb20-23" aria-hidden="true" tabindex="-1"></a>);</span></code></pre></div>
 <hr />
-<p><em>Document generated: 2026-07-01 05:11:10 CEST</em></p>
+<p><em>Document generated: 2026-07-27 14:58:30 CEST</em></p>
 </body>
 </html>

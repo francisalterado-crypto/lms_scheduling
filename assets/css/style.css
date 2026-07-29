@@ -617,6 +617,38 @@ html[data-bs-theme="dark"] .schedule-block.c5 {
   word-break: break-word;
 }
 
+.classroom-content-body table,
+.wordpad-editor table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+}
+
+.classroom-content-body thead th,
+.wordpad-editor thead th {
+  background: rgba(13, 110, 253, 0.06);
+  font-weight: 600;
+}
+
+.classroom-content-body th,
+.classroom-content-body td,
+.wordpad-editor th,
+.wordpad-editor td {
+  border: 1px solid #c5d0da;
+  padding: 0.4rem 0.6rem;
+  vertical-align: top;
+}
+
+.classroom-content-body caption,
+.wordpad-editor caption {
+  caption-side: top;
+  text-align: left;
+  padding: 0.35rem 0;
+  color: #495057;
+  font-weight: 600;
+}
+
 .classroom-content-body img,
 .classroom-content-attachment-image img,
 .wordpad-editor img {

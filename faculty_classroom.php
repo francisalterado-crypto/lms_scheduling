@@ -1075,7 +1075,23 @@ document.querySelectorAll('[data-wordpad]').forEach((shell) => {
     });
 
     editor.addEventListener('paste', (event) => {
-        const items = event.clipboardData && event.clipboardData.items;
+        const clipboard = event.clipboardData;
+        if (!clipboard) {
+            return;
+        }
+
+        // Prefer rich HTML (tables, formatting) over a bitmap snapshot of the selection.
+        let html = '';
+        try {
+            html = clipboard.getData('text/html') || '';
+        } catch (err) {
+            html = '';
+        }
+        if (html !== '' && /<(table|tr|td|th|p|div|ul|ol|li|h[1-6]|img)\b/i.test(html)) {
+            return;
+        }
+
+        const items = clipboard.items;
         if (!items) {
             return;
         }

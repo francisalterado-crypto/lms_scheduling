@@ -77,6 +77,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $roomId = (int) ($_POST['room_id'] ?? 0);
     $scheduleType = (string) ($_POST['schedule_type'] ?? 'Custom');
     $days = isset($_POST['days']) && is_array($_POST['days']) ? array_map('strval', $_POST['days']) : [];
+    $days = normalize_schedule_days($scheduleType, $days);
+    $old['day_array'] = $days;
     $startTime = substr((string) ($_POST['start_time'] ?? ''), 0, 5) . ':00';
     $endTime = substr((string) ($_POST['end_time'] ?? ''), 0, 5) . ':00';
     $semester = trim((string) ($_POST['semester'] ?? ''));
@@ -126,10 +128,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ((int) $chk->fetchColumn() < 1) {
             $errors[] = 'Selected course is not a GE course.';
         }
-        $chk = db()->prepare("SELECT COUNT(*) FROM rooms WHERE id=? AND is_gened=1 AND status IN ('available','tba')");
+        $chk = db()->prepare("SELECT COUNT(*) FROM rooms WHERE id=? AND status IN ('available','tba')");
         $chk->execute([$roomId]);
         if ((int) $chk->fetchColumn() < 1) {
-            $errors[] = 'Selected room is not an available GE room.';
+            $errors[] = 'Selected room is not available.';
         }
 
         $chk = db()->prepare('SELECT COUNT(*) FROM ge_course_colleges WHERE course_id=? AND college_id=?');
@@ -291,9 +293,15 @@ $facultyList = $hasIsGenedFaculty
 $courseList = $hasIsGenedCourse
     ? db()->query('SELECT id, course_code, course_name FROM courses WHERE is_gened=1 ORDER BY course_code')->fetchAll()
     : [];
-$roomList = $hasIsGenedRoom
-    ? db()->query("SELECT id, room_code, room_name FROM rooms WHERE is_gened=1 AND status IN ('available','tba') ORDER BY room_code")->fetchAll()
-    : [];
+$isGenedRoomSelect = $hasIsGenedRoom ? ', COALESCE(r.is_gened, 0) AS is_gened' : ', 0 AS is_gened';
+$isGenedRoomOrder = $hasIsGenedRoom ? 'CASE WHEN COALESCE(r.is_gened, 0) = 1 THEN 0 ELSE 1 END,' : '';
+$roomList = db()->query(
+    "SELECT r.id, r.room_code, r.room_name{$isGenedRoomSelect}, c.college_code
+     FROM rooms r
+     LEFT JOIN colleges c ON c.id = r.college_id
+     WHERE r.status IN ('available','tba')
+     ORDER BY {$isGenedRoomOrder} COALESCE(c.college_code, ''), r.room_code"
+)->fetchAll();
 $collegeList = db()->query("SELECT id, college_code, college_name FROM colleges WHERE status='active' ORDER BY college_code")->fetchAll();
 $days = schedule_days_list();
 $semesters = ['1st Semester', '2nd Semester', 'Summer'];
@@ -405,15 +413,23 @@ require_once __DIR__ . '/includes/header.php';
                 <select name="room_id" class="form-select" required>
                     <option value="">— Select —</option>
                     <?php foreach ($roomList as $r): ?>
+                        <?php
+                        $roomScope = ((int) ($r['is_gened'] ?? 0) === 1)
+                            ? 'GE'
+                            : trim((string) ($r['college_code'] ?? ''));
+                        $roomLabel = ($roomScope !== '' ? $roomScope . ' — ' : '')
+                            . $r['room_code']
+                            . ($r['room_name'] ? ' — ' . $r['room_name'] : '');
+                        ?>
                         <option value="<?= (int) $r['id'] ?>" <?= (int) ($old['room_id'] ?? 0) === (int) $r['id'] ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($r['room_code'] . ($r['room_name'] ? ' — ' . $r['room_name'] : '')) ?>
+                            <?= htmlspecialchars($roomLabel) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-md-4">
                 <label class="form-label">Schedule type</label>
-                <select name="schedule_type" class="form-select">
+                <select name="schedule_type" id="schedule_type" class="form-select">
                     <?php foreach ($types as $t): ?>
                         <option value="<?= $t ?>" <?= (($old['schedule_type'] ?? 'Custom') === $t) ? 'selected' : '' ?>><?= htmlspecialchars($t) ?></option>
                     <?php endforeach; ?>
@@ -549,6 +565,32 @@ require_once __DIR__ . '/includes/header.php';
 
     renderPrograms();
     renderSections();
+
+    const typeDays = {
+        MW: ['Monday', 'Wednesday'],
+        TTH: ['Tuesday', 'Thursday'],
+        MWF: ['Monday', 'Wednesday', 'Friday'],
+        TTHS: ['Tuesday', 'Thursday', 'Saturday'],
+        Saturday: ['Saturday'],
+        Sunday: ['Sunday'],
+        MW_TTH: ['Monday', 'Tuesday', 'Wednesday', 'Thursday']
+    };
+    const typeSel = document.getElementById('schedule_type');
+    const dayChecks = () => Array.from(document.querySelectorAll('input[name="days[]"]'));
+    function syncDaysFromType(force) {
+        if (!typeSel) return;
+        const preset = typeDays[typeSel.value];
+        if (!preset) return;
+        const boxes = dayChecks();
+        if (!force && boxes.some((cb) => cb.checked)) return;
+        boxes.forEach((cb) => {
+            cb.checked = preset.indexOf(cb.value) !== -1;
+        });
+    }
+    if (typeSel) {
+        typeSel.addEventListener('change', () => syncDaysFromType(true));
+        syncDaysFromType(false);
+    }
 })();
 </script>
 

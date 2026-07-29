@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 /**
  * Faculty teaching load (units) from scheduled offerings.
- * Scoped: admin (optional college/faculty filters), dean (college), program chair (program), gened (GE courses), faculty (own load only).
+ * Scoped: admin (optional college/faculty filters), dean (college), program chair (program),
+ * GE program chair (GE faculty loads + college GE offerings), gened (GE courses), faculty (own load only).
  */
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
@@ -37,6 +38,7 @@ if (is_dean()) {
     $programScope = program_scope_or_fail();
     $collegeId = dean_or_program_chair_college_id_or_fail();
 }
+$geProgramChair = is_program_chair() && is_ge_program_scope($programScope);
 
 $adminCollegeId = (int) ($_GET['college_id'] ?? 0);
 $dept = trim((string) ($_GET['dept'] ?? ''));
@@ -116,15 +118,31 @@ if ($role === 'admin') {
     $hasIsGenedCourseCol = db_column_exists('courses', 'is_gened');
     $sql .= dean_schedule_scope_sql($collegeId, $hasIsGenedCourseCol, $params, $hasGeTargetsTable);
 } elseif ($programScope !== null && $collegeId) {
-    $sql .= program_chair_schedule_scope_sql($collegeId, $programScope, $hasGeTargetsTable, $params);
+    if ($geProgramChair) {
+        $sql .= ge_program_chair_teaching_load_scope_sql(
+            $collegeId,
+            $hasGeTargetsTable,
+            $hasIsGenedFaculty,
+            $hasIsGenedCourse,
+            $params
+        );
+    } else {
+        $sql .= program_chair_schedule_scope_sql($collegeId, $programScope, $hasGeTargetsTable, $params);
+    }
 } elseif ($role === 'faculty' && $facultySelfId > 0) {
     $sql .= ' AND s.faculty_id = ?';
     $params[] = $facultySelfId;
 }
 
 if (is_gened()) {
-    if ($hasIsGenedCourse) {
+    // GE coordinator: GE catalog offerings, plus any load taught by GE-designated faculty
+    // (e.g. GE Faculty assigned to a major-program section by a dean/program chair).
+    if ($hasIsGenedCourse && $hasIsGenedFaculty) {
+        $sql .= ' AND (COALESCE(c.is_gened, 0) = 1 OR COALESCE(f.is_gened, 0) = 1)';
+    } elseif ($hasIsGenedCourse) {
         $sql .= ' AND COALESCE(c.is_gened, 0) = 1';
+    } elseif ($hasIsGenedFaculty) {
+        $sql .= ' AND COALESCE(f.is_gened, 0) = 1';
     } else {
         $sql .= ' AND COALESCE(uc.role, "") = "gened"';
     }
@@ -136,7 +154,8 @@ if (is_gened() && $hasIsGenedFaculty && $geFacultyFilter === '1') {
     $sql .= ' AND COALESCE(f.is_gened, 0) = 0';
 }
 
-if (is_program_chair()) {
+// Major-program chairs exclude GE catalog courses; GE program chairs include GE faculty loads.
+if (is_program_chair() && !$geProgramChair) {
     if ($hasIsGenedCourse) {
         $sql .= ' AND COALESCE(c.is_gened, 0) = 0';
     } else {
@@ -648,7 +667,9 @@ require_once __DIR__ . '/includes/header.php';
         <p class="text-muted ftl-scope-note mb-3">
             Program scope: <strong><?= htmlspecialchars($programScope) ?></strong> (<?= htmlspecialchars(college_name_by_id($collegeId)) ?>).
             <?php if (is_program_chair()): ?>
-                <?php if ($hasIsGenedCourse): ?>
+                <?php if ($geProgramChair): ?>
+                    <span class="d-block mt-1">Includes the full teaching load of <strong>GE Faculty</strong> (GEN ED roster), plus General Education offerings scheduled for this college.</span>
+                <?php elseif ($hasIsGenedCourse): ?>
                     <span class="d-block mt-1">General Education (GE) catalog courses are excluded. Includes <strong>major</strong> courses in this program and any loads for <strong>your program&rsquo;s faculty</strong> (including subjects the Dean assigned in other programs).</span>
                 <?php else: ?>
                     <span class="d-block mt-1">Schedules created by GEN ED accounts are excluded. Run <a href="upgrade_roles.php">upgrade_roles.php</a> so GE can be flagged in the catalog for clearer filtering.</span>
@@ -659,7 +680,9 @@ require_once __DIR__ . '/includes/header.php';
         <p class="text-muted ftl-scope-note mb-3">College: <strong><?= htmlspecialchars(college_name_by_id($collegeId)) ?></strong></p>
     <?php elseif (is_gened()): ?>
         <p class="text-muted ftl-scope-note mb-3">
-            <?php if ($hasIsGenedCourse): ?>
+            <?php if ($hasIsGenedCourse && $hasIsGenedFaculty): ?>
+                Showing <strong>General Education</strong> catalog offerings and the full teaching load of <strong>GE Faculty</strong> (including major-program sections assigned by a dean or program chair).
+            <?php elseif ($hasIsGenedCourse): ?>
                 Showing schedules for courses flagged as <strong>General Education</strong> in the catalog.
             <?php else: ?>
                 Showing schedules created by <strong>GEN ED</strong> coordinator accounts. Run upgrade_roles.php so courses can be flagged as GE in the catalog for this report to follow those offerings instead.
@@ -688,7 +711,9 @@ require_once __DIR__ . '/includes/header.php';
         <?php if (is_program_chair() && $programScope !== null): ?>
             <div class="<?= htmlspecialchars($filterColClass) ?>">
                 <label class="form-label small mb-0">Program</label>
-                <input type="text" class="form-control form-control-sm bg-body-secondary" readonly value="<?= htmlspecialchars($programScope) ?>" aria-readonly="true"<?= app_tooltip_attr('Your account is limited to this program. Teaching load includes courses in this program and all assignments for faculty in this program (including cross-program loads assigned by the Dean).') ?>>
+                <input type="text" class="form-control form-control-sm bg-body-secondary" readonly value="<?= htmlspecialchars($programScope) ?>" aria-readonly="true"<?= app_tooltip_attr($geProgramChair
+                    ? 'Your account covers General Education. Teaching load includes all assignments for GE Faculty and GE offerings for this college.'
+                    : 'Your account is limited to this program. Teaching load includes courses in this program and all assignments for faculty in this program (including cross-program loads assigned by the Dean).') ?>>
                 <input type="hidden" name="dept" value="<?= htmlspecialchars($programScope) ?>">
             </div>
         <?php elseif (!$isFacultySelfView): ?>
