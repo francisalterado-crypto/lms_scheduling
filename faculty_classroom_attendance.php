@@ -257,8 +257,26 @@ $session = null;
 $records = [];
 $summary = ['present' => 0, 'absent' => 0, 'total' => 0];
 $latestSessionDate = null;
+$availableSessionDates = [];
 $showDateHint = false;
+$statusFilter = strtolower(trim((string) ($_GET['status'] ?? '')));
+if (!in_array($statusFilter, ['present', 'absent'], true)) {
+    $statusFilter = '';
+}
 if ($missingTables === [] && $classroom && $hasPresenceColumns) {
+    $st = db()->prepare(
+        'SELECT attendance_date
+         FROM classroom_attendance_sessions
+         WHERE classroom_id = ?
+         ORDER BY attendance_date DESC, id DESC'
+    );
+    $st->execute([$classroomId]);
+    $availableSessionDates = array_values(array_unique(array_map(
+        static fn ($row): string => (string) $row['attendance_date'],
+        $st->fetchAll()
+    )));
+    $latestSessionDate = $availableSessionDates[0] ?? null;
+
     $st = db()->prepare(
         'SELECT *
          FROM classroom_attendance_sessions
@@ -269,16 +287,6 @@ if ($missingTables === [] && $classroom && $hasPresenceColumns) {
     $session = $st->fetch() ?: null;
 
     if (!$session) {
-        $st = db()->prepare(
-            'SELECT attendance_date
-             FROM classroom_attendance_sessions
-             WHERE classroom_id = ?
-             ORDER BY attendance_date DESC, id DESC
-             LIMIT 1'
-        );
-        $st->execute([$classroomId]);
-        $latestSessionDate = $st->fetchColumn() ?: null;
-
         if (!$attendanceDateExplicit && $latestSessionDate !== null) {
             $attendanceDate = (string) $latestSessionDate;
             $st = db()->prepare(
@@ -301,7 +309,9 @@ if ($missingTables === [] && $classroom && $hasPresenceColumns) {
              INNER JOIN classroom_students cs ON cs.id = ar.student_id
              LEFT JOIN users u ON u.id = cs.user_id
              WHERE ar.session_id = ?
-             ORDER BY cs.full_name ASC'
+             ORDER BY
+                CASE ar.status WHEN \'present\' THEN 0 WHEN \'absent\' THEN 1 ELSE 2 END,
+                cs.full_name ASC'
         );
         $st->execute([(int) $session['id']]);
         $records = $st->fetchAll();
@@ -314,8 +324,18 @@ if ($missingTables === [] && $classroom && $hasPresenceColumns) {
                 $summary['absent']++;
             }
         }
+
+        if ($statusFilter !== '') {
+            $records = array_values(array_filter(
+                $records,
+                static fn (array $row): bool => (string) $row['status'] === $statusFilter
+            ));
+        }
     }
 }
+
+$attendanceDateDisplay = date('l, F j, Y', strtotime($attendanceDate)) ?: $attendanceDate;
+$viewQueryBase = 'faculty_classroom_attendance.php?id=' . (int) $classroomId . '&attendance_date=' . urlencode($attendanceDate);
 
 $pageTitle = $printMode ? 'Attendance Printout' : 'Class Attendance';
 require_once __DIR__ . '/includes/header.php';
@@ -374,6 +394,58 @@ require_once __DIR__ . '/includes/header.php';
 
     <?php if (!$printMode): ?>
     <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white"><strong>View attendance by day</strong></div>
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end" id="attendanceDayViewForm">
+                <input type="hidden" name="id" value="<?= (int) $classroomId ?>">
+                <?php if ($statusFilter !== ''): ?>
+                    <input type="hidden" name="status" value="<?= htmlspecialchars($statusFilter) ?>">
+                <?php endif; ?>
+                <div class="col-md-4">
+                    <label class="form-label" for="attendance_date_view">Select day</label>
+                    <input
+                        type="date"
+                        id="attendance_date_view"
+                        name="attendance_date"
+                        class="form-control"
+                        value="<?= htmlspecialchars($attendanceDate) ?>"
+                        required
+                        <?= app_tooltip_attr('Choose a class day to see who was present or absent.') ?>
+                    >
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary"<?= app_tooltip_attr('Shows present and absent students for the selected day.') ?>>
+                        <i class="fa-solid fa-calendar-day me-1"></i>View day
+                    </button>
+                </div>
+            </form>
+            <div class="mt-3">
+                <div class="small text-muted mb-1">Showing: <strong><?= htmlspecialchars($attendanceDateDisplay) ?></strong></div>
+                <?php if ($availableSessionDates !== []): ?>
+                    <div class="d-flex flex-wrap gap-1 align-items-center">
+                        <span class="small text-muted me-1">Recorded days:</span>
+                        <?php foreach (array_slice($availableSessionDates, 0, 12) as $sessionDate): ?>
+                            <?php
+                            $isActiveDay = $sessionDate === $attendanceDate;
+                            $dayHref = 'faculty_classroom_attendance.php?id=' . (int) $classroomId
+                                . '&attendance_date=' . urlencode($sessionDate)
+                                . ($statusFilter !== '' ? '&status=' . urlencode($statusFilter) : '');
+                            ?>
+                            <a
+                                href="<?= htmlspecialchars($dayHref) ?>"
+                                class="btn btn-sm <?= $isActiveDay ? 'btn-primary' : 'btn-outline-secondary' ?>"
+                                <?= app_tooltip_attr('Open attendance for ' . $sessionDate . '.') ?>
+                            ><?= htmlspecialchars(date('M j', strtotime($sessionDate)) ?: $sessionDate) ?></a>
+                        <?php endforeach; ?>
+                    </div>
+                <?php else: ?>
+                    <div class="small text-muted">No recorded attendance days yet. Run an automatic check below to create the first day.</div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
         <div class="card-header bg-white"><strong>Run Auto Attendance</strong></div>
         <div class="card-body">
             <form method="post" class="row g-3 align-items-end">
@@ -396,28 +468,44 @@ require_once __DIR__ . '/includes/header.php';
 
     <div class="row g-3 mb-3">
         <div class="col-md-4">
-            <div class="border rounded p-3 h-100 bg-body-tertiary">
-                <div class="small text-muted text-uppercase">Total</div>
-                <div class="fs-4 fw-semibold"><?= (int) $summary['total'] ?></div>
-            </div>
+            <a href="<?= htmlspecialchars($viewQueryBase) ?>" class="text-decoration-none text-reset d-block h-100">
+                <div class="border rounded p-3 h-100 bg-body-tertiary<?= $statusFilter === '' ? ' border-primary' : '' ?>">
+                    <div class="small text-muted text-uppercase">Total</div>
+                    <div class="fs-4 fw-semibold"><?= (int) $summary['total'] ?></div>
+                </div>
+            </a>
         </div>
         <div class="col-md-4">
-            <div class="border rounded p-3 h-100 bg-body-tertiary">
-                <div class="small text-muted text-uppercase">Present</div>
-                <div class="fs-4 fw-semibold text-success"><?= (int) $summary['present'] ?></div>
-            </div>
+            <a href="<?= htmlspecialchars($viewQueryBase . '&status=present') ?>" class="text-decoration-none text-reset d-block h-100"<?= app_tooltip_attr('Show only students marked present for this day.') ?>>
+                <div class="border rounded p-3 h-100 bg-body-tertiary<?= $statusFilter === 'present' ? ' border-success' : '' ?>">
+                    <div class="small text-muted text-uppercase">Present</div>
+                    <div class="fs-4 fw-semibold text-success"><?= (int) $summary['present'] ?></div>
+                </div>
+            </a>
         </div>
         <div class="col-md-4">
-            <div class="border rounded p-3 h-100 bg-body-tertiary">
-                <div class="small text-muted text-uppercase">Absent</div>
-                <div class="fs-4 fw-semibold text-danger"><?= (int) $summary['absent'] ?></div>
-            </div>
+            <a href="<?= htmlspecialchars($viewQueryBase . '&status=absent') ?>" class="text-decoration-none text-reset d-block h-100"<?= app_tooltip_attr('Show only students marked absent for this day.') ?>>
+                <div class="border rounded p-3 h-100 bg-body-tertiary<?= $statusFilter === 'absent' ? ' border-danger' : '' ?>">
+                    <div class="small text-muted text-uppercase">Absent</div>
+                    <div class="fs-4 fw-semibold text-danger"><?= (int) $summary['absent'] ?></div>
+                </div>
+            </a>
         </div>
     </div>
     <?php endif; ?>
 
     <div class="card shadow-sm">
-        <div class="card-header bg-white"><strong>Attendance Records</strong></div>
+        <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <strong>
+                Attendance for <?= htmlspecialchars($attendanceDateDisplay) ?>
+                <?php if ($statusFilter !== ''): ?>
+                    <span class="text-muted fw-normal">(<?= htmlspecialchars(ucfirst($statusFilter)) ?> only)</span>
+                <?php endif; ?>
+            </strong>
+            <?php if (!$printMode && $statusFilter !== ''): ?>
+                <a href="<?= htmlspecialchars($viewQueryBase) ?>" class="btn btn-sm btn-outline-secondary">Show all</a>
+            <?php endif; ?>
+        </div>
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-sm mb-0">
@@ -434,7 +522,15 @@ require_once __DIR__ . '/includes/header.php';
                     </thead>
                     <tbody>
                     <?php if ($records === []): ?>
-                        <tr><td colspan="<?= $printMode ? '6' : '7' ?>" class="p-3 text-muted">No attendance records yet. Run automatic check first.</td></tr>
+                        <tr>
+                            <td colspan="<?= $printMode ? '6' : '7' ?>" class="p-3 text-muted">
+                                <?php if ($session && $statusFilter !== ''): ?>
+                                    No <?= htmlspecialchars($statusFilter) ?> students for this day.
+                                <?php else: ?>
+                                    No attendance records for this day yet. Select a recorded day above, or run automatic check first.
+                                <?php endif; ?>
+                            </td>
+                        </tr>
                     <?php endif; ?>
                     <?php foreach ($records as $row): ?>
                         <?php $logoutDisplay = (string) (($row['evidence_logout_at'] ?? '') !== '' ? $row['evidence_logout_at'] : ($row['user_last_logout_at'] ?? '')); ?>
@@ -490,6 +586,20 @@ require_once __DIR__ . '/includes/header.php';
             </div>
         </div>
     </div>
+    <script>
+        (function () {
+            var form = document.getElementById('attendanceDayViewForm');
+            var dateInput = document.getElementById('attendance_date_view');
+            if (!form || !dateInput) {
+                return;
+            }
+            dateInput.addEventListener('change', function () {
+                if (dateInput.value) {
+                    form.submit();
+                }
+            });
+        })();
+    </script>
 <?php endif; ?>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

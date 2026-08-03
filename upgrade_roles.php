@@ -714,6 +714,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
 
+        exec_safe(
+            $pdo,
+            "CREATE TABLE IF NOT EXISTS system_evaluation_responses (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                role ENUM('student','faculty') NOT NULL,
+                term_label VARCHAR(40) NOT NULL DEFAULT '',
+                overall_rating TINYINT UNSIGNED NULL,
+                comments TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_sys_eval_user_term_role (user_id, role, term_label),
+                KEY idx_sys_eval_role_term (role, term_label),
+                CONSTRAINT fk_ser_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+
+        exec_safe(
+            $pdo,
+            "CREATE TABLE IF NOT EXISTS system_evaluation_answers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                response_id INT NOT NULL,
+                question_key VARCHAR(64) NOT NULL,
+                rating TINYINT UNSIGNED NULL,
+                answer_text VARCHAR(500) NOT NULL DEFAULT '',
+                UNIQUE KEY uq_sea_response_q (response_id, question_key),
+                CONSTRAINT fk_sea_response FOREIGN KEY (response_id) REFERENCES system_evaluation_responses(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+
         // Remove campuses feature: drop FKs/columns/table and restore pre-campus room_code_scope (idempotent).
         exec_safe($pdo, 'ALTER TABLE schedules DROP FOREIGN KEY fk_sched_campus');
         exec_safe($pdo, 'ALTER TABLE schedules DROP COLUMN campus_id');

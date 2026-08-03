@@ -186,6 +186,13 @@ function render_super_admin_nav_sections(string $currentPage, int $messagingUnre
                 'tooltip' => 'All programs: weekly contact hours from schedules. Under load is below 18 hrs/week; overload is above 27. Filter by college and term.',
             ],
             nav_faculty_workload_external_item(),
+            [
+                'file' => 'admin_system_evaluations.php',
+                'href' => 'admin_system_evaluations.php',
+                'icon' => 'fa-clipboard-check',
+                'label' => 'System evaluations',
+                'tooltip' => 'View student and faculty feedback on portal usability, with averages by question and recent comments.',
+            ],
         ],
     ];
     render_nav_sections_markup($sections, $currentPage, $dismissOffcanvas);
@@ -255,6 +262,13 @@ function render_admin_nav_sections(string $currentPage, int $messagingUnread, bo
             [
                 'file' => 'global_reports.php', 'href' => 'global_reports.php', 'icon' => 'fa-chart-column', 'label' => 'Global reports',
                 'tooltip' => 'Cross-college analytics and exports. Use this for institution-wide summaries beyond a single college.',
+            ],
+            [
+                'file' => 'admin_system_evaluations.php',
+                'href' => 'admin_system_evaluations.php',
+                'icon' => 'fa-clipboard-check',
+                'label' => 'System evaluations',
+                'tooltip' => 'View student and faculty feedback on portal usability, with averages by question and recent comments.',
             ],
         ],
     ];
@@ -516,6 +530,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'file' => 'faculty_edutools.php', 'href' => 'faculty_edutools.php', 'icon' => 'fa-wand-magic-sparkles', 'label' => 'EduTools',
                     'tooltip' => 'Education sources: writing tools (Turnitin, Grammarly, QuillBot, AI detector), AI & research (ChatGPT, Perplexity, NotebookLM, Wolfram), notebooks, Khan Academy, and Notion—plus a built-in notebook.',
                 ],
+                [
+                    'file' => 'faculty_system_evaluation.php',
+                    'href' => 'faculty_system_evaluation.php',
+                    'icon' => 'fa-clipboard-check',
+                    'label' => 'System evaluation',
+                    'tooltip' => 'Rate how well the portal supports your teaching (classrooms, grading, schedules). One response per school year; you can update it.',
+                ],
             ],
             'Management' => [
                 [
@@ -584,6 +605,13 @@ function role_nav_sections(string $role, int $messagingUnread): array
                     'icon' => 'fa-heart-pulse',
                     'label' => 'Wellness companion',
                     'tooltip' => 'Private mental health support chat (stress, anxiety, loneliness). English/Tagalog. Not therapy or emergency care—crisis hotlines shown when needed.',
+                ],
+                [
+                    'file' => 'student_system_evaluation.php',
+                    'href' => 'student_system_evaluation.php',
+                    'icon' => 'fa-clipboard-check',
+                    'label' => 'System evaluation',
+                    'tooltip' => 'Rate how well the portal supports your learning (classes, tools, reliability). One response per school year; you can update it.',
                 ],
             ],
         ],
