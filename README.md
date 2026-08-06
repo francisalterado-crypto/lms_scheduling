@@ -65,3 +65,6 @@ C:\xampp\php\php.exe docs\build_whole_code.php
 2. Run `install.php` in the browser
 3. Run `upgrade_roles.php` for latest schema
 4. Log in at `login.php`
+
+
+#testing
