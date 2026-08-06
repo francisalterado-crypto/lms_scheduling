@@ -27,6 +27,7 @@ Full source code documentation organized by module:
 | Reports | [docs/15-reports.md](docs/15-reports.md) |
 | API | [docs/16-api.md](docs/16-api.md) |
 | UI assets | [docs/17-ui-assets.md](docs/17-ui-assets.md) |
+| Deploy over Tailscale | [docs/deploy-tailscale.md](docs/deploy-tailscale.md) |
 
 ## Exported documents (single file)
 

@@ -115,3 +115,7 @@ Maintenance utility for `rooms.room_code_scope` — a generated column ensuring 
 
 - `web.config` — IIS rewrite rules (if deployed on Windows IIS).
 - `uploads/web.config` — Restricts script execution in upload directory.
+
+## Remote updates (Tailscale)
+
+Push and pull code to a production server over a private Tailscale network (SSH + Git): [deploy-tailscale.md](deploy-tailscale.md).

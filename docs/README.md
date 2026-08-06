@@ -29,6 +29,7 @@ This documentation describes all application source code organized by functional
 | 15 | Reports & analytics | [15-reports.md](15-reports.md) |
 | 16 | REST API | [16-api.md](16-api.md) |
 | 17 | UI assets & shared layout | [17-ui-assets.md](17-ui-assets.md) |
+| — | Deploy over Tailscale (SSH + Git) | [deploy-tailscale.md](deploy-tailscale.md) |
 
 ---
 
